@@ -127,22 +127,14 @@ app.delete("/api/admin/user/:email", async (req, res) => {
     res.status(500).json({ message: "Ocorreu um erro no servidor." });
   }
 });
-
 app.post("/api/admin/reset-all-saldos", async (req, res) => {
   try {
     const { secret } = req.body;
-
-    // 1. Verifica se a chave secreta é válida
     if (secret !== process.env.ADMIN_SECRET_KEY) {
       return res.status(403).json({ message: "Acesso não autorizado." });
     }
-
-    // 2. Atualiza TODOS os utilizadores, definindo o saldo para 0
     await User.updateMany({}, { $set: { saldo: 0 } });
-
-    // 3. Envia uma resposta de sucesso
     res.status(200).json({ message: "O saldo de todos os utilizadores foi zerado com sucesso!" });
-
   } catch (error) {
     res.status(500).json({ message: "Ocorreu um erro no servidor ao zerar os saldos." });
   }
@@ -227,19 +219,16 @@ io.on("connection", (socket) => {
   socket.on("getValidMoves", (data) => {
     const { row, col, roomCode } = data;
     const room = gameRooms[roomCode];
-    if (!room || !room.game) {
-      return socket.emit("showValidMoves", []);
-    }
+    if (!room || !room.game) return socket.emit("showValidMoves", []);
     const game = room.game;
     const piece = game.boardState[row][col];
-    if (piece === 0) {
-      return socket.emit("showValidMoves", []);
-    }
+    if (piece === 0) return socket.emit("showValidMoves", []);
     const playerColor = piece.toLowerCase();
+
     const validMoves = [];
     for (let toRow = 0; toRow < 8; toRow++) {
       for (let toCol = 0; toCol < 8; toCol++) {
-        const moveCheck = isMoveValid({ row, col }, { row: toRow, col: toCol }, playerColor, game);
+        const moveCheck = isMoveValid({ row, col }, { row: toRow, col: toCol }, playerColor, game, true); // O 'true' ignora a regra da maioria para mostrar todas as jogadas
         if (moveCheck.valid) {
           validMoves.push({ row: toRow, col: toCol });
         }
@@ -254,7 +243,7 @@ io.on("connection", (socket) => {
     }
     socket.userData = data.user;
     const bet = parseInt(data.bet, 10);
-    const isTablita = data.isTablita; // GUARDA A OPÇÃO
+    const isTablita = data.isTablita;
     if (!bet || bet <= 0) return socket.emit("joinError", { message: "Aposta inválida." });
     const user = await User.findOne({ email: socket.userData.email });
     if (!user || user.saldo < bet) {
@@ -270,7 +259,7 @@ io.on("connection", (socket) => {
       roomCode,
       bet,
       players: [{ socketId: socket.id, user: socket.userData }],
-      isTablita: isTablita, // ARMAZENA O MODO DE JOGO NA SALA
+      isTablita: isTablita,
       timerInterval: null,
       timeLeft: 40,
       disconnectTimeout: null,
@@ -291,7 +280,6 @@ io.on("connection", (socket) => {
       const saldoAtual = user ? user.saldo : 0;
       return socket.emit("joinError", { message: `Saldo insuficiente. A aposta é ${room.bet} e você tem ${saldoAtual}.` });
     }
-    // ENVIA A INFORMAÇÃO DO MODO DE JOGO PARA O OPONENTE
     socket.emit("confirmBet", { roomCode: room.roomCode, bet: room.bet, isTablita: room.isTablita });
   });
 
@@ -319,7 +307,6 @@ io.on("connection", (socket) => {
     }
 
     let selectedBoard;
-    // VERIFICA O MODO DE JOGO GUARDADO NA SALA
     if (room.isTablita) {
       const randomIndex = Math.floor(Math.random() * tablitaOpenings.length);
       selectedBoard = JSON.parse(JSON.stringify(tablitaOpenings[randomIndex]));
@@ -367,7 +354,8 @@ io.on("connection", (socket) => {
           game.boardState[to.row][to.col] = movedPiece;
         }
         if (!wasPromotion) {
-            canCaptureAgain = canPieceCapture(to.row, to.col, game).length > 0;
+            const nextCaptures = getAllPossibleCapturesForPiece(to.row, to.col, game);
+            canCaptureAgain = nextCaptures.length > 0;
         }
       }
       piece = game.boardState[to.row][to.col];
@@ -449,9 +437,7 @@ io.on("connection", (socket) => {
         }
         room.disconnectTimeout = setTimeout(() => {
           const currentRoomState = gameRooms[roomName];
-          if (!currentRoomState) {
-            return;
-          }
+          if (!currentRoomState) return;
           const handleWinByDisconnect = async () => {
             try {
               const winnerInfo = currentRoomState.players.find((p) => p.socketId !== disconnectedSocketId);
@@ -492,137 +478,268 @@ io.on("connection", (socket) => {
 });
 
 // =========================================================
-// ============ FUNÇÕES DE LÓGICA DO JOGO ==================
+// ========= FUNÇÕES DE LÓGICA DO JOGO (ATUALIZADAS) =========
 // =========================================================
-function isMoveValid(from, to, playerColor, game) {
-  const board = game.boardState;
-  if (!board || !board[from.row] || !board[to.row]) return { valid: false, reason: "Tabuleiro inválido." };
-  const piece = board[from.row][from.col];
-  const destination = board[to.row][to.col];
-  if (piece === 0 || piece.toLowerCase() !== playerColor || destination !== 0) return { valid: false, reason: "Seleção ou destino inválido." };
-  const hasCapture = playerHasAnyCapture(playerColor, game);
-  let moveResult;
-  if (piece === "B" || piece === "P") {
-    moveResult = getDamaMove(from, to, playerColor, board);
-  } else {
-    moveResult = getNormalPieceMove(from, to, playerColor, board);
-  }
-  if (hasCapture && !moveResult.isCapture) {
-    return { valid: false, reason: "Você tem uma captura obrigatória a fazer." };
-  }
-  return moveResult || { valid: false, reason: "Movimento não permitido." };
-}
-function getNormalPieceMove(from, to, playerColor, board) {
-  if (to.row < 0 || to.row > 7 || to.col < 0 || to.col > 7 || board[to.row]?.[to.col] !== 0) return { valid: false };
-  const opponentColor = playerColor === "b" ? "p" : "b";
-  const rowDiff = to.row - from.row;
-  const colDiff = to.col - from.col;
-  const moveDirection = playerColor === "b" ? -1 : 1;
-  if (Math.abs(colDiff) === 1 && rowDiff === moveDirection) {
-    return { valid: true, isCapture: false };
-  }
-  if (Math.abs(colDiff) === 2 && Math.abs(rowDiff) === 2) {
-    const capturedPos = { row: from.row + rowDiff / 2, col: from.col + colDiff / 2 };
-    const capturedPiece = board[capturedPos.row]?.[capturedPos.col];
-    if (capturedPiece && capturedPiece.toLowerCase() === opponentColor) {
-      return { valid: true, isCapture: true, capturedPos };
+
+// NOVA FUNÇÃO para encontrar a melhor sequência de captura
+function findBestCaptureMoves(playerColor, game) {
+    let bestMoves = [];
+    let maxCaptures = 0;
+    let hasDamaCapture = false;
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const piece = game.boardState[r][c];
+            if (piece !== 0 && piece.toLowerCase() === playerColor) {
+                const isDama = piece === piece.toUpperCase();
+                const sequences = findCaptureSequencesForPiece(r, c, game.boardState, isDama);
+                
+                sequences.forEach(seq => {
+                    const numCaptures = seq.length - 1;
+                    if (isDama && !hasDamaCapture) {
+                        hasDamaCapture = true;
+                        maxCaptures = numCaptures;
+                        bestMoves = [seq];
+                    } else if (isDama && hasDamaCapture && numCaptures > maxCaptures) {
+                        maxCaptures = numCaptures;
+                        bestMoves = [seq];
+                    } else if (isDama && hasDamaCapture && numCaptures === maxCaptures) {
+                        bestMoves.push(seq);
+                    } else if (!isDama && !hasDamaCapture && numCaptures > maxCaptures) {
+                        maxCaptures = numCaptures;
+                        bestMoves = [seq];
+                    } else if (!isDama && !hasDamaCapture && numCaptures === maxCaptures) {
+                        bestMoves.push(seq);
+                    }
+                });
+            }
+        }
     }
-  }
-  return { valid: false };
+    return bestMoves;
 }
-function getDamaMove(from, to, playerColor, board) {
-  if (to.row < 0 || to.row > 7 || to.col < 0 || to.col > 7 || board[to.row]?.[to.col] !== 0) return { valid: false };
-  const opponentColor = playerColor === "b" ? "p" : "b";
-  const rowDiff = to.row - from.row;
-  const colDiff = to.col - from.col;
-  if (Math.abs(rowDiff) !== Math.abs(colDiff)) return { valid: false };
-  const stepRow = rowDiff > 0 ? 1 : -1;
-  const stepCol = colDiff > 0 ? 1 : -1;
-  let capturedPieces = [];
-  let capturedPos = null;
-  for (let i = 1; i < Math.abs(rowDiff); i++) {
-    const currRow = from.row + i * stepRow;
-    const currCol = from.col + i * stepCol;
-    const pieceOnPath = board[currRow][currCol];
-    if (pieceOnPath !== 0) {
-      if (pieceOnPath.toLowerCase() === opponentColor) {
-        capturedPieces.push(pieceOnPath);
-        capturedPos = { row: currRow, col: currCol };
-      } else {
-        return { valid: false };
-      }
-    }
-  }
-  if (capturedPieces.length > 1) return { valid: false };
-  if (capturedPieces.length === 1) return { valid: true, isCapture: true, capturedPos };
-  return { valid: true, isCapture: false };
-}
-function canPieceCapture(row, col, game) {
-  const board = game.boardState;
-  const piece = board[row][col];
-  if (!piece || piece === 0) return [];
-  const possibleCaptures = [];
-  const playerColor = piece.toLowerCase();
-  if (piece === "b" || piece === "p") {
-    for (let r_mod of [-2, 2]) {
-      for (let c_mod of [-2, 2]) {
-        const to = { row: row + r_mod, col: col + c_mod };
-        const move = getNormalPieceMove({ row, col }, to, playerColor, board);
-        if (move.valid && move.isCapture) possibleCaptures.push(move);
-      }
-    }
-  } else if (piece === "B" || piece === "P") {
-    const directions = [ { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 } ];
+
+// NOVA FUNÇÃO RECURSIVA para encontrar sequências
+function findCaptureSequencesForPiece(row, col, board, isDama) {
+    let sequences = [];
+    const opponentColor = board[row][col].toLowerCase() === 'b' ? 'p' : 'b';
+    const directions = [{r: -1, c: -1}, {r: -1, c: 1}, {r: 1, c: -1}, {r: 1, c: 1}];
+
     for (const dir of directions) {
-      let opponentFound = null;
-      for (let i = 1; i < 8; i++) {
-        const checkRow = row + i * dir.r;
-        const checkCol = col + i * dir.c;
-        if (checkRow < 0 || checkRow > 7 || checkCol < 0 || checkCol > 7) break;
-        const pieceOnPath = board[checkRow][checkCol];
-        if (opponentFound) {
-          if (pieceOnPath === 0) { possibleCaptures.push({ valid: true }); break; } 
-          else { break; }
+        if (isDama) {
+            // Lógica de captura da Dama
+            let capturedPos = null;
+            for (let i = 1; i < 8; i++) {
+                const nextRow = row + i * dir.r;
+                const nextCol = col + i * dir.c;
+                if (nextRow < 0 || nextRow > 7 || nextCol < 0 || nextCol > 7) break;
+                
+                const pieceOnPath = board[nextRow][nextCol];
+                if (pieceOnPath !== 0) {
+                    if (pieceOnPath.toLowerCase() === opponentColor && board[nextRow + dir.r]?.[nextCol + dir.c] === 0) {
+                        capturedPos = { row: nextRow, col: nextCol };
+                        
+                        for (let j = 1; j < 8; j++) {
+                           const landRow = capturedPos.row + j * dir.r;
+                           const landCol = capturedPos.col + j * dir.c;
+                           if(landRow < 0 || landRow > 7 || landCol < 0 || landCol > 7 || board[landRow]?.[landCol] !== 0) break;
+                           
+                           const newBoard = JSON.parse(JSON.stringify(board));
+                           newBoard[landRow][landCol] = newBoard[row][col];
+                           newBoard[row][col] = 0;
+                           newBoard[capturedPos.row][capturedPos.col] = 0;
+
+                           const nextSequences = findCaptureSequencesForPiece(landRow, landCol, newBoard, true);
+                           if (nextSequences.length > 0) {
+                               nextSequences.forEach(seq => sequences.push([{row, col}, ...seq]));
+                           } else {
+                               sequences.push([{row, col}, {row: landRow, col: landCol}]);
+                           }
+                        }
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            }
         } else {
-          if (pieceOnPath !== 0) {
-            if (pieceOnPath.toLowerCase() !== playerColor) { opponentFound = pieceOnPath; } 
-            else { break; }
-          }
+            // Lógica de captura da Peça Comum
+            const capturedRow = row + dir.r;
+            const capturedCol = col + dir.c;
+            const landRow = row + 2 * dir.r;
+            const landCol = col + 2 * dir.c;
+
+            if (landRow >= 0 && landRow < 8 && landCol >= 0 && landCol < 8) {
+                const capturedPiece = board[capturedRow]?.[capturedCol];
+                const landingSquare = board[landRow]?.[landCol];
+                if (capturedPiece && capturedPiece.toLowerCase() === opponentColor && landingSquare === 0) {
+                    const newBoard = JSON.parse(JSON.stringify(board));
+                    newBoard[landRow][landCol] = newBoard[row][col];
+                    newBoard[row][col] = 0;
+                    newBoard[capturedRow][capturedCol] = 0;
+
+                    const nextSequences = findCaptureSequencesForPiece(landRow, landCol, newBoard, false);
+                    if (nextSequences.length > 0) {
+                        nextSequences.forEach(seq => sequences.push([{row, col}, ...seq]));
+                    } else {
+                        sequences.push([{row, col}, {row: landRow, col: landCol}]);
+                    }
+                }
+            }
         }
-      }
     }
-  }
-  return possibleCaptures;
+    return sequences;
 }
-function playerHasAnyCapture(playerColor, game) {
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const piece = game.boardState[r][c];
-      if (piece !== 0 && piece.toLowerCase() === playerColor) {
-        if (canPieceCapture(r, c, game).length > 0) {
-          return true;
+
+
+// FUNÇÃO ATUALIZADA
+function isMoveValid(from, to, playerColor, game, ignoreMajorityRule = false) {
+    const board = game.boardState;
+    if (!board || !board[from.row] || !board[to.row]) return { valid: false, reason: "Tabuleiro inválido." };
+    const piece = board[from.row][from.col];
+    const destination = board[to.row][to.col];
+    if (piece === 0 || piece.toLowerCase() !== playerColor || destination !== 0) return { valid: false, reason: "Seleção ou destino inválido." };
+
+    // Lógica da Lei da Maioria e Qualidade
+    if (!ignoreMajorityRule) {
+        const bestCaptures = findBestCaptureMoves(playerColor, game);
+        if (bestCaptures.length > 0) {
+            const isMoveInBestCaptures = bestCaptures.some(seq => 
+                seq[0].row === from.row && seq[0].col === from.col &&
+                seq[1].row === to.row && seq[1].col === to.col
+            );
+            if (!isMoveInBestCaptures) {
+                return { valid: false, reason: "Existe uma captura obrigatória com mais peças ou com uma Dama." };
+            }
         }
-      }
     }
-  }
-  return false;
+    
+    let moveResult;
+    if (piece === "B" || piece === "P") {
+      moveResult = getDamaMove(from, to, playerColor, board);
+    } else {
+      moveResult = getNormalPieceMove(from, to, playerColor, board);
+    }
+    
+    if (!ignoreMajorityRule && findBestCaptureMoves(playerColor, game).length > 0 && !moveResult.isCapture) {
+         return { valid: false, reason: "Você tem uma captura obrigatória a fazer." };
+    }
+
+    return moveResult || { valid: false, reason: "Movimento não permitido." };
 }
+
+// FUNÇÕES AUXILIARES (sem alterações, mas mantidas por clareza)
+function getNormalPieceMove(from, to, playerColor, board) {
+    if (to.row < 0 || to.row > 7 || to.col < 0 || to.col > 7 || board[to.row]?.[to.col] !== 0) return { valid: false };
+    const opponentColor = playerColor === "b" ? "p" : "b";
+    const rowDiff = to.row - from.row;
+    const colDiff = to.col - from.col;
+    const moveDirection = playerColor === "b" ? -1 : 1;
+
+    // Movimento normal
+    if (Math.abs(colDiff) === 1 && rowDiff === moveDirection) {
+        return { valid: true, isCapture: false };
+    }
+    // Captura
+    if (Math.abs(colDiff) === 2 && Math.abs(rowDiff) === 2) {
+        const capturedPos = { row: from.row + rowDiff / 2, col: from.col + colDiff / 2 };
+        const capturedPiece = board[capturedPos.row]?.[capturedPos.col];
+        if (capturedPiece && capturedPiece.toLowerCase() === opponentColor) {
+            return { valid: true, isCapture: true, capturedPos };
+        }
+    }
+    return { valid: false };
+}
+
+function getDamaMove(from, to, playerColor, board) {
+    if (to.row < 0 || to.row > 7 || to.col < 0 || to.col > 7 || board[to.row]?.[to.col] !== 0) return { valid: false };
+    const opponentColor = playerColor === "b" ? "p" : "b";
+    const rowDiff = to.row - from.row;
+    const colDiff = to.col - from.col;
+    if (Math.abs(rowDiff) !== Math.abs(colDiff)) return { valid: false };
+
+    const stepRow = rowDiff > 0 ? 1 : -1;
+    const stepCol = colDiff > 0 ? 1 : -1;
+    let capturedPieces = [];
+    let capturedPos = null;
+
+    for (let i = 1; i < Math.abs(rowDiff); i++) {
+        const currRow = from.row + i * stepRow;
+        const currCol = from.col + i * stepCol;
+        const pieceOnPath = board[currRow][currCol];
+        if (pieceOnPath !== 0) {
+            if (pieceOnPath.toLowerCase() === opponentColor) {
+                capturedPieces.push(pieceOnPath);
+                capturedPos = { row: currRow, col: currCol };
+            } else {
+                return { valid: false, reason: "Não pode saltar sobre peças da mesma cor." };
+            }
+        }
+    }
+
+    if (capturedPieces.length > 1) return { valid: false, reason: "Dama não pode capturar mais de uma peça na mesma diagonal." };
+    if (capturedPieces.length === 1) {
+        // Verifica se a casa a seguir à peça capturada está livre
+        const landRow = capturedPos.row + stepRow;
+        const landCol = capturedPos.col + stepCol;
+        if(landRow !== to.row || landCol !== to.col) {
+            if(board[to.row]?.[to.col] !== 0) return { valid: false, reason: "Casa de aterragem da Dama está ocupada." };
+        }
+        return { valid: true, isCapture: true, capturedPos };
+    }
+    return { valid: true, isCapture: false };
+}
+
+function getAllPossibleCapturesForPiece(row, col, game) {
+    const board = game.boardState;
+    const piece = board[row][col];
+    if (!piece || piece === 0) return [];
+    const isDama = piece === piece.toUpperCase();
+    return findCaptureSequencesForPiece(row, col, board, isDama);
+}
+
 function checkWinCondition(boardState) {
-  let whitePieces = 0;
-  let blackPieces = 0;
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const piece = boardState[r][c];
-      if (piece !== 0) {
-        if (piece.toLowerCase() === "b") whitePieces++;
-        else if (piece.toLowerCase() === "p") blackPieces++;
-      }
+    let whitePieces = 0;
+    let blackPieces = 0;
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const piece = boardState[r][c];
+            if (piece !== 0) {
+                if (piece.toLowerCase() === "b") whitePieces++;
+                else if (piece.toLowerCase() === "p") blackPieces++;
+            }
+        }
     }
-  }
-  if (whitePieces === 0) return "p";
-  if (blackPieces === 0) return "b";
-  return null;
+    if (whitePieces === 0) return "p";
+    if (blackPieces === 0) return "b";
+    
+    // VERIFICA SE O JOGADOR ATUAL TEM MOVIMENTOS VÁLIDOS
+    const currentPlayer = io.sockets.sockets.values().next().value?.game?.currentPlayer || 'b'; // Um pouco de adivinhação aqui
+    const hasMoves = hasValidMoves(currentPlayer, { boardState });
+    if (!hasMoves) {
+        return currentPlayer === 'b' ? 'p' : 'b';
+    }
+
+    return null;
 }
+
+function hasValidMoves(playerColor, game) {
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const piece = game.boardState[r][c];
+            if (piece !== 0 && piece.toLowerCase() === playerColor) {
+                for (let toRow = 0; toRow < 8; toRow++) {
+                    for (let toCol = 0; toCol < 8; toCol++) {
+                        if (isMoveValid({row: r, col: c}, {row: toRow, col: toCol}, playerColor, game, true).valid) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 function startTimer(roomCode) {
   const room = gameRooms[roomCode];
   if (!room) return;
