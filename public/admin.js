@@ -59,19 +59,19 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderTable(users) {
     usersTableBody.innerHTML = ""; 
     users.forEach((user) => {
-  const row = document.createElement("tr");
-  row.innerHTML = `
-  <td>${user.email}</td>
-  <td data-email="${user.email}">
-    <span>${user.saldo}</span>
-  </td>
-  <td>
-    <button class="edit-btn" data-email="${user.email}">Editar</button>
-    <button class="delete-btn" data-email="${user.email}" style="background-color: #c0392b;">Excluir</button>
-  </td>
-`;
-  usersTableBody.appendChild(row);
-});
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${user.email}</td>
+        <td data-email="${user.email}">
+          <span>${user.saldo}</span>
+        </td>
+        <td>
+          <button class="edit-btn" data-email="${user.email}">Editar</button>
+          <button class="delete-btn" data-email="${user.email}" style="background-color: #c0392b;">Excluir</button>
+        </td>
+      `;
+      usersTableBody.appendChild(row);
+    });
   }
 
   // 4. Lida com os cliques na tabela (para os botões "Editar" e "Excluir")
@@ -164,6 +164,38 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     renderTable(filteredUsers);
   });
+
+  // 9. LÓGICA PARA O BOTÃO DE ZERAR SALDOS
+  const resetAllSaldosBtn = document.getElementById("reset-all-saldos-btn");
+
+  if (resetAllSaldosBtn) {
+      resetAllSaldosBtn.addEventListener("click", async () => {
+          if (!confirm("TEM A CERTEZA ABSOLUTA?\nEsta ação irá zerar o saldo de TODOS os utilizadores e não pode ser desfeita.")) {
+              return;
+          }
+          if (!confirm("Último aviso: Confirma que deseja zerar o saldo de todos os utilizadores?")) {
+              return;
+          }
+
+          try {
+              const response = await fetch('/api/admin/reset-all-saldos', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ secret: adminSecretKey })
+              });
+
+              const data = await response.json();
+
+              if (!response.ok) {
+                  throw new Error(data.message || 'Falha ao executar a operação.');
+              }
+
+              alert(data.message);
+              loadUsers();
+
+          } catch (error) {
+              alert(`Erro: ${error.message}`);
+          }
+      });
+  }
 });
-
-
