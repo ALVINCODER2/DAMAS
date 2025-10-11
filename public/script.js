@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // --- Elementos do DOM ---
   const authContainer = document.getElementById("auth-container");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
@@ -49,6 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedPiece = null;
   let tempRoomCode = null;
   let nextGameInterval = null;
+  let isGameOver = false; // NOVA "TRAVA" DE SEGURANÇA
 
   async function checkSession() {
     const savedEmail = localStorage.getItem("checkersUserEmail");
@@ -83,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function returnToLobby() {
+    isGameOver = false; // Reinicia a trava
     gameContainer.classList.add("hidden");
     overlay.classList.add("hidden");
     winnerScreen.classList.add("hidden");
@@ -103,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ... (funções de formulário de login/registo mantêm-se iguais) ...
   showRegisterLink.addEventListener("click", (e) => {
     e.preventDefault();
     loginForm.style.display = "none";
@@ -168,17 +172,14 @@ document.addEventListener("DOMContentLoaded", () => {
       authMessage.style.color = "red";
     }
   });
-
   logoutBtn.addEventListener("click", () => {
     localStorage.removeItem("checkersUserEmail");
     localStorage.removeItem("checkersCurrentRoom");
     window.location.reload();
   });
-
   createRoomBtn.addEventListener("click", () => {
     const bet = parseInt(betAmountInput.value, 10);
     const isTablita = document.getElementById("tablita-mode-checkbox").checked;
-
     if (bet > 0 && currentUser) {
       socket.emit("createRoom", { bet, user: currentUser, isTablita });
       lobbyErrorMessage.textContent = "";
@@ -207,6 +208,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tempRoomCode = null;
   });
 
+  // ... (funções createBoard, renderPieces, handleBoardClick, selectPiece, unselectPiece mantêm-se iguais) ...
   function createBoard() {
     boardElement.innerHTML = "";
     for (let row = 0; row < 8; row++) {
@@ -266,19 +268,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   }
-
   function selectPiece(pieceElement, row, col) {
     unselectPiece();
     pieceElement.classList.add("selected");
     selectedPiece = { element: pieceElement, row, col };
     socket.emit("getValidMoves", { row, col, roomCode: currentRoom });
   }
-
   function unselectPiece() {
     document.querySelectorAll(".valid-move-highlight").forEach((square) => {
       square.classList.remove("valid-move-highlight");
     });
-
     if (selectedPiece) {
       selectedPiece.element.classList.remove("selected");
       selectedPiece = null;
@@ -329,6 +328,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameStart", (gameState) => {
+    isGameOver = false; // Reinicia a trava para um novo jogo
     if (nextGameOverlay) nextGameOverlay.classList.add("hidden");
     if (nextGameInterval) clearInterval(nextGameInterval);
     lobbyContainer.classList.add("hidden");
@@ -368,7 +368,6 @@ document.addEventListener("DOMContentLoaded", () => {
     connectionLostOverlay.classList.add("hidden");
     updateGame(data.gameState);
     timerDisplay.textContent = data.timeLeft;
-
     myColor = socket.id === data.gameState.players.white ? "b" : "p";
     boardElement.classList.remove("board-flipped");
     if (myColor === "p") {
@@ -378,7 +377,12 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("opponentDisconnected", (data) => {
     returnToLobby();
   });
+
+  // ATUALIZAÇÃO COM A TRAVA DE SEGURANÇA
   socket.on("gameOver", (data) => {
+    if (isGameOver) return; // Se o jogo já acabou, ignora
+    isGameOver = true; // Ativa a trava
+
     connectionLostOverlay.classList.add("hidden");
     if (data.reason) {
       console.log("Fim de jogo:", data.reason);
@@ -390,7 +394,11 @@ document.addEventListener("DOMContentLoaded", () => {
       loserScreen.classList.remove("hidden");
     }
   });
+
   socket.on("gameDraw", (data) => {
+    if (isGameOver) return;
+    isGameOver = true;
+
     connectionLostOverlay.classList.add("hidden");
     if (drawReason) drawReason.textContent = data.reason;
     overlay.classList.remove("hidden");
