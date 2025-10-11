@@ -152,6 +152,8 @@ app.post("/api/admin/reset-all-saldos", async (req, res) => {
 // =========================================================
 const gameRooms = {};
 
+// Em index.js, substitui a constante standardOpening por esta versão corrigida
+
 const standardOpening = [
   [0, "p", 0, "p", 0, "p", 0, "p"],
   ["p", 0, "p", 0, "p", 0, "p", 0],
