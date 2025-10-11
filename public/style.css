@@ -1,0 +1,644 @@
+/* --- ESTILOS GERAIS E NOVOS PARA LOGIN PROFISSIONAL --- */
+
+/* Reset básico e configuração do corpo da página */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Poppins', sans-serif; 
+  background-image: url('background-login.jpg');
+  background-size: cover;
+  background-position: center top; /* ALTERADO AQUI */
+  background-attachment: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  color: #f0f0f0;
+}
+
+/* Container de Autenticação com Efeito de Vidro */
+#auth-container {
+  /* Fundo semitransparente escuro */
+  background: rgba(20, 20, 30, 0.65);
+
+  /* O efeito de desfoque que cria a aparência de "vidro fosco" */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px); /* Para compatibilidade com Safari */
+
+  padding: 2.5rem 3rem;
+  border-radius: 20px;
+
+  /* Borda subtil para realçar o efeito de vidro */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  /* Sombra para dar profundidade */
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+#auth-container h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #ffffff;
+}
+
+#auth-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+#auth-container input {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 14px;
+  color: #f0f0f0;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+#auth-container input::placeholder {
+  color: #a0a0a0;
+}
+
+#auth-container input:focus {
+  border-color: #e85d40; /* Cor de destaque inspirada na imagem */
+}
+
+#auth-container button {
+  background-color: #e85d40; /* Cor de destaque laranja/vermelho */
+  color: white;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+}
+
+#auth-container button:hover {
+  background-color: #d74c30;
+  transform: translateY(-2px); /* Efeito de elevação subtil */
+}
+
+#auth-container p {
+  margin-top: 1rem;
+  color: #c0c0c0;
+}
+
+#auth-container a {
+  color: #e85d40;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s;
+}
+
+#auth-container a:hover {
+  color: #ffffff;
+}
+
+#auth-message {
+  margin-top: 1rem;
+  font-weight: 600;
+  min-height: 24px;
+}
+
+/* --- ESTILOS ANTIGOS (LOBBY E JOGO) --- */
+/* Mantemos os estilos do lobby e do jogo para quando o login for bem-sucedido */
+
+/* Container do Jogo */
+#game-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #333; /* Fundo escuro para o jogo */
+  padding: 2rem;
+  border-radius: 10px;
+}
+
+/* Estilos do Tabuleiro */
+#board {
+  display: grid;
+  grid-template-columns: repeat(8, min(60px, 10vw));
+  grid-template-rows: repeat(8, min(60px, 10vw));
+  border: 5px solid #5a3d2b;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.square {
+  width: min(60px, 10vw);
+  height: min(60px, 10vw);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.light {
+  background-color: #f0d9b5;
+}
+.dark {
+  background-color: #b58863;
+}
+
+/* Estilos das Peças (Geral) */
+.piece {
+  width: 85%;
+  height: 85%;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  /* Sombra externa para a peça "saltar" do tabuleiro */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  position: relative; /* Necessário para os anéis concêntricos */
+}
+
+/* Efeito de anéis concêntricos usando pseudo-elementos */
+.piece::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.piece:hover {
+  transform: scale(1.1);
+}
+
+/* Peças Brancas */
+.white-piece {
+  /* Gradiente radial para simular luz a bater no centro da peça */
+  background: radial-gradient(circle at 50% 40%, #ffffff, #f0f0f0 60%, #dcdcdc);
+  /* Borda subtil para dar definição */
+  border: 1px solid #c0c0c0;
+}
+
+.white-piece::before {
+   border: 2px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Peças Pretas */
+.black-piece {
+  /* Gradiente radial para as peças escuras, com o brilho no topo */
+  background: radial-gradient(circle at 50% 40%, #5a5a5a, #2a2a2a 70%, #1a1a1a);
+   /* Borda subtil para as peças escuras */
+  border: 1px solid #111;
+}
+
+/* Dama (King) e Seleção */
+.king::after {
+  content: "♕";
+  font-size: 24px;
+  font-weight: bold;
+  position: absolute;
+  color: gold;
+  text-shadow: 0 0 3px black;
+}
+.black-piece.king::after {
+  color: #f0f0f0;
+  text-shadow: 0 0 3px gold;
+}
+.selected {
+  outline: 3px solid #00aaff;
+  transform: scale(1.1);
+}
+
+/* Classes Utilitárias e Telas de Fim de Jogo */
+.hidden {
+  display: none !important;
+}
+.error-message {
+  color: #e74c3c;
+  margin-top: 10px;
+}
+#game-over-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+#winner-screen,
+#loser-screen {
+  background-color: #2c3e50;
+  color: white;
+  padding: 40px 60px;
+  border-radius: 15px;
+  text-align: center;
+  border: 5px solid #f1c40f;
+  position: relative;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+#winner-screen h1,
+#loser-screen h1 {
+  font-size: 2.5em;
+  margin-bottom: 20px;
+}
+#winner-screen button,
+#loser-screen button {
+  padding: 15px 30px;
+  font-size: 1.2em;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  background-color: #f1c40f;
+  color: #2c3e50;
+  font-weight: bold;
+}
+#loser-screen .emoji {
+  font-size: 80px;
+  animation: cry 2s infinite;
+}
+@keyframes cry {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.firework {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #f1c40f;
+  border-radius: 50%;
+  opacity: 0;
+  animation: firework-animation 1.5s infinite;
+}
+.firework:nth-child(2) {
+  left: 20%;
+  top: 30%;
+  animation-delay: 0.5s;
+}
+.firework:nth-child(3) {
+  right: 20%;
+  top: 60%;
+  animation-delay: 1s;
+}
+@keyframes firework-animation {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(25);
+    opacity: 0;
+  }
+}
+
+/* Estilos do Lobby */
+#lobby-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: rgba(30, 40, 50, 0.85); /* Fundo escuro para o lobby */
+  backdrop-filter: blur(10px);
+  padding: 2rem 3rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  color: white;
+}
+.lobby-section {
+  width: 100%;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+}
+#lobby-container input {
+  padding: 10px;
+  margin-right: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+#lobby-container input[type="number"] {
+  width: 120px;
+}
+#lobby-container button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  background-color: #e85d40;
+  color: white;
+  cursor: pointer;
+  font-size: 1em;
+}
+#lobby-container button:hover {
+  background-color: #d74c30;
+}
+#room-code-display {
+  background-color: #ecf0f1;
+  color: #2c3e50;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-family: "Courier New", Courier, monospace;
+}
+
+/* Tela de Confirmação de Aposta */
+#confirm-bet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+  backdrop-filter: blur(5px);
+}
+#confirm-bet-box {
+  background-color: white;
+  color: #333;
+  padding: 30px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+#confirm-bet-box h3 {
+  margin-top: 0;
+}
+.confirm-buttons {
+  margin-top: 20px;
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+.confirm-buttons button {
+  padding: 10px 25px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+#accept-bet-btn {
+  background-color: #2ecc71;
+  color: white;
+}
+#decline-bet-btn {
+  background-color: #e74c3c;
+  color: white;
+}
+
+/* --- AJUSTE FINO PARA ECRÃS MUITO LARGOS --- */
+
+/* Esta regra só será aplicada se a largura do ecrã for de 1600 pixels ou mais */
+@media (min-width: 1600px) {
+  body {
+    /* Em vez de 'cover', forçamos a imagem a ter 100% da largura do ecrã.
+       A altura será ajustada automaticamente para manter a proporção. */
+    background-size: 100% auto;
+  }
+}
+
+/* --- ESTILOS PARA VIRAR O TABULEIRO PARA O JOGADOR 'PRETAS' --- */
+
+/* Roda o tabuleiro inteiro quando ele tem a classe .board-flipped */
+#board.board-flipped {
+  transform: rotate(180deg);
+  transition: transform 0.5s ease-in-out; /* Adiciona uma animação suave */
+}
+
+/* As peças dentro do tabuleiro virado também rodam.
+  Precisamos de as 'desvirar' para que não fiquem de cabeça para baixo.
+*/
+#board.board-flipped .piece {
+  transform: rotate(180deg);
+}
+
+/* Ajusta os efeitos de hover e seleção para funcionarem corretamente
+  com a peça já rotacionada.
+*/
+#board.board-flipped .piece:hover {
+  transform: rotate(180deg) scale(1.1);
+}
+
+#board.board-flipped .selected {
+  transform: rotate(180deg) scale(1.1);
+}
+
+/* O símbolo da Dama (coroa) também precisa ser 'desvirado' */
+#board.board-flipped .king::after {
+  transform: rotate(180deg);
+  display: inline-block; /* Garante que a transformação seja aplicada corretamente */
+}
+
+/* --- ESTILO PARA O BOTÃO DE RETIRADA --- */
+
+#withdraw-btn {
+  display: inline-block;
+  padding: 10px 25px;
+  margin-bottom: 20px; /* Adiciona um espaço abaixo do botão */
+  border-radius: 5px;
+  background-color: #2ecc71; /* Cor verde para simbolizar dinheiro/saque */
+  color: white;
+  font-weight: bold;
+  font-size: 1em;
+  text-decoration: none; /* Remove o sublinhado padrão do link */
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+#withdraw-btn:hover {
+  background-color: #27ae60; /* Um verde um pouco mais escuro ao passar o rato */
+}
+
+/* --- ESTILOS PARA O OVERLAY DE CONEXÃO PERDIDA --- */
+
+#connection-lost-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1002;
+  color: white;
+  text-align: center;
+}
+
+#connection-lost-box {
+  background-color: #34495e;
+  padding: 30px 40px;
+  border-radius: 10px;
+}
+
+#connection-lost-box h3 {
+  margin-top: 0;
+  color: #e67e22;
+}
+
+/* Animação de 'loading' */
+.loader {
+  border: 4px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 4px solid #e85d40;
+  width: 40px;
+  height: 40px;
+  animation: spin 2s linear infinite;
+  margin: 20px auto 0;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* --- ESTILOS RESPONSIVOS PARA MOBILE --- */
+
+/* Estas regras aplicam-se a ecrãs com 768px de largura ou menos (tablets e telemóveis) */
+@media (max-width: 768px) {
+  body {
+    /* Remove o padding extra para dar mais espaço aos elementos */
+    padding: 1rem;
+    /* Garante que os containers não fiquem colados às bordas */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* --- Ajustes na Tela de Login --- */
+  #auth-container {
+    padding: 2rem 1.5rem; /* Reduz o padding lateral */
+    width: 100%;
+    max-width: 90vw; /* Usa a largura da tela como referência */
+  }
+
+  #auth-container h2 {
+    font-size: 1.8rem; /* Diminui um pouco o título */
+  }
+
+  /* --- Ajustes no Lobby --- */
+  #lobby-container {
+    padding: 1.5rem; /* Reduz o padding */
+    width: 100%;
+    max-width: 95vw; /* Usa quase toda a largura da tela */
+    gap: 15px; /* Reduz o espaçamento entre as seções */
+  }
+
+  .lobby-section {
+    padding: 10px; /* Menos padding interno nas seções */
+    display: flex;
+    flex-direction: column; /* Coloca os elementos um em baixo do outro */
+    align-items: stretch; /* Estica os elementos para ocupar a largura total */
+    gap: 10px; /* Espaçamento entre o input e o botão */
+  }
+
+  #lobby-container input {
+    margin-right: 0; /* Remove a margem que não é mais necessária */
+    width: 100%; /* Faz os inputs ocuparem toda a largura */
+  }
+
+  #lobby-container input[type="number"] {
+    width: 100%; /* Também ocupa toda a largura */
+  }
+
+  /* --- Ajustes na Tela de Jogo --- */
+  #game-container {
+    padding: 1rem; /* Reduz o padding para maximizar o tabuleiro */
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  /* Ajusta o tamanho do tabuleiro e das casas para caber na tela */
+  #board {
+    /* A unidade 'vw' (viewport width) é perfeita para mobile.
+       90vw significa 90% da largura da tela.
+       Dividido por 8 casas, cada uma terá cerca de 11vw. */
+    grid-template-columns: repeat(8, min(45px, 11vw));
+    grid-template-rows: repeat(8, min(45px, 11vw));
+    border-width: 3px; /* Borda um pouco mais fina */
+  }
+
+  .square {
+    width: min(45px, 11vw);
+    height: min(45px, 11vw);
+  }
+
+  /* Garante que a coroa da Dama (king) se ajuste ao novo tamanho */
+  .king::after {
+    font-size: 18px;
+  }
+
+  #game-info {
+    flex-direction: column; /* Coloca "Vez de:" e "Tempo" um em baixo do outro */
+    align-items: center;
+    gap: 5px; /* Adiciona um pequeno espaço entre eles */
+    margin-top: 15px; /* Mais espaço acima da info do jogo */
+  }
+
+  /* Ajustes nas telas de fim de jogo (Vitória/Derrota) */
+  #winner-screen,
+  #loser-screen,
+  #draw-screen {
+    padding: 20px 30px; /* Menos padding */
+    width: 90vw; /* Ocupa 90% da tela */
+  }
+
+  #winner-screen h1,
+  #loser-screen h1 {
+    font-size: 1.8em; /* Título menor */
+  }
+}
+
+/* --- ESTILO PARA DESTAQUE DE JOGADAS VÁLIDAS --- */
+
+/* Cria um "pseudo-elemento" dentro da casa válida para ser o nosso ponto animado */
+.valid-move-highlight::after {
+  content: '';
+  display: block;
+  width: 30%; /* Tamanho do ponto */
+  height: 30%;
+  background-color: rgba(46, 204, 113, 0.7); /* Cor verde semi-transparente */
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+  /* Aplica a animação 'pulse' */
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Define a animação 'pulse' */
+@keyframes pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+}
+
+
