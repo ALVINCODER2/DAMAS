@@ -152,25 +152,53 @@ body {
   background-color: #b58863;
 }
 
-/* Estilos das Peças */
+/* Estilos das Peças (Geral) */
 .piece {
-  width: 80%;
-  height: 80%;
+  width: 85%;
+  height: 85%;
   border-radius: 50%;
-  box-shadow: inset 0 -4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   transition: transform 0.2s ease;
+  /* Sombra externa para a peça "saltar" do tabuleiro */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  position: relative; /* Necessário para os anéis concêntricos */
 }
+
+/* Efeito de anéis concêntricos usando pseudo-elementos */
+.piece::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
 .piece:hover {
   transform: scale(1.1);
 }
+
+/* Peças Brancas */
 .white-piece {
-  background-color: #f8f8f8;
-  border: 2px solid #ccc;
+  /* Gradiente radial para simular luz a bater no centro da peça */
+  background: radial-gradient(circle at 50% 40%, #ffffff, #f0f0f0 60%, #dcdcdc);
+  /* Borda subtil para dar definição */
+  border: 1px solid #c0c0c0;
 }
+
+.white-piece::before {
+   border: 2px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Peças Pretas */
 .black-piece {
-  background-color: #3a3a3a;
-  border: 2px solid #222;
+  /* Gradiente radial para as peças escuras, com o brilho no topo */
+  background: radial-gradient(circle at 50% 40%, #5a5a5a, #2a2a2a 70%, #1a1a1a);
+   /* Borda subtil para as peças escuras */
+  border: 1px solid #111;
 }
 
 /* Dama (King) e Seleção */
