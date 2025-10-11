@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   // --- Elementos do DOM ---
+  const resignBtn = document.getElementById("resign-btn");
   const authContainer = document.getElementById("auth-container");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
@@ -106,6 +107,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  resignBtn.addEventListener("click", () => {
+    if (
+      currentRoom &&
+      confirm("Tem a certeza que deseja desistir da partida?")
+    ) {
+      socket.emit("playerResign", { room: currentRoom });
+    }
+  });
   // ... (funções de formulário de login/registo mantêm-se iguais) ...
   showRegisterLink.addEventListener("click", (e) => {
     e.preventDefault();

@@ -214,6 +214,28 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("playerResign", () => {
+    // Encontra a sala onde o jogador que desistiu está
+    const roomCode = Array.from(socket.rooms).find((r) => r !== socket.id);
+    const gameRoom = gameRooms[roomCode];
+
+    if (!gameRoom || !gameRoom.game) return;
+
+    // Determina quem é o vencedor e quem é o perdedor
+    const loserSocketId = socket.id;
+    const winnerSocketId =
+      gameRoom.game.players.white === loserSocketId
+        ? gameRoom.game.players.black
+        : gameRoom.game.players.white;
+
+    const winnerColor =
+      gameRoom.game.players.white === winnerSocketId ? "b" : "p";
+    const loserColor = winnerColor === "b" ? "p" : "b";
+
+    // Chama a função existente para processar o fim do jogo
+    processEndOfGame(winnerColor, loserColor, gameRoom, "Oponente desistiu.");
+  });
+
   socket.on("rejoinActiveGame", (data) => {
     const { roomCode, user } = data;
     if (!roomCode || !user) return;
