@@ -1027,48 +1027,32 @@ function hasValidMoves(playerColor, game) {
   return false;
 }
 
+// VERSÃO NOVA E CORRIGIDA
 function startTimer(roomCode) {
   const room = gameRooms[roomCode];
   if (!room) return;
-  room.timerInterval = setInterval(async () => {
+
+  // Limpa qualquer temporizador antigo para esta sala, por segurança
+  if (room.timerInterval) clearInterval(room.timerInterval);
+
+  room.timerInterval = setInterval(() => {
+    // Removido 'async' desnecessário
+    if (!gameRooms[roomCode]) {
+      // Verificação extra para salas já eliminadas
+      clearInterval(room.timerInterval);
+      return;
+    }
+
     room.timeLeft--;
     io.to(roomCode).emit("timerUpdate", { timeLeft: room.timeLeft });
+
     if (room.timeLeft <= 0) {
       clearInterval(room.timerInterval);
       const loserColor = room.game.currentPlayer;
       const winnerColor = loserColor === "b" ? "p" : "b";
-      const winnerId =
-        room.game.players[winnerColor === "b" ? "white" : "black"];
-      const loserId =
-        room.game.players[winnerColor === "b" ? "black" : "white"];
-      const winnerSocket = io.sockets.sockets.get(winnerId);
-      const winnerUser = room.players.find(
-        (p) => p.socketId === winnerId
-      )?.user;
-      if (winnerUser) {
-        const prize = room.bet * 2;
-        const updatedUser = await User.findOneAndUpdate(
-          { email: winnerUser.email },
-          { $inc: { saldo: prize } },
-          { new: true }
-        );
-        const loserData = room.players.find((p) => p.socketId === loserId);
-        const updatedLoser = await User.findOne({
-          email: loserData.user.email,
-        });
-        io.to(roomCode).emit("gameOver", {
-          winner: winnerColor,
-          reason: "Tempo esgotado!",
-        });
-        if (winnerSocket) {
-          winnerSocket.emit("updateSaldo", { newSaldo: updatedUser.saldo });
-        }
-        const loserSocket = io.sockets.sockets.get(loserId);
-        if (loserSocket) {
-          loserSocket.emit("updateSaldo", { newSaldo: updatedLoser.saldo });
-        }
-      }
-      delete gameRooms[roomCode];
+
+      // AQUI ESTÁ A CORREÇÃO: Apenas chama a função principal!
+      processEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
     }
   }, 1000);
 }
