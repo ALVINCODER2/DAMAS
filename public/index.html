@@ -1,140 +1,140 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Damas Aposta - Jogo Online</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"
-      rel="stylesheet"
-    />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Damas Aposta - Jogo Online</title>
 
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <div id="auth-container">
-      <form id="login-form">
-        <h2>LOGIN</h2>
-        <input type="email" id="login-email" placeholder="Email" required />
-        <input
-          type="password"
-          id="login-password"
-          placeholder="Senha"
-          required
-        />
-        <button type="submit">Entrar</button>
-        <p>Não tem uma conta? <a href="#" id="show-register">Cadastre-se</a></p>
-      </form>
-      <form id="register-form" style="display: none">
-        <h2>Cadastro</h2>
-        <input type="email" id="register-email" placeholder="Email" required />
-        <input
-          type="password"
-          id="register-password"
-          placeholder="Senha"
-          required
-        />
-        <button type="submit">Cadastrar</button>
-        <p>Já tem uma conta? <a href="#" id="show-login">Faça Login</a></p>
-      </form>
-      <p id="auth-message" class="message"></p>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div id="auth-container">
+    <form id="login-form">
+      <h2>LOGIN</h2>
+      <input type="email" id="login-email" placeholder="Email" required />
+      <input type="password" id="login-password" placeholder="Senha" required />
+      <button type="submit">Entrar</button>
+      <p>Não tem uma conta? <a href="#" id="show-register">Cadastre-se</a></p>
+    </form>
+    <form id="register-form" style="display: none">
+      <h2>Cadastro</h2>
+      <input type="email" id="register-email" placeholder="Email" required />
+      <input type="password" id="register-password" placeholder="Senha" required />
+      <button type="submit">Cadastrar</button>
+      <p>Já tem uma conta? <a href="#" id="show-login">Faça Login</a></p>
+    </form>
+    <p id="auth-message" class="message"></p>
+  </div>
+
+  <div id="lobby-container" class="hidden">
+    <h2 id="lobby-welcome-message"></h2>
+
+    <a href="https://w.app/fjvskr" id="withdraw-btn" target="_blank">Retirar Saldo</a>
+    <button id="logout-btn" style="background-color:#c0392b; margin-bottom: 20px;">Sair</button>
+
+    <div class="lobby-section">
+      <h3>Criar uma nova partida</h3>
+      <input type="number" id="bet-amount-input" placeholder="Valor da Aposta" min="1" value="1" />
+      <div
+        style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; margin-bottom: 10px;">
+        <input type="checkbox" id="tablita-mode-checkbox" />
+        <label for="tablita-mode-checkbox">Jogar em modo Tablita</label>
+      </div>
+      <button id="create-room-btn">Criar Sala</button>
     </div>
-
-    <div id="lobby-container" class="hidden">
-      <h2 id="lobby-welcome-message"></h2>
-      
-      <a href="https://w.app/fjvskr" id="withdraw-btn" target="_blank">Retirar Saldo</a>
-      <button id="logout-btn" style="background-color:#c0392b; margin-bottom: 20px;">Sair</button>
-
-      <div class="lobby-section">
-        <h3>Criar uma nova partida</h3>
-        <input
-          type="number"
-          id="bet-amount-input"
-          placeholder="Valor da Aposta"
-          min="1"
-          value="1"
-        />
-        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; margin-bottom: 10px;">
-            <input type="checkbox" id="tablita-mode-checkbox" />
-            <label for="tablita-mode-checkbox">Jogar em modo Tablita</label>
-        </div>
-        <button id="create-room-btn">Criar Sala</button>
-      </div>
-      <div class="lobby-section">
-        <h3>Entrar numa partida</h3>
-        <input type="text" id="room-code-input" placeholder="Código da Sala" />
-        <button id="join-room-btn">Entrar na Sala</button>
-      </div>
-      <div id="waiting-area" class="hidden">
-        <p>A aguardar por um oponente...</p>
-        <p>
-          Partilhe este código com um amigo:
-          <strong id="room-code-display"></strong>
-        </p>
-      </div>
-      <p id="lobby-error-message" class="error-message"></p>
+    <div class="lobby-section">
+      <h3>Entrar numa partida</h3>
+      <input type="text" id="room-code-input" placeholder="Código da Sala" />
+      <button id="join-room-btn">Entrar na Sala</button>
     </div>
-
-    <div id="game-container" class="hidden">
-      <p id="game-status"></p>
-      <div id="board"></div>
-      <div id="game-info">
-        <p>Vez de: <span id="turn">Brancas</span></p>
-        <p>Tempo restante: <span id="timer">40</span>s</p>
-      </div>
+    <div id="waiting-area" class="hidden">
+      <p>A aguardar por um oponente...</p>
+      <p>
+        Partilhe este código com um amigo:
+        <strong id="room-code-display"></strong>
+      </p>
     </div>
+    <p id="lobby-error-message" class="error-message"></p>
+  </div>
 
-    <div id="game-over-overlay" class="hidden">
-      <div id="winner-screen" class="hidden">
-        <div class="firework"></div>
-        <div class="firework"></div>
-        <div class="firework"></div>
-        <h1>Parabéns, Você Ganhou!</h1>
-        <button id="play-again-btn-winner">Jogar Novamente</button>
-      </div>
-      <div id="loser-screen" class="hidden">
-        <div class="emoji">😢</div>
-        <h1>Você Perdeu</h1>
-        <button id="play-again-btn-loser">Jogar Novamente</button>
-      </div>
-       <div id="draw-screen" class="hidden" style="text-align: center; color: white; background-color: #555; padding: 40px 60px; border-radius: 15px;">
-        <h1>Empate!</h1>
-        <p id="draw-reason" style="margin-bottom: 20px;">A partida terminou em empate.</p>
-        <button id="draw-play-again-btn">Voltar ao Lobby</button>
-      </div>
+  <div id="game-container" class="hidden">
+    <p id="game-status"></p>
+    <div id="board"></div>
+    <div id="game-info">
+      <p>Vez de: <span id="turn">Brancas</span></p>
+      <p>Tempo restante: <span id="timer">40</span>s</p>
     </div>
+  </div>
 
-    <div id="confirm-bet-overlay" class="hidden">
-      <div id="confirm-bet-box">
-        <h3>Confirmar Aposta</h3>
-        <p>
-          A aposta para esta sala é de
-          <strong id="confirm-bet-amount"></strong> créditos.
-        </p>
-        <p id="confirm-tablita-mode" style="font-weight: bold; margin-top: 10px;"></p>
-        <p>Você aceita?</p>
-        <div class="confirm-buttons">
-          <button id="accept-bet-btn">Aceitar</button>
-          <button id="decline-bet-btn">Recusar</button>
-        </div>
+  <div id="game-over-overlay" class="hidden">
+    <div id="winner-screen" class="hidden">
+      <div class="firework"></div>
+      <div class="firework"></div>
+      <div class="firework"></div>
+      <h1>Parabéns, Você Ganhou!</h1>
+      <button id="play-again-btn-winner">Jogar Novamente</button>
+    </div>
+    <div id="loser-screen" class="hidden">
+      <div class="emoji">😢</div>
+      <h1>Você Perdeu</h1>
+      <button id="play-again-btn-loser">Jogar Novamente</button>
+    </div>
+    <div id="draw-screen" class="hidden"
+      style="text-align: center; color: white; background-color: #555; padding: 40px 60px; border-radius: 15px;">
+      <h1>Empate!</h1>
+      <p id="draw-reason" style="margin-bottom: 20px;">A partida terminou em empate.</p>
+      <button id="draw-play-again-btn">Voltar ao Lobby</button>
+    </div>
+  </div>
+
+  <div id="confirm-bet-overlay" class="hidden">
+    <div id="confirm-bet-box">
+      <h3>Confirmar Aposta</h3>
+      <p>
+        A aposta para esta sala é de
+        <strong id="confirm-bet-amount"></strong> créditos.
+      </p>
+      <p id="confirm-tablita-mode" style="font-weight: bold; margin-top: 10px;"></p>
+      <p>Você aceita?</p>
+      <div class="confirm-buttons">
+        <button id="accept-bet-btn">Aceitar</button>
+        <button id="decline-bet-btn">Recusar</button>
       </div>
     </div>
-    <div id="connection-lost-overlay" class="hidden">
-      <div id="connection-lost-box">
-        <h3>Conexão Instável</h3>
-        <p id="connection-lost-message"></p>
-        <div class="loader"></div>
-      </div>
+  </div>
+  <div id="connection-lost-overlay" class="hidden">
+    <div id="connection-lost-box">
+      <h3>Conexão Instável</h3>
+      <p id="connection-lost-message"></p>
+      <div class="loader"></div>
     </div>
+  </div>
+  <div id="next-game-overlay" class="hidden">
+    <div id="next-game-box">
+      <h2 id="next-game-title">Fim da 1ª Partida!</h2>
+      <p id="match-score-display" style="font-size: 1.2em; margin: 15px 0;"></p>
+      <p>A 2ª partida começará com as cores invertidas...</p>
+      <p style="margin-top: 15px;">A iniciar em <span id="next-game-timer">10</span>s</p>
+    </div>
+  </div>
 
-    <audio id="move-sound" src="/sounds/move.mp3" preload="auto"></audio>
-    <audio id="capture-sound" src="/sounds/capture.mp3" preload="auto"></audio>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
-  </body>
+</html>
+
+<audio id="move-sound" src="/sounds/move.mp3" preload="auto"></audio>
+<audio id="capture-sound" src="/sounds/capture.mp3" preload="auto"></audio>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="script.js"></script>
+</body>
+
 </html>

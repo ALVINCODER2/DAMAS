@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // --- Elementos do DOM ---
   const authContainer = document.getElementById("auth-container");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
@@ -25,17 +24,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const loserScreen = document.getElementById("loser-screen");
   const drawScreen = document.getElementById("draw-screen");
   const drawReason = document.getElementById("draw-reason");
-  const connectionLostOverlay = document.getElementById("connection-lost-overlay");
-  const connectionLostMessage = document.getElementById("connection-lost-message");
+  const connectionLostOverlay = document.getElementById(
+    "connection-lost-overlay"
+  );
+  const connectionLostMessage = document.getElementById(
+    "connection-lost-message"
+  );
   const confirmBetOverlay = document.getElementById("confirm-bet-overlay");
   const confirmBetAmount = document.getElementById("confirm-bet-amount");
   const acceptBetBtn = document.getElementById("accept-bet-btn");
   const declineBetBtn = document.getElementById("decline-bet-btn");
   const logoutBtn = document.getElementById("logout-btn");
-  // ELEMENTOS DE ÁUDIO
   const moveSound = document.getElementById("move-sound");
   const captureSound = document.getElementById("capture-sound");
-
+  const nextGameOverlay = document.getElementById("next-game-overlay");
+  const matchScoreDisplay = document.getElementById("match-score-display");
+  const nextGameTimer = document.getElementById("next-game-timer");
 
   const socket = io({ autoConnect: false });
   let currentUser = null;
@@ -44,6 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let boardState = [];
   let selectedPiece = null;
   let tempRoomCode = null;
+  let nextGameInterval = null;
 
   async function checkSession() {
     const savedEmail = localStorage.getItem("checkersUserEmail");
@@ -59,7 +64,9 @@ document.addEventListener("DOMContentLoaded", () => {
           currentUser = data.user;
           authContainer.classList.add("hidden");
           lobbyContainer.classList.remove("hidden");
-          lobbyWelcomeMessage.textContent = `Bem-vindo, ${currentUser.email}! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
+          lobbyWelcomeMessage.textContent = `Bem-vindo, ${
+            currentUser.email
+          }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
           socket.connect();
         } else {
           localStorage.removeItem("checkersUserEmail");
@@ -81,15 +88,18 @@ document.addEventListener("DOMContentLoaded", () => {
     winnerScreen.classList.add("hidden");
     loserScreen.classList.add("hidden");
     if (drawScreen) drawScreen.classList.add("hidden");
+    if (nextGameOverlay) nextGameOverlay.classList.add("hidden");
     connectionLostOverlay.classList.add("hidden");
     lobbyContainer.classList.remove("hidden");
-    boardElement.classList.remove('board-flipped');
+    boardElement.classList.remove("board-flipped");
     boardElement.innerHTML = "";
     currentRoom = null;
     myColor = null;
     localStorage.removeItem("checkersCurrentRoom");
     if (currentUser) {
-      lobbyWelcomeMessage.textContent = `Bem-vindo, ${currentUser.email}! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
+      lobbyWelcomeMessage.textContent = `Bem-vindo, ${
+        currentUser.email
+      }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
     }
   }
 
@@ -146,7 +156,9 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("checkersUserEmail", currentUser.email);
         authContainer.classList.add("hidden");
         lobbyContainer.classList.remove("hidden");
-        lobbyWelcomeMessage.textContent = `Bem-vindo, ${currentUser.email}! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
+        lobbyWelcomeMessage.textContent = `Bem-vindo, ${
+          currentUser.email
+        }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
       } else {
         authMessage.textContent = data.message;
         authMessage.style.color = "red";
@@ -166,12 +178,13 @@ document.addEventListener("DOMContentLoaded", () => {
   createRoomBtn.addEventListener("click", () => {
     const bet = parseInt(betAmountInput.value, 10);
     const isTablita = document.getElementById("tablita-mode-checkbox").checked;
-    
+
     if (bet > 0 && currentUser) {
       socket.emit("createRoom", { bet, user: currentUser, isTablita });
       lobbyErrorMessage.textContent = "";
     } else if (!currentUser) {
-      lobbyErrorMessage.textContent = "Erro de autenticação. Tente fazer o login novamente.";
+      lobbyErrorMessage.textContent =
+        "Erro de autenticação. Tente fazer o login novamente.";
     } else {
       lobbyErrorMessage.textContent = "A aposta deve ser maior que zero.";
     }
@@ -262,31 +275,32 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function unselectPiece() {
-    document.querySelectorAll('.valid-move-highlight').forEach(square => {
-        square.classList.remove('valid-move-highlight');
+    document.querySelectorAll(".valid-move-highlight").forEach((square) => {
+      square.classList.remove("valid-move-highlight");
     });
 
     if (selectedPiece) {
-        selectedPiece.element.classList.remove("selected");
-        selectedPiece = null;
+      selectedPiece.element.classList.remove("selected");
+      selectedPiece = null;
     }
   }
 
   function updateGame(gameState) {
-    // Lógica para contar peças e tocar som
-    const oldPieceCount = boardState.flat().filter(p => p !== 0).length;
-    const newPieceCount = gameState.boardState.flat().filter(p => p !== 0).length;
+    const oldPieceCount = boardState.flat().filter((p) => p !== 0).length;
+    const newPieceCount = gameState.boardState
+      .flat()
+      .filter((p) => p !== 0).length;
 
-    if (newPieceCount > 0 && oldPieceCount > 0) { // Não toca som no início do jogo
-        if (newPieceCount < oldPieceCount) {
-            captureSound.currentTime = 0;
-            captureSound.play();
-        } else {
-            moveSound.currentTime = 0;
-            moveSound.play();
-        }
+    if (newPieceCount > 0 && oldPieceCount > 0) {
+      if (newPieceCount < oldPieceCount) {
+        captureSound.currentTime = 0;
+        captureSound.play();
+      } else {
+        moveSound.currentTime = 0;
+        moveSound.play();
+      }
     }
-    
+
     boardState = gameState.boardState;
     renderPieces();
     turnDisplay.textContent =
@@ -300,20 +314,23 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("joinError", (data) => {
     lobbyErrorMessage.textContent = data.message;
   });
-  
+
   socket.on("confirmBet", (data) => {
     confirmBetAmount.textContent = data.bet;
     tempRoomCode = data.roomCode;
-    const tablitaInfo = document.getElementById('confirm-tablita-mode');
+    const tablitaInfo = document.getElementById("confirm-tablita-mode");
     if (data.isTablita) {
-        tablitaInfo.textContent = "Esta partida será em modo Tablita (início aleatório).";
+      tablitaInfo.textContent =
+        "Esta partida será em modo Tablita (ida e volta).";
     } else {
-        tablitaInfo.textContent = "Esta partida será em modo Clássico.";
+      tablitaInfo.textContent = "Esta partida será em modo Clássico.";
     }
     confirmBetOverlay.classList.remove("hidden");
   });
 
   socket.on("gameStart", (gameState) => {
+    if (nextGameOverlay) nextGameOverlay.classList.add("hidden");
+    if (nextGameInterval) clearInterval(nextGameInterval);
     lobbyContainer.classList.add("hidden");
     gameContainer.classList.remove("hidden");
     createBoard();
@@ -323,10 +340,10 @@ document.addEventListener("DOMContentLoaded", () => {
     gameStatus.textContent = `Você joga com as ${
       myColor === "b" ? "Brancas" : "Pretas"
     }.`;
-    if (myColor === 'p') {
-      boardElement.classList.add('board-flipped');
+    boardElement.classList.remove("board-flipped");
+    if (myColor === "p") {
+      boardElement.classList.add("board-flipped");
     }
-    // Não toca som no gameStart, apenas atualiza o estado inicial
     boardState = gameState.boardState;
     renderPieces();
     turnDisplay.textContent =
@@ -336,7 +353,6 @@ document.addEventListener("DOMContentLoaded", () => {
     timerDisplay.textContent = data.timeLeft;
   });
 
-  // O "gameStateUpdate" agora é a ÚNICA fonte de atualização e som
   socket.on("gameStateUpdate", (gameState) => {
     updateGame(gameState);
   });
@@ -354,9 +370,9 @@ document.addEventListener("DOMContentLoaded", () => {
     timerDisplay.textContent = data.timeLeft;
 
     myColor = socket.id === data.gameState.players.white ? "b" : "p";
-    boardElement.classList.remove('board-flipped');
-    if (myColor === 'p') {
-      boardElement.classList.add('board-flipped');
+    boardElement.classList.remove("board-flipped");
+    if (myColor === "p") {
+      boardElement.classList.add("board-flipped");
     }
   });
   socket.on("opponentDisconnected", (data) => {
@@ -381,12 +397,29 @@ document.addEventListener("DOMContentLoaded", () => {
     if (drawScreen) drawScreen.classList.remove("hidden");
   });
 
+  socket.on("nextGameStarting", (data) => {
+    matchScoreDisplay.textContent = `Placar: ${data.score[0]} - ${data.score[1]}`;
+    nextGameOverlay.classList.remove("hidden");
+    let countdown = 10;
+    nextGameTimer.textContent = countdown;
+    if (nextGameInterval) clearInterval(nextGameInterval);
+    nextGameInterval = setInterval(() => {
+      countdown--;
+      nextGameTimer.textContent = countdown;
+      if (countdown <= 0) {
+        clearInterval(nextGameInterval);
+      }
+    }, 1000);
+  });
+
   socket.on("showValidMoves", (moves) => {
-    moves.forEach(move => {
-        const square = document.querySelector(`.square[data-row='${move.row}'][data-col='${move.col}']`);
-        if (square) {
-            square.classList.add('valid-move-highlight');
-        }
+    moves.forEach((move) => {
+      const square = document.querySelector(
+        `.square[data-row='${move.row}'][data-col='${move.col}']`
+      );
+      if (square) {
+        square.classList.add("valid-move-highlight");
+      }
     });
   });
 
@@ -395,16 +428,22 @@ document.addEventListener("DOMContentLoaded", () => {
       currentUser.saldo = data.newSaldo;
     }
   });
-  document.getElementById("play-again-btn-winner").addEventListener("click", () => {
-    returnToLobby();
-  });
-  document.getElementById("play-again-btn-loser").addEventListener("click", () => {
-    returnToLobby();
-  });
-  if (document.getElementById("draw-play-again-btn")) {
-    document.getElementById("draw-play-again-btn").addEventListener("click", () => {
+  document
+    .getElementById("play-again-btn-winner")
+    .addEventListener("click", () => {
       returnToLobby();
     });
+  document
+    .getElementById("play-again-btn-loser")
+    .addEventListener("click", () => {
+      returnToLobby();
+    });
+  if (document.getElementById("draw-play-again-btn")) {
+    document
+      .getElementById("draw-play-again-btn")
+      .addEventListener("click", () => {
+        returnToLobby();
+      });
   }
   socket.on("connect", () => {
     console.log("Conectado ao servidor com o ID:", socket.id);
@@ -416,7 +455,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } else if (currentUser && savedRoom) {
       currentRoom = savedRoom;
-      socket.emit('rejoinActiveGame', { roomCode: currentRoom, user: currentUser });
+      socket.emit("rejoinActiveGame", {
+        roomCode: currentRoom,
+        user: currentUser,
+      });
       authContainer.classList.add("hidden");
       lobbyContainer.classList.add("hidden");
       gameContainer.classList.remove("hidden");
@@ -425,9 +467,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameNotFound", () => {
-    alert("A partida anterior não foi encontrada. O tempo para reconexão pode ter expirado. A voltar para o lobby...");
+    alert(
+      "A partida anterior não foi encontrada. O tempo para reconexão pode ter expirado. A voltar para o lobby..."
+    );
     returnToLobby();
   });
-  
+
   checkSession();
 });
