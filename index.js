@@ -426,6 +426,8 @@ io.on("connection", (socket) => {
     io.to(roomCode).emit("gameStart", gameState);
   });
 
+  // EM index.js, SUBSTITUA A SUA FUNÇÃO 'playerMove' POR ESTA
+
   socket.on("playerMove", async (moveData) => {
     const { from, to, room } = moveData;
     const gameRoom = gameRooms[room];
@@ -440,45 +442,44 @@ io.on("connection", (socket) => {
     const isValid = isMoveValid(from, to, playerColor, game);
     if (isValid.valid) {
       let piece = game.boardState[from.row][from.col];
-      let wasPromotion = false;
       game.boardState[to.row][to.col] = piece;
       game.boardState[from.row][from.col] = 0;
       let canCaptureAgain = false;
+      let wasPromotion = false;
+
       if (isValid.isCapture) {
         game.boardState[isValid.capturedPos.row][isValid.capturedPos.col] = 0;
         game.movesSinceCapture = 0;
-        let movedPiece = game.boardState[to.row][to.col];
-        if (
-          (movedPiece === "b" && to.row === 0) ||
-          (movedPiece === "p" && to.row === 7)
-        ) {
+
+        const nextCaptures = getAllPossibleCapturesForPiece(
+          to.row,
+          to.col,
+          game
+        );
+        canCaptureAgain = nextCaptures.length > 0;
+      }
+
+      // <-- CORREÇÃO: A lógica de promoção foi movida para aqui
+      // Uma peça só é promovida se NÃO PUDER capturar novamente na mesma jogada.
+      if (!canCaptureAgain) {
+        const currentPiece = game.boardState[to.row][to.col];
+        if (currentPiece === "b" && to.row === 0) {
+          game.boardState[to.row][to.col] = "B";
           wasPromotion = true;
-          movedPiece = movedPiece.toUpperCase();
-          game.boardState[to.row][to.col] = movedPiece;
-        }
-        if (!wasPromotion) {
-          const nextCaptures = getAllPossibleCapturesForPiece(
-            to.row,
-            to.col,
-            game
-          );
-          canCaptureAgain = nextCaptures.length > 0;
+        } else if (currentPiece === "p" && to.row === 7) {
+          game.boardState[to.row][to.col] = "P";
+          wasPromotion = true;
         }
       }
-      piece = game.boardState[to.row][to.col];
-      if (piece.toLowerCase() === "b" && to.row === 0 && piece === "b") {
-        game.boardState[to.row][to.col] = "B";
-        wasPromotion = true;
-      }
-      if (piece.toLowerCase() === "p" && to.row === 7 && piece === "p") {
-        game.boardState[to.row][to.col] = "P";
-        wasPromotion = true;
-      }
+
+      // Se foi uma promoção, não pode haver outra captura (regra oficial)
       if (wasPromotion) {
+        canCaptureAgain = false;
         game.movesSinceCapture = 0;
       } else if (!isValid.isCapture) {
         game.movesSinceCapture++;
       }
+
       if (game.movesSinceCapture >= 20) {
         return processEndOfGame(
           null,
@@ -487,6 +488,7 @@ io.on("connection", (socket) => {
           "Empate por 20 jogadas sem captura."
         );
       }
+
       const winner = checkWinCondition(
         game.boardState,
         game.currentPlayer,
@@ -500,7 +502,9 @@ io.on("connection", (socket) => {
           "Fim de jogo!"
         );
       }
-      if (!canCaptureAgain || wasPromotion) {
+
+      // Troca o jogador apenas se não houver mais capturas a serem feitas
+      if (!canCaptureAgain) {
         game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
         if (!hasValidMoves(game.currentPlayer, game)) {
           return processEndOfGame(
@@ -511,6 +515,7 @@ io.on("connection", (socket) => {
           );
         }
       }
+
       resetTimer(room);
       io.to(room).emit("gameStateUpdate", { ...game });
     } else {
@@ -904,7 +909,8 @@ function isMoveValid(from, to, playerColor, game, ignoreMajorityRule = false) {
   return moveResult || { valid: false, reason: "Movimento não permitido." };
 }
 
-// FUNÇÕES AUXILIARES (sem alterações, mas mantidas por clareza)
+// EM index.js, SUBSTITUA A SUA FUNÇÃO 'getNormalPieceMove' POR ESTA
+
 function getNormalPieceMove(from, to, playerColor, board) {
   if (
     to.row < 0 ||
@@ -912,18 +918,21 @@ function getNormalPieceMove(from, to, playerColor, board) {
     to.col < 0 ||
     to.col > 7 ||
     board[to.row]?.[to.col] !== 0
-  )
+  ) {
     return { valid: false };
+  }
   const opponentColor = playerColor === "b" ? "p" : "b";
   const rowDiff = to.row - from.row;
   const colDiff = to.col - from.col;
   const moveDirection = playerColor === "b" ? -1 : 1;
 
-  // Movimento normal
+  // Movimento normal (para a frente)
   if (Math.abs(colDiff) === 1 && rowDiff === moveDirection) {
     return { valid: true, isCapture: false };
   }
-  // Captura
+
+  // <-- CORREÇÃO: A lógica de captura agora ignora a 'moveDirection'
+  // Captura (em qualquer direção na diagonal)
   if (Math.abs(colDiff) === 2 && Math.abs(rowDiff) === 2) {
     const capturedPos = {
       row: from.row + rowDiff / 2,
