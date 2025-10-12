@@ -715,10 +715,15 @@ function findBestCaptureMoves(playerColor, game) {
   return bestMoves;
 }
 
+// EM index.js, SUBSTITUA A FUNÇÃO ANTIGA POR ESTA VERSÃO CORRIGIDA
+
 // NOVA FUNÇÃO RECURSIVA para encontrar sequências
 function findCaptureSequencesForPiece(row, col, board, isDama) {
   let sequences = [];
-  const opponentColor = board[row][col].toLowerCase() === "b" ? "p" : "b";
+  const piece = board[row][col];
+  if (piece === 0) return []; // Verificação de segurança
+  const opponentColor = piece.toLowerCase() === "b" ? "p" : "b";
+
   const directions = [
     { r: -1, c: -1 },
     { r: -1, c: 1 },
@@ -728,7 +733,7 @@ function findCaptureSequencesForPiece(row, col, board, isDama) {
 
   for (const dir of directions) {
     if (isDama) {
-      // Lógica de captura da Dama
+      // Lógica de captura da Dama (mantém-se igual, pois já era robusta)
       let capturedPos = null;
       for (let i = 1; i < 8; i++) {
         const nextRow = row + i * dir.r;
@@ -764,7 +769,7 @@ function findCaptureSequencesForPiece(row, col, board, isDama) {
                 landRow,
                 landCol,
                 newBoard,
-                true
+                true // Continua como Dama
               );
               if (nextSequences.length > 0) {
                 nextSequences.forEach((seq) =>
@@ -784,11 +789,18 @@ function findCaptureSequencesForPiece(row, col, board, isDama) {
         }
       }
     } else {
-      // Lógica de captura da Peça Comum
+      // Lógica de captura da Peça Comum (AQUI ESTÁ A CORREÇÃO)
       const capturedRow = row + dir.r;
       const capturedCol = col + dir.c;
       const landRow = row + 2 * dir.r;
       const landCol = col + 2 * dir.c;
+
+      // Garante que a peça só capture para a frente
+      const pieceColor = board[row][col].toLowerCase();
+      const forwardDirection = pieceColor === "b" ? -1 : 1;
+      if (dir.r !== forwardDirection) {
+        continue; // Pula direções "para trás" para peças comuns
+      }
 
       if (landRow >= 0 && landRow < 8 && landCol >= 0 && landCol < 8) {
         const capturedPiece = board[capturedRow]?.[capturedCol];
@@ -798,17 +810,30 @@ function findCaptureSequencesForPiece(row, col, board, isDama) {
           capturedPiece.toLowerCase() === opponentColor &&
           landingSquare === 0
         ) {
+          // --- INÍCIO DA LÓGICA CORRIGIDA ---
+          let becomesDama = false;
+          // Verifica se a peça vai aterrar na linha de promoção
+          if (
+            (pieceColor === "b" && landRow === 0) ||
+            (pieceColor === "p" && landRow === 7)
+          ) {
+            becomesDama = true;
+          }
+
           const newBoard = JSON.parse(JSON.stringify(board));
           newBoard[landRow][landCol] = newBoard[row][col];
           newBoard[row][col] = 0;
           newBoard[capturedRow][capturedCol] = 0;
 
+          // A chamada recursiva agora passa 'becomesDama' como o novo status da peça
           const nextSequences = findCaptureSequencesForPiece(
             landRow,
             landCol,
             newBoard,
-            false
+            becomesDama // <--- ESTA É A MUDANÇA CRÍTICA!
           );
+          // --- FIM DA LÓGICA CORRIGIDA ---
+
           if (nextSequences.length > 0) {
             nextSequences.forEach((seq) =>
               sequences.push([{ row, col }, ...seq])
