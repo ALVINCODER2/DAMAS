@@ -836,7 +836,8 @@ body {
 
 /* Fundo Escuro do Overlay */
 #pix-overlay,
-#withdraw-overlay {
+#withdraw-overlay,
+#referrals-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -937,12 +938,14 @@ body {
 
 /* Botão Fechar Padronizado */
 #close-pix-overlay-btn,
-#close-withdraw-overlay-btn {
+#close-withdraw-overlay-btn,
+#close-referrals-overlay-btn {
   background-color: #95a5a6;
   margin-top: 15px;
 }
 #close-pix-overlay-btn:hover,
-#close-withdraw-overlay-btn:hover {
+#close-withdraw-overlay-btn:hover,
+#close-referrals-overlay-btn:hover {
   background-color: #7f8c8d;
 }
 
