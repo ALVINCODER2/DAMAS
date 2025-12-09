@@ -997,7 +997,7 @@ body {
   color: #95a5a6; /* Cinza */
 }
 
-/* --- NOVO: HUD DOS JOGADORES (NOMES ACIMA DO TABULEIRO) --- */
+/* --- HUD DE JOGADORES (JÁ EXISTENTE) --- */
 .players-hud {
   display: flex;
   justify-content: space-between;
@@ -1047,7 +1047,7 @@ body {
 
 @media (max-width: 500px) {
   .players-hud {
-    flex-direction: row; /* Mantém na mesma linha em mobile */
+    flex-direction: row;
     justify-content: space-between;
     padding: 8px 10px;
     font-size: 0.9em;
@@ -1058,5 +1058,53 @@ body {
   .piece-icon {
     width: 20px;
     height: 20px;
+  }
+}
+
+/* --- ESTILOS DO TIMER E INFORMAÇÕES DE JOGO (ATUALIZADO) --- */
+#game-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 15px;
+  width: 100%;
+}
+
+#game-info p {
+  color: #ecf0f1;
+  font-size: 1.1rem;
+  margin: 0;
+  text-align: center;
+}
+
+/* Destaque para o turno */
+#turn {
+  font-weight: bold;
+  color: #3498db; /* Azul claro para destacar de quem é a vez */
+  text-transform: uppercase;
+}
+
+/* TIMER GIGANTE */
+#timer {
+  display: inline-block;
+  font-family: "Courier New", Courier, monospace; /* Fonte monoespaçada para evitar que os números "pulem" */
+  font-size: 3.5rem; /* Tamanho bem grande */
+  font-weight: 800;
+  color: #f1c40f; /* Amarelo Dourado para máximo destaque */
+  text-shadow: 3px 3px 0px rgba(0, 0, 0, 0.8); /* Sombra dura para legibilidade */
+  background-color: rgba(0, 0, 0, 0.3); /* Fundo sutil */
+  padding: 5px 15px;
+  border-radius: 10px;
+  margin-top: 5px;
+  line-height: 1;
+  min-width: 120px; /* Garante um tamanho mínimo para não ficar variando */
+  text-align: center;
+}
+
+/* Ajuste para telas menores */
+@media (max-width: 600px) {
+  #timer {
+    font-size: 2.8rem; /* Um pouco menor no mobile, mas ainda grande */
   }
 }
