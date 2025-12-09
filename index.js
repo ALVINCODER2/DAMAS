@@ -1,4 +1,4 @@
-// index.js (VERSÃO COM ROTAS DE ADMIN)
+// index.js (VERSÃO COMPLETA COM GESTÃO DE SAQUES)
 require("dotenv").config();
 
 const express = require("express");
@@ -6,6 +6,7 @@ const http = require("http");
 const socketIo = require("socket.io");
 const mongoose = require("mongoose");
 const User = require("./models/User");
+const Withdrawal = require("./models/Withdrawal"); // Importante: Modelo de Saque
 const bcrypt = require("bcryptjs");
 
 const { initializeSocket, gameRooms } = require("./src/socketHandlers");
@@ -18,23 +19,14 @@ const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// --- ADICIONADO: Verificação de variáveis de ambiente ---
 if (!MONGO_URI) {
   console.warn("Atenção: A variável de ambiente MONGO_URI não está definida.");
-  console.warn(
-    "O aplicativo pode falhar ao tentar conectar ao banco de dados."
-  );
-  console.warn(
-    "Se estiver a implantar no Fly.io, use 'fly secrets set MONGO_URI=...'"
-  );
 }
 if (!process.env.ADMIN_SECRET_KEY) {
   console.warn(
     "Atenção: A variável de ambiente ADMIN_SECRET_KEY não está definida."
   );
-  console.warn("O painel de admin não será acessível.");
 }
-// --- FIM DA VERIFICAÇÃO ---
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -45,7 +37,7 @@ mongoose
   .then(() => console.log("Conectado ao MongoDB Atlas com sucesso!"))
   .catch((err) => console.error("Erro ao conectar ao MongoDB:", err));
 
-// --- ROTAS DE API PADRÃO ---
+// --- ROTAS DE API PADRÃO (LOGIN/REGISTRO) ---
 app.post("/api/register", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -100,9 +92,49 @@ app.post("/api/user/re-authenticate", async (req, res) => {
   }
 });
 
+// --- ROTA DE SOLICITAÇÃO DE SAQUE (JOGADOR) ---
+app.post("/api/withdraw", async (req, res) => {
+  try {
+    const { email, amount, pixKey } = req.body;
+
+    if (!email || !amount || !pixKey) {
+      return res.status(400).json({ message: "Dados incompletos." });
+    }
+    if (amount <= 0) {
+      return res.status(400).json({ message: "Valor inválido." });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if (user.saldo < amount) {
+      return res
+        .status(400)
+        .json({ message: "Saldo insuficiente para o saque." });
+    }
+
+    const newWithdrawal = new Withdrawal({
+      email,
+      amount,
+      pixKey,
+      status: "pending",
+    });
+
+    await newWithdrawal.save();
+
+    res.status(201).json({
+      message: "Solicitação de saque enviada com sucesso! Aguarde a aprovação.",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao processar solicitação." });
+  }
+});
+
 // --- ROTAS DA API DE ADMINISTRAÇÃO ---
 
-// Middleware para verificar a chave secreta no header
 const adminAuthHeader = (req, res, next) => {
   const secretKey = req.headers["x-admin-secret-key"];
   if (secretKey && secretKey === process.env.ADMIN_SECRET_KEY) {
@@ -112,7 +144,6 @@ const adminAuthHeader = (req, res, next) => {
   }
 };
 
-// Middleware para verificar a chave secreta no body
 const adminAuthBody = (req, res, next) => {
   const { secret } = req.body;
   if (secret && secret === process.env.ADMIN_SECRET_KEY) {
@@ -122,7 +153,6 @@ const adminAuthBody = (req, res, next) => {
   }
 };
 
-// Rota para buscar todos os usuários (protegida por header)
 app.get("/api/admin/users", adminAuthHeader, async (req, res) => {
   try {
     const users = await User.find({}, "email saldo").sort({ email: 1 });
@@ -132,7 +162,76 @@ app.get("/api/admin/users", adminAuthHeader, async (req, res) => {
   }
 });
 
-// Rota para atualizar o saldo de um usuário (protegida por body)
+// ### ROTA ADMIN: LISTAR SAQUES PENDENTES (ADICIONADA) ###
+app.get("/api/admin/withdrawals", adminAuthHeader, async (req, res) => {
+  try {
+    const withdrawals = await Withdrawal.find({ status: "pending" }).sort({
+      createdAt: 1,
+    });
+    res.json(withdrawals);
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao buscar solicitações." });
+  }
+});
+
+// ### ROTA ADMIN: APROVAR SAQUE (ADICIONADA) ###
+app.post("/api/admin/approve-withdrawal", adminAuthBody, async (req, res) => {
+  try {
+    const { withdrawalId } = req.body;
+
+    const withdrawal = await Withdrawal.findById(withdrawalId);
+    if (!withdrawal) {
+      return res.status(404).json({ message: "Solicitação não encontrada." });
+    }
+    if (withdrawal.status !== "pending") {
+      return res
+        .status(400)
+        .json({ message: "Esta solicitação já foi processada." });
+    }
+
+    const user = await User.findOne({ email: withdrawal.email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Usuário da solicitação não encontrado." });
+    }
+
+    if (user.saldo < withdrawal.amount) {
+      return res.status(400).json({
+        message: `ERRO: O usuário tem saldo insuficiente (${user.saldo}) para este saque de ${withdrawal.amount}.`,
+      });
+    }
+
+    user.saldo -= withdrawal.amount;
+    await user.save();
+
+    withdrawal.status = "completed";
+    await withdrawal.save();
+
+    res.json({ message: "Saque aprovado e saldo descontado com sucesso!" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao aprovar saque." });
+  }
+});
+
+// ### ROTA ADMIN: REJEITAR SAQUE (ADICIONADA) ###
+app.post("/api/admin/reject-withdrawal", adminAuthBody, async (req, res) => {
+  try {
+    const { withdrawalId } = req.body;
+    const withdrawal = await Withdrawal.findById(withdrawalId);
+    if (!withdrawal)
+      return res.status(404).json({ message: "Solicitação não encontrada." });
+
+    withdrawal.status = "rejected";
+    await withdrawal.save();
+
+    res.json({ message: "Solicitação rejeitada (saldo não foi alterado)." });
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao rejeitar." });
+  }
+});
+
 app.put("/api/admin/update-saldo", adminAuthBody, async (req, res) => {
   try {
     const { email, newSaldo } = req.body;
@@ -154,7 +253,6 @@ app.put("/api/admin/update-saldo", adminAuthBody, async (req, res) => {
   }
 });
 
-// Rota para deletar um usuário (protegida por body)
 app.delete("/api/admin/user/:email", adminAuthBody, async (req, res) => {
   try {
     const result = await User.deleteOne({ email: req.params.email });
@@ -167,7 +265,6 @@ app.delete("/api/admin/user/:email", adminAuthBody, async (req, res) => {
   }
 });
 
-// Rota para zerar o saldo de todos os usuários (protegida por body)
 app.post("/api/admin/reset-all-saldos", adminAuthBody, async (req, res) => {
   try {
     await User.updateMany({}, { $set: { saldo: 0 } });
@@ -177,14 +274,10 @@ app.post("/api/admin/reset-all-saldos", adminAuthBody, async (req, res) => {
   }
 });
 
-// --- INICIALIZAÇÃO DOS MÓDULOS DO JOGO ---
 initializeManager(io, gameRooms);
 initializeSocket(io);
 
-// --- INICIA O SERVIDOR ---
-// --- MODIFICADO: Adicionado '0.0.0.0' para garantir a ligação correta no container ---
 const HOST = process.env.HOST || "0.0.0.0";
-
 server.listen(PORT, HOST, () => {
   console.log(`Servidor a rodar em http://${HOST}:${PORT}.`);
 });

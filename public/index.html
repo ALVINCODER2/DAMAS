@@ -66,8 +66,8 @@
 
     <button id="add-balance-btn">Adicionar Saldo</button>
 
-    <a href="https://wa.me/5571920007957?text=QUERO%20RETIRAR%20SALDO%20NO%20MEU%20PERFIL!%20%20%3A)" id="withdraw-btn"
-      target="_blank">Retirar Saldo</a>
+    <button id="withdraw-btn" style="background-color: #2ecc71;">Retirar Saldo</button>
+
     <a href="https://chat.whatsapp.com/IhFRzg8Bt89JhacRTdySUN?mode=wwt" id="whatsapp-group-btn" target="_blank">Entrar
       no Grupo do WhatsApp</a>
     <button id="logout-btn" style="background-color: #c0392b; margin-bottom: 20px">
@@ -149,7 +149,6 @@
       </div>
     </div>
 
-    <!-- NOVA SEÇÃO PARA JOGOS EM ANDAMENTO -->
     <div class="lobby-section" id="active-rooms-section" style="margin-top: 20px;">
       <h3>Jogos em Andamento (Assistir)</h3>
       <div id="active-rooms-list">
@@ -161,7 +160,6 @@
   </div>
 
   <div id="game-container" class="hidden">
-    <!-- Indicador de Espectador -->
     <div id="spectator-indicator" class="hidden"
       style="background-color: #f39c12; color: #fff; padding: 5px 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold;">
       👀 MODO ESPECTADOR
@@ -175,7 +173,6 @@
       <div id="game-buttons">
         <button id="resign-btn">Desistir</button>
         <button id="draw-btn">Empate</button>
-        <!-- Botão Sair para Espectadores -->
         <button id="spectator-leave-btn" class="hidden" style="background-color: #c0392b;">Sair do Jogo</button>
       </div>
     </div>
@@ -211,7 +208,6 @@
         <button class="exit-lobby-btn">Voltar à Tela Principal</button>
       </div>
     </div>
-    <!-- Tela de Fim de Jogo para Espectadores -->
     <div id="spectator-end-screen" class="hidden"
       style="background-color: #2c3e50; color: white; padding: 40px; border-radius: 15px; text-align: center; border: 5px solid #3498db;">
       <h1>Fim de Jogo</h1>
@@ -268,15 +264,21 @@
 
   <div id="pix-overlay" class="hidden">
     <div id="pix-box">
-      <h3>Adicionar Saldo via PIX</h3>
-      <p>Faça o pagamento para a chave abaixo:</p>
+      <h3>Recarga Livre</h3>
+      <p>Envie o valor que desejar!</p>
+
+      <!-- IMAGEM DO QR CODE -->
+      <!-- Certifique-se de que a imagem 'qrcode.png' está na pasta public/ -->
+      <img src="qrcode.png" alt="QR Code PIX"
+        style="width: 200px; height: auto; margin: 15px auto; display: block; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+
+      <p>Ou copie a chave abaixo:</p>
       <div class="pix-info">
-        <p><strong>Tipo de Chave:</strong> Copia e Cola</p>
+        <p><strong>Tipo de Chave:</strong> Copia e Cola (QR Code)</p>
         <p>
           <strong>Chave:</strong>
-          <span
-            id="pix-key">00020126580014br.gov.bcb.pix01362b3485a0-d28c-4d37-9b5d-b2efcac4cee652040000530398654045.005802BR5919TIAGO
-            SOUZA SANTANA6008Salvador6211050726f7879630451B0</span>
+          <span id="pix-key"
+            style="word-break: break-all; font-size: 0.85em;">00020126580014br.gov.bcb.pix01362b3485a0-d28c-4d37-9b5d-b2efcac4cee65204000053039865802BR5919TIAGO SOUZA SANTANA6008Salvador6211050726f78796304D315</span>
         </p>
         <p><strong>Nome:</strong> Tiago Souza Santana</p>
       </div>
@@ -288,6 +290,25 @@
       <a href="https://wa.me/5571920007957?text=Ol%C3%A1%21%20Estou%20enviando%20o%20comprovativo%20do%20meu%20pagamento%20PIX."
         target="_blank" class="whatsapp-link">Enviar Comprovante!</a>
       <button id="close-pix-overlay-btn">Fechar</button>
+    </div>
+  </div>
+
+  <!-- NOVO: OVERLAY DE SOLICITAÇÃO DE SAQUE -->
+  <div id="withdraw-overlay" class="hidden">
+    <div id="pix-box"> <!-- Reutilizando estilo do pix-box -->
+      <h3>Solicitar Retirada</h3>
+      <p>Preencha os dados para receber seu saldo via PIX.</p>
+
+      <form id="withdraw-form" style="display: flex; flex-direction: column; gap: 10px;">
+        <input type="text" id="withdraw-pix-key" placeholder="Sua Chave PIX" required
+          style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; width: 100%;">
+        <input type="number" id="withdraw-amount" placeholder="Valor (R$)" min="1" required
+          style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; width: 100%;">
+        <button type="submit" style="background-color: #2ecc71; margin-top: 10px;">Solicitar</button>
+      </form>
+
+      <p id="withdraw-message" style="margin-top: 10px; font-weight: bold;"></p>
+      <button id="close-withdraw-overlay-btn" style="background-color: #95a5a6; margin-top: 10px;">Fechar</button>
     </div>
   </div>
 

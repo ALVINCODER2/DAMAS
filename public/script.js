@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const mainContainer = document.getElementById("main-container");
   const resignBtn = document.getElementById("resign-btn");
   const drawBtn = document.getElementById("draw-btn");
-  const spectatorLeaveBtn = document.getElementById("spectator-leave-btn"); // NOVO
+  const spectatorLeaveBtn = document.getElementById("spectator-leave-btn");
   const authContainer = document.getElementById("auth-container");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
@@ -25,19 +25,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const timerSelect = document.getElementById("timer-select");
   const cancelRoomBtn = document.getElementById("cancel-room-btn");
   const openRoomsList = document.getElementById("open-rooms-list");
-  const activeRoomsList = document.getElementById("active-rooms-list"); // NOVO
+  const activeRoomsList = document.getElementById("active-rooms-list");
   const gameContainer = document.getElementById("game-container");
   const gameStatus = document.getElementById("game-status");
   const boardElement = document.getElementById("board");
   const turnDisplay = document.getElementById("turn");
   const timerDisplay = document.getElementById("timer");
-  const spectatorIndicator = document.getElementById("spectator-indicator"); // NOVO
+  const spectatorIndicator = document.getElementById("spectator-indicator");
   const overlay = document.getElementById("game-over-overlay");
   const winnerScreen = document.getElementById("winner-screen");
   const loserScreen = document.getElementById("loser-screen");
   const drawScreen = document.getElementById("draw-screen");
-  const spectatorEndScreen = document.getElementById("spectator-end-screen"); // NOVO
-  const spectatorEndMessage = document.getElementById("spectator-end-message"); // NOVO
+  const spectatorEndScreen = document.getElementById("spectator-end-screen");
+  const spectatorEndMessage = document.getElementById("spectator-end-message");
   const drawReason = document.getElementById("draw-reason");
   const connectionLostOverlay = document.getElementById(
     "connection-lost-overlay"
@@ -60,7 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const acceptDrawBtn = document.getElementById("accept-draw-btn");
   const declineDrawBtn = document.getElementById("decline-draw-btn");
   const addBalanceBtn = document.getElementById("add-balance-btn");
+  const withdrawBtn = document.getElementById("withdraw-btn"); // NOVO
   const pixOverlay = document.getElementById("pix-overlay");
+  const withdrawOverlay = document.getElementById("withdraw-overlay"); // NOVO
+  const withdrawForm = document.getElementById("withdraw-form"); // NOVO
+  const withdrawMessage = document.getElementById("withdraw-message"); // NOVO
+  const closeWithdrawOverlayBtn = document.getElementById(
+    "close-withdraw-overlay-btn"
+  ); // NOVO
   const closePixOverlayBtn = document.getElementById("close-pix-overlay-btn");
   const copyPixKeyBtn = document.getElementById("copy-pix-key-btn");
 
@@ -75,9 +82,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let nextGameInterval = null;
   let isGameOver = false;
   let drawCooldownInterval = null;
-  let isSpectator = false; // Flag para controlar o modo espectador
+  let isSpectator = false;
 
-  // --- LÓGICA DE SELEÇÃO DE TEMPO ---
+  // ... (Lógica de timer e UI mantida) ...
   function updateTimerOptions() {
     timerSelect.innerHTML = "";
     const controlType = timeControlSelect.value;
@@ -118,8 +125,6 @@ document.addEventListener("DOMContentLoaded", () => {
   updateTimerOptions();
   timeControlSelect.addEventListener("change", updateTimerOptions);
 
-  // --- FUNÇÕES DE UI ---
-
   function resetLobbyUI() {
     waitingArea.classList.add("hidden");
     createRoomBtn.disabled = false;
@@ -131,18 +136,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function returnToLobby() {
     isGameOver = false;
-    isSpectator = false; // Reseta flag
+    isSpectator = false;
     gameContainer.classList.add("hidden");
     overlay.classList.add("hidden");
     winnerScreen.classList.add("hidden");
     loserScreen.classList.add("hidden");
     drawScreen.classList.add("hidden");
-    spectatorEndScreen.classList.add("hidden"); // Esconde tela de fim de espectador
+    spectatorEndScreen.classList.add("hidden");
     nextGameOverlay.classList.add("hidden");
     drawRequestOverlay.classList.add("hidden");
     connectionLostOverlay.classList.add("hidden");
 
-    // Reseta UI de jogo
     spectatorIndicator.classList.add("hidden");
     spectatorLeaveBtn.classList.add("hidden");
     resignBtn.classList.remove("hidden");
@@ -171,7 +175,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Renderiza salas de espera (jogar)
   function renderOpenRooms(rooms) {
     openRoomsList.innerHTML = "";
     if (!rooms || rooms.length === 0) {
@@ -225,7 +228,6 @@ document.addEventListener("DOMContentLoaded", () => {
     openRoomsList.appendChild(list);
   }
 
-  // Renderiza salas ativas (assistir)
   function renderActiveRooms(rooms) {
     activeRoomsList.innerHTML = "";
     if (!rooms || rooms.length === 0) {
@@ -239,7 +241,6 @@ document.addEventListener("DOMContentLoaded", () => {
     rooms.forEach((room) => {
       const card = document.createElement("li");
       card.className = "room-card";
-      // Estilo diferente para jogos ativos
       card.style.borderLeft = "4px solid #f39c12";
 
       const p1Name = room.player1Email.split("@")[0];
@@ -282,9 +283,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  // --- EVENT LISTENERS ---
-
-  // ... (Login/Register/Auth listeners mantidos igual) ...
   async function checkSession() {
     const savedEmail = localStorage.getItem("checkersUserEmail");
     if (savedEmail) {
@@ -317,6 +315,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- LÓGICA DE SOLICITAÇÃO DE SAQUE ---
+  if (withdrawBtn) {
+    withdrawBtn.addEventListener("click", () => {
+      withdrawOverlay.classList.remove("hidden");
+      withdrawMessage.textContent = "";
+    });
+  }
+
+  if (closeWithdrawOverlayBtn) {
+    closeWithdrawOverlayBtn.addEventListener("click", () => {
+      withdrawOverlay.classList.add("hidden");
+    });
+  }
+
+  if (withdrawForm) {
+    withdrawForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pixKey = document.getElementById("withdraw-pix-key").value;
+      const amount = document.getElementById("withdraw-amount").value;
+
+      if (!pixKey || !amount) return;
+
+      try {
+        const response = await fetch("/api/withdraw", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: currentUser.email,
+            amount: parseFloat(amount),
+            pixKey,
+          }),
+        });
+
+        const data = await response.json();
+        withdrawMessage.textContent = data.message;
+
+        if (response.ok) {
+          withdrawMessage.style.color = "green";
+          // Limpa formulário
+          document.getElementById("withdraw-pix-key").value = "";
+          document.getElementById("withdraw-amount").value = "";
+        } else {
+          withdrawMessage.style.color = "red";
+        }
+      } catch (error) {
+        withdrawMessage.textContent = "Erro ao enviar solicitação.";
+        withdrawMessage.style.color = "red";
+      }
+    });
+  }
+
+  // ... (Outros listeners de criar sala, etc.) ...
   createRoomBtn.addEventListener("click", () => {
     if (
       !betAmountInput ||
@@ -367,9 +417,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Delegated Event Listener para Entrar e Assistir
   lobbyContainer.addEventListener("click", (e) => {
-    // Entrar para Jogar
     if (e.target.classList.contains("join-room-btn")) {
       const roomCode = e.target.dataset.roomCode;
       if (roomCode && currentUser) {
@@ -377,7 +425,6 @@ document.addEventListener("DOMContentLoaded", () => {
         lobbyErrorMessage.textContent = "";
       }
     }
-    // Entrar para Assistir
     if (e.target.classList.contains("watch-game-btn")) {
       const roomCode = e.target.dataset.roomCode;
       if (roomCode) {
@@ -442,7 +489,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   spectatorLeaveBtn.addEventListener("click", () => {
-    socket.emit("leaveEndGameScreen", { roomCode: currentRoom }); // Reutiliza lógica de sair
+    socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
     returnToLobby();
   });
 
@@ -558,8 +605,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // --- LÓGICA DO JOGO (CLIENT-SIDE) ---
-
+  // ... (Funções de criação do tabuleiro, peças, sons, mantidas iguais) ...
   function createBoard() {
     boardElement.innerHTML = "";
     const boardSize = currentBoardSize || 8;
@@ -623,7 +669,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleBoardClick(e) {
-    // BLOQUEIA INTERAÇÃO PARA ESPECTADORES
     if (isSpectator) return;
 
     if (!myColor) return;
@@ -719,7 +764,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document
       .querySelectorAll(".mandatory-capture")
       .forEach((p) => p.classList.remove("mandatory-capture"));
-    // Espectadores não precisam ver obrigações de captura (opcional, aqui estamos mantendo para visualização)
     if (piecesToHighlight && piecesToHighlight.length > 0) {
       piecesToHighlight.forEach((pos) => {
         const square = document.querySelector(
@@ -737,8 +781,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const sec = seconds % 60;
     return `${min}:${sec < 10 ? "0" : ""}${sec}`;
   }
-
-  // --- SOCKET.IO EVENT HANDLERS ---
 
   socket.on("connect", () => {
     console.log("Conectado ao servidor com o ID:", socket.id);
@@ -768,7 +810,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("updateLobby", (data) => {
-    // Agora recebe { waiting: [...], active: [...] }
     renderOpenRooms(data.waiting);
     renderActiveRooms(data.active);
   });
@@ -801,7 +842,6 @@ document.addEventListener("DOMContentLoaded", () => {
     confirmBetOverlay.classList.remove("hidden");
   });
 
-  // --- EVENTO DE ENTRADA DO ESPECTADOR ---
   socket.on("spectatorJoined", (data) => {
     isSpectator = true;
     currentRoom = data.gameState.roomCode;
@@ -809,7 +849,6 @@ document.addEventListener("DOMContentLoaded", () => {
     lobbyContainer.classList.add("hidden");
     gameContainer.classList.remove("hidden");
 
-    // Ajusta UI para espectador
     spectatorIndicator.classList.remove("hidden");
     resignBtn.classList.add("hidden");
     drawBtn.classList.add("hidden");
@@ -821,7 +860,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updateGame(data.gameState);
     highlightMandatoryPieces(data.gameState.mandatoryPieces);
 
-    // Atualiza o tempo inicial
     if (data.timeControl === "match") {
       const turnColor =
         data.gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
@@ -835,7 +873,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameStart", (gameState) => {
-    if (isSpectator) return; // Espectadores usam spectatorJoined e gameStateUpdate
+    if (isSpectator) return;
 
     isGameOver = false;
     overlay.classList.add("hidden");
@@ -915,1102 +953,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameResumed", (data) => {
-    // Se for espectador, não processa o 'gameResumed' padrão pois ele re-seta myColor baseado em socket.id
-    if (isSpectator) return;
-
-    connectionLostOverlay.classList.add("hidden");
-
-    currentBoardSize = data.gameState.boardSize;
-    createBoard();
-
-    updateGame(data.gameState);
-
-    if (data.timeLeft !== undefined) {
-      timerDisplay.textContent = data.timeLeft + "s";
-    } else if (data.whiteTime !== undefined) {
-      timerDisplay.textContent = "A sincronizar...";
-    }
-
-    myColor = socket.id === data.gameState.players.white ? "b" : "p";
-    boardElement.classList.remove("board-flipped");
-    if (myColor === "p") {
-      boardElement.classList.add("board-flipped");
-    }
-  });
-
-  socket.on("opponentDisconnected", (data) => {
-    if (isSpectator) return;
-    returnToLobby();
-  });
-
-  socket.on("gameOver", (data) => {
-    if (isGameOver) return;
-    isGameOver = true;
-    connectionLostOverlay.classList.add("hidden");
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    drawBtn.disabled = true;
-    resetEndGameUI();
-    overlay.classList.remove("hidden");
-
-    if (isSpectator) {
-      spectatorEndScreen.classList.remove("hidden");
-      const winnerText = data.winner === "b" ? "Brancas" : "Pretas";
-      spectatorEndMessage.textContent = `O jogador das ${winnerText} venceu! Motivo: ${data.reason}`;
-    } else {
-      if (data.winner === myColor) {
-        winnerScreen.classList.remove("hidden");
-      } else {
-        loserScreen.classList.remove("hidden");
-      }
-    }
-  });
-
-  socket.on("gameDraw", (data) => {
-    if (isGameOver) return;
-    isGameOver = true;
-    connectionLostOverlay.classList.add("hidden");
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    drawBtn.disabled = true;
-    drawReason.textContent = data.reason;
-    resetEndGameUI();
-    overlay.classList.remove("hidden");
-
-    if (isSpectator) {
-      spectatorEndScreen.classList.remove("hidden");
-      spectatorEndMessage.textContent = `O jogo terminou em empate. Motivo: ${data.reason}`;
-    } else {
-      drawScreen.classList.remove("hidden");
-    }
-  });
-
-  socket.on("showValidMoves", (moves) => {
-    if (isSpectator) return;
-    if (!Array.isArray(moves)) {
-      console.error("ERRO: O dado recebido não é um array!", moves);
-      return;
-    }
-    moves.forEach((move) => {
-      const square = document.querySelector(
-        `.square[data-row='${move.row}'][data-col='${move.col}']`
-      );
-      if (square) {
-        square.classList.add("valid-move-highlight");
-      }
-    });
-  });
-
-  socket.on("nextGameStarting", (data) => {
-    const titleElement = document.getElementById("next-game-title");
-    if (titleElement && data.title) {
-      titleElement.textContent = data.title;
-    }
-    matchScoreDisplay.textContent = `Placar: ${data.score[0]} - ${data.score[1]}`;
-    nextGameOverlay.classList.remove("hidden");
-    let countdown = 10;
-    nextGameTimer.textContent = countdown;
-    if (nextGameInterval) clearInterval(nextGameInterval);
-    nextGameInterval = setInterval(() => {
-      countdown--;
-      nextGameTimer.textContent = countdown;
-      if (countdown <= 0) {
-        clearInterval(nextGameInterval);
-      }
-    }, 1000);
-  });
-
-  socket.on("updateSaldo", (data) => {
-    if (currentUser) {
-      currentUser.saldo = data.newSaldo;
-    }
-  });
-
-  socket.on("drawRequestSent", () => {
-    drawBtn.disabled = true;
-    drawBtn.textContent = "Pedido Enviado";
-  });
-
-  socket.on("drawRequested", () => {
-    if (isSpectator) return;
-    drawRequestOverlay.classList.remove("hidden");
-  });
-
-  socket.on("drawDeclined", () => {
-    const originalStatusHTML = gameStatus.innerHTML;
-    gameStatus.innerHTML = "O oponente recusou o pedido de empate.";
-    setTimeout(() => {
-      if (gameStatus.innerHTML === "O oponente recusou o pedido de empate.") {
-        gameStatus.innerHTML = originalStatusHTML;
-      }
-    }, 3000);
-
-    drawBtn.disabled = true;
-    let countdown = 30;
-    drawBtn.textContent = `Empate (${countdown}s)`;
-
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    drawCooldownInterval = setInterval(() => {
-      countdown--;
-      if (countdown > 0) {
-        drawBtn.textContent = `Empate (${countdown}s)`;
-      } else {
-        clearInterval(drawCooldownInterval);
-        drawCooldownInterval = null;
-        if (!isGameOver) {
-          drawBtn.disabled = false;
-          drawBtn.textContent = "Empate";
-        }
-      }
-    }, 1000);
-  });
-
-  socket.on("drawOfferCancelled", () => {
-    drawRequestOverlay.classList.add("hidden");
-  });
-
-  socket.on("revancheDeclined", (data) => {
-    document.querySelectorAll(".revanche-status").forEach((el) => {
-      el.textContent = data.message || "O seu oponente não aceitou a revanche.";
-      el.style.color = "#e74c3c";
-    });
-
-    document
-      .querySelectorAll(".revanche-btn, .exit-lobby-btn")
-      .forEach((btn) => (btn.disabled = true));
-
-    setTimeout(() => {
-      if (!overlay.classList.contains("hidden")) {
-        returnToLobby();
-      }
-    }, 3000);
-  });
-
-  socket.on("gameNotFound", () => {
-    alert(
-      "A partida anterior não foi encontrada. O tempo para reconexão pode ter expirado. A voltar para o lobby..."
-    );
-    returnToLobby();
-  });
-
-  checkSession();
-});
-document.addEventListener("DOMContentLoaded", () => {
-  // --- Elementos do DOM ---
-  const mainContainer = document.getElementById("main-container");
-  const resignBtn = document.getElementById("resign-btn");
-  const drawBtn = document.getElementById("draw-btn");
-  const spectatorLeaveBtn = document.getElementById("spectator-leave-btn"); // NOVO
-  const authContainer = document.getElementById("auth-container");
-  const loginForm = document.getElementById("login-form");
-  const registerForm = document.getElementById("register-form");
-  const authMessage = document.getElementById("auth-message");
-  const showRegisterLink = document.getElementById("show-register");
-  const showLoginLink = document.getElementById("show-login");
-  const lobbyContainer = document.getElementById("lobby-container");
-  const lobbyWelcomeMessage = document.getElementById("lobby-welcome-message");
-  const createRoomBtn = document.getElementById("create-room-btn");
-  const waitingArea = document.getElementById("waiting-area");
-  const roomCodeDisplay = document.getElementById("room-code-display");
-  const lobbyErrorMessage = document.getElementById("lobby-error-message");
-  const betAmountInput = document.getElementById("bet-amount-input");
-  const gameModeSelect = document.getElementById("game-mode-select");
-  const timeControlSelect = document.getElementById("time-control-select");
-  const timerSelectionContainer = document.getElementById(
-    "timer-selection-container"
-  );
-  const timerSelect = document.getElementById("timer-select");
-  const cancelRoomBtn = document.getElementById("cancel-room-btn");
-  const openRoomsList = document.getElementById("open-rooms-list");
-  const activeRoomsList = document.getElementById("active-rooms-list"); // NOVO
-  const gameContainer = document.getElementById("game-container");
-  const gameStatus = document.getElementById("game-status");
-  const boardElement = document.getElementById("board");
-  const turnDisplay = document.getElementById("turn");
-  const timerDisplay = document.getElementById("timer");
-  const spectatorIndicator = document.getElementById("spectator-indicator"); // NOVO
-  const overlay = document.getElementById("game-over-overlay");
-  const winnerScreen = document.getElementById("winner-screen");
-  const loserScreen = document.getElementById("loser-screen");
-  const drawScreen = document.getElementById("draw-screen");
-  const spectatorEndScreen = document.getElementById("spectator-end-screen"); // NOVO
-  const spectatorEndMessage = document.getElementById("spectator-end-message"); // NOVO
-  const drawReason = document.getElementById("draw-reason");
-  const connectionLostOverlay = document.getElementById(
-    "connection-lost-overlay"
-  );
-  const connectionLostMessage = document.getElementById(
-    "connection-lost-message"
-  );
-  const confirmBetOverlay = document.getElementById("confirm-bet-overlay");
-  const confirmBetAmount = document.getElementById("confirm-bet-amount");
-  const confirmGameMode = document.getElementById("confirm-game-mode");
-  const acceptBetBtn = document.getElementById("accept-bet-btn");
-  const declineBetBtn = document.getElementById("decline-bet-btn");
-  const logoutBtn = document.getElementById("logout-btn");
-  const moveSound = document.getElementById("move-sound");
-  const captureSound = document.getElementById("capture-sound");
-  const nextGameOverlay = document.getElementById("next-game-overlay");
-  const matchScoreDisplay = document.getElementById("match-score-display");
-  const nextGameTimer = document.getElementById("next-game-timer");
-  const drawRequestOverlay = document.getElementById("draw-request-overlay");
-  const acceptDrawBtn = document.getElementById("accept-draw-btn");
-  const declineDrawBtn = document.getElementById("decline-draw-btn");
-  const addBalanceBtn = document.getElementById("add-balance-btn");
-  const pixOverlay = document.getElementById("pix-overlay");
-  const closePixOverlayBtn = document.getElementById("close-pix-overlay-btn");
-  const copyPixKeyBtn = document.getElementById("copy-pix-key-btn");
-
-  const socket = io({ autoConnect: false });
-  let currentUser = null;
-  let myColor = null;
-  let currentRoom = null;
-  let boardState = [];
-  let selectedPiece = null;
-  let currentBoardSize = 8;
-  let tempRoomCode = null;
-  let nextGameInterval = null;
-  let isGameOver = false;
-  let drawCooldownInterval = null;
-  let isSpectator = false; // Flag para controlar o modo espectador
-
-  // --- LÓGICA DE SELEÇÃO DE TEMPO ---
-  function updateTimerOptions() {
-    timerSelect.innerHTML = "";
-    const controlType = timeControlSelect.value;
-
-    if (controlType === "move") {
-      const options = [
-        { val: 5, label: "5 segundos" },
-        { val: 10, label: "10 segundos" },
-        { val: 30, label: "30 segundos" },
-        { val: 40, label: "40 segundos" },
-        { val: 60, label: "1 minuto" },
-        { val: 90, label: "1 min e 30 seg" },
-      ];
-      options.forEach((opt) => {
-        const option = document.createElement("option");
-        option.value = opt.val;
-        option.textContent = opt.label;
-        if (opt.val === 40) option.selected = true;
-        timerSelect.appendChild(option);
-      });
-    } else {
-      const options = [
-        { val: 40, label: "40 segundos" },
-        { val: 60, label: "1 minuto" },
-        { val: 180, label: "3 minutos" },
-        { val: 300, label: "5 minutos" },
-      ];
-      options.forEach((opt) => {
-        const option = document.createElement("option");
-        option.value = opt.val;
-        option.textContent = opt.label;
-        if (opt.val === 60) option.selected = true;
-        timerSelect.appendChild(option);
-      });
-    }
-  }
-
-  updateTimerOptions();
-  timeControlSelect.addEventListener("change", updateTimerOptions);
-
-  // --- FUNÇÕES DE UI ---
-
-  function resetLobbyUI() {
-    waitingArea.classList.add("hidden");
-    createRoomBtn.disabled = false;
-    betAmountInput.disabled = false;
-    gameModeSelect.disabled = false;
-    timeControlSelect.disabled = false;
-    timerSelectionContainer.style.display = "flex";
-  }
-
-  function returnToLobby() {
-    isGameOver = false;
-    isSpectator = false; // Reseta flag
-    gameContainer.classList.add("hidden");
-    overlay.classList.add("hidden");
-    winnerScreen.classList.add("hidden");
-    loserScreen.classList.add("hidden");
-    drawScreen.classList.add("hidden");
-    spectatorEndScreen.classList.add("hidden"); // Esconde tela de fim de espectador
-    nextGameOverlay.classList.add("hidden");
-    drawRequestOverlay.classList.add("hidden");
-    connectionLostOverlay.classList.add("hidden");
-
-    // Reseta UI de jogo
-    spectatorIndicator.classList.add("hidden");
-    spectatorLeaveBtn.classList.add("hidden");
-    resignBtn.classList.remove("hidden");
-    drawBtn.classList.remove("hidden");
-
-    lobbyContainer.classList.remove("hidden");
-    boardElement.classList.remove("board-flipped");
-    boardElement.innerHTML = "";
-    currentRoom = null;
-    myColor = null;
-    currentBoardSize = 8;
-    localStorage.removeItem("checkersCurrentRoom");
-    resetLobbyUI();
-
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    drawCooldownInterval = null;
-    if (drawBtn) {
-      drawBtn.disabled = false;
-      drawBtn.textContent = "Empate";
-    }
-    if (currentUser) {
-      socket.emit("enterLobby");
-      lobbyWelcomeMessage.textContent = `Bem-vindo, ${
-        currentUser.email
-      }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
-    }
-  }
-
-  // Renderiza salas de espera (jogar)
-  function renderOpenRooms(rooms) {
-    openRoomsList.innerHTML = "";
-    if (!rooms || rooms.length === 0) {
-      openRoomsList.innerHTML =
-        "<p>Nenhuma sala aberta no momento. Crie uma!</p>";
-      return;
-    }
-
-    const list = document.createElement("ul");
-    list.className = "room-card-list";
-
-    rooms.forEach((room) => {
-      const card = document.createElement("li");
-      card.className = "room-card";
-      const creatorName = room.creatorEmail.split("@")[0];
-
-      const gameModeNames = {
-        classic: "Clássico 8x8",
-        tablita: "Tablita 8x8",
-        international: "Internacional 10x10",
-      };
-      const gameModeText = gameModeNames[room.gameMode] || "Clássico 8x8";
-
-      let timeText = `${room.timerDuration}s`;
-      if (room.timeControl === "match") {
-        const mins = Math.floor(room.timerDuration / 60);
-        const secs = room.timerDuration % 60;
-        timeText =
-          mins > 0 ? `${mins}m${secs > 0 ? " " + secs + "s" : ""}` : `${secs}s`;
-        timeText += " (Total)";
-      } else {
-        timeText += " (Jogada)";
-      }
-
-      card.innerHTML = `
-            <div class="room-card-info">
-                <p><strong>Criador:</strong> ${creatorName}</p>
-                <p><strong>Aposta:</strong> R$ ${room.bet.toFixed(2)}</p>
-                <p><strong>Modo:</strong> ${gameModeText}</p>
-                <p><strong>Tempo:</strong> ${timeText}</p>
-            </div>
-            <div class="room-card-action">
-                <button class="join-room-btn" data-room-code="${
-                  room.roomCode
-                }">Entrar</button>
-            </div>
-        `;
-      list.appendChild(card);
-    });
-
-    openRoomsList.appendChild(list);
-  }
-
-  // Renderiza salas ativas (assistir)
-  function renderActiveRooms(rooms) {
-    activeRoomsList.innerHTML = "";
-    if (!rooms || rooms.length === 0) {
-      activeRoomsList.innerHTML = "<p>Nenhum jogo em andamento.</p>";
-      return;
-    }
-
-    const list = document.createElement("ul");
-    list.className = "room-card-list";
-
-    rooms.forEach((room) => {
-      const card = document.createElement("li");
-      card.className = "room-card";
-      // Estilo diferente para jogos ativos
-      card.style.borderLeft = "4px solid #f39c12";
-
-      const p1Name = room.player1Email.split("@")[0];
-      const p2Name = room.player2Email.split("@")[0];
-
-      const gameModeNames = {
-        classic: "Clássico 8x8",
-        tablita: "Tablita 8x8",
-        international: "Internacional 10x10",
-      };
-      const gameModeText = gameModeNames[room.gameMode] || "Clássico 8x8";
-
-      card.innerHTML = `
-            <div class="room-card-info">
-                <p><strong>Jogadores:</strong> ${p1Name} vs ${p2Name}</p>
-                <p><strong>Aposta:</strong> R$ ${room.bet.toFixed(2)}</p>
-                <p><strong>Modo:</strong> ${gameModeText}</p>
-            </div>
-            <div class="room-card-action">
-                <button class="watch-game-btn" data-room-code="${
-                  room.roomCode
-                }" style="background-color: #f39c12;">Assistir</button>
-            </div>
-        `;
-      list.appendChild(card);
-    });
-
-    activeRoomsList.appendChild(list);
-  }
-
-  function resetEndGameUI() {
-    document.querySelectorAll(".revanche-status").forEach((el) => {
-      el.textContent = "";
-      el.style.color = "white";
-    });
-    document
-      .querySelectorAll(".revanche-btn, .exit-lobby-btn")
-      .forEach((btn) => {
-        btn.disabled = false;
-      });
-  }
-
-  // --- EVENT LISTENERS ---
-
-  // ... (Login/Register/Auth listeners mantidos igual) ...
-  async function checkSession() {
-    const savedEmail = localStorage.getItem("checkersUserEmail");
-    if (savedEmail) {
-      try {
-        const response = await fetch("/api/user/re-authenticate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: savedEmail }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          currentUser = data.user;
-          if (mainContainer) mainContainer.classList.add("hidden");
-          lobbyContainer.classList.remove("hidden");
-          lobbyWelcomeMessage.textContent = `Bem-vindo, ${
-            currentUser.email
-          }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
-          socket.connect();
-        } else {
-          localStorage.removeItem("checkersUserEmail");
-          localStorage.removeItem("checkersCurrentRoom");
-          socket.connect();
-        }
-      } catch (error) {
-        console.error("Falha ao re-autenticar:", error);
-        socket.connect();
-      }
-    } else {
-      socket.connect();
-    }
-  }
-
-  createRoomBtn.addEventListener("click", () => {
-    if (
-      !betAmountInput ||
-      !gameModeSelect ||
-      !timerSelect ||
-      !timerSelectionContainer ||
-      !lobbyErrorMessage
-    ) {
-      console.error(
-        "ERRO: Elementos da UI para criar sala não foram encontrados!"
-      );
-      return;
-    }
-
-    const bet = parseInt(betAmountInput.value, 10);
-    const gameMode = gameModeSelect.value;
-    const timerDuration = timerSelect.value;
-    const timeControl = timeControlSelect.value;
-
-    const roomData = {
-      bet,
-      user: currentUser,
-      gameMode,
-      timerDuration,
-      timeControl,
-    };
-
-    if (bet > 0 && currentUser) {
-      socket.emit("createRoom", roomData);
-      lobbyErrorMessage.textContent = "";
-      createRoomBtn.disabled = true;
-      betAmountInput.disabled = true;
-      gameModeSelect.disabled = true;
-      timeControlSelect.disabled = true;
-      timerSelectionContainer.style.display = "none";
-    } else if (!currentUser) {
-      lobbyErrorMessage.textContent =
-        "Erro de autenticação. Tente fazer o login novamente.";
-    } else {
-      lobbyErrorMessage.textContent = "A aposta deve ser maior que zero.";
-    }
-  });
-
-  cancelRoomBtn.addEventListener("click", () => {
-    const roomCode = roomCodeDisplay.textContent;
-    if (roomCode) {
-      socket.emit("cancelRoom", { roomCode });
-    }
-  });
-
-  // Delegated Event Listener para Entrar e Assistir
-  lobbyContainer.addEventListener("click", (e) => {
-    // Entrar para Jogar
-    if (e.target.classList.contains("join-room-btn")) {
-      const roomCode = e.target.dataset.roomCode;
-      if (roomCode && currentUser) {
-        socket.emit("joinRoomRequest", { roomCode, user: currentUser });
-        lobbyErrorMessage.textContent = "";
-      }
-    }
-    // Entrar para Assistir
-    if (e.target.classList.contains("watch-game-btn")) {
-      const roomCode = e.target.dataset.roomCode;
-      if (roomCode) {
-        socket.emit("joinAsSpectator", { roomCode });
-      }
-    }
-  });
-
-  addBalanceBtn.addEventListener("click", () => {
-    pixOverlay.classList.remove("hidden");
-  });
-
-  closePixOverlayBtn.addEventListener("click", () => {
-    pixOverlay.classList.add("hidden");
-  });
-
-  copyPixKeyBtn.addEventListener("click", () => {
-    const pixKey = document.getElementById("pix-key").textContent;
-    const tempInput = document.createElement("input");
-    document.body.appendChild(tempInput);
-    tempInput.value = pixKey;
-    tempInput.select();
-    try {
-      document.execCommand("copy");
-      copyPixKeyBtn.textContent = "Copiado!";
-      setTimeout(() => {
-        copyPixKeyBtn.textContent = "Copiar Chave";
-      }, 2000);
-    } catch (err) {
-      alert("Não foi possível copiar a chave. Por favor, copie manually.");
-    }
-    document.body.removeChild(tempInput);
-  });
-
-  acceptBetBtn.addEventListener("click", () => {
-    if (tempRoomCode && currentUser) {
-      socket.emit("acceptBet", { roomCode: tempRoomCode, user: currentUser });
-      confirmBetOverlay.classList.add("hidden");
-    }
-  });
-
-  declineBetBtn.addEventListener("click", () => {
-    confirmBetOverlay.classList.add("hidden");
-    tempRoomCode = null;
-  });
-
-  resignBtn.addEventListener("click", () => {
-    if (
-      currentRoom &&
-      !isSpectator &&
-      confirm("Tem a certeza que deseja desistir da partida?")
-    ) {
-      socket.emit("playerResign");
-    }
-  });
-
-  drawBtn.addEventListener("click", () => {
-    if (currentRoom && !isSpectator) {
-      drawBtn.disabled = true;
-      socket.emit("requestDraw", { roomCode: currentRoom });
-    }
-  });
-
-  spectatorLeaveBtn.addEventListener("click", () => {
-    socket.emit("leaveEndGameScreen", { roomCode: currentRoom }); // Reutiliza lógica de sair
-    returnToLobby();
-  });
-
-  acceptDrawBtn.addEventListener("click", () => {
-    if (currentRoom) {
-      socket.emit("acceptDraw", { roomCode: currentRoom });
-      drawRequestOverlay.classList.add("hidden");
-    }
-  });
-
-  declineDrawBtn.addEventListener("click", () => {
-    if (currentRoom) {
-      socket.emit("declineDraw", { roomCode: currentRoom });
-      drawRequestOverlay.classList.add("hidden");
-    }
-  });
-
-  showRegisterLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    loginForm.style.display = "none";
-    registerForm.style.display = "block";
-    authMessage.textContent = "";
-  });
-
-  showLoginLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    registerForm.style.display = "none";
-    loginForm.style.display = "block";
-    authMessage.textContent = "";
-  });
-
-  registerForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = document.getElementById("register-email").value;
-    const password = document.getElementById("register-password").value;
-    try {
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-      authMessage.textContent = data.message;
-      if (response.ok) {
-        authMessage.style.color = "green";
-        setTimeout(() => {
-          showLoginLink.click();
-        }, 2000);
-      } else {
-        authMessage.style.color = "red";
-      }
-    } catch (error) {
-      authMessage.textContent = "Erro ao conectar ao servidor.";
-      authMessage.style.color = "red";
-    }
-  });
-
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = document.getElementById("login-email").value;
-    const password = document.getElementById("login-password").value;
-    try {
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        currentUser = data.user;
-        localStorage.setItem("checkersUserEmail", currentUser.email);
-        if (mainContainer) mainContainer.classList.add("hidden");
-        lobbyContainer.classList.remove("hidden");
-        lobbyWelcomeMessage.textContent = `Bem-vindo, ${
-          currentUser.email
-        }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
-        socket.connect();
-      } else {
-        authMessage.textContent = data.message;
-        authMessage.style.color = "red";
-      }
-    } catch (error) {
-      authMessage.textContent = "Erro ao conectar ao servidor.";
-      authMessage.style.color = "red";
-    }
-  });
-
-  logoutBtn.addEventListener("click", () => {
-    localStorage.removeItem("checkersUserEmail");
-    localStorage.removeItem("checkersCurrentRoom");
-    window.location.reload();
-  });
-
-  document.body.addEventListener("click", (e) => {
-    if (e.target.classList.contains("revanche-btn")) {
-      if (currentRoom && !isSpectator) {
-        socket.emit("requestRevanche", { roomCode: currentRoom });
-        document.querySelectorAll(".revanche-status").forEach((el) => {
-          el.textContent = "Pedido de revanche enviado... A aguardar oponente!";
-        });
-        document
-          .querySelectorAll(".revanche-btn, .exit-lobby-btn")
-          .forEach((btn) => {
-            btn.disabled = true;
-          });
-      }
-    }
-    if (e.target.classList.contains("exit-lobby-btn")) {
-      if (currentRoom) {
-        socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
-      }
-      returnToLobby();
-    }
-  });
-
-  // --- LÓGICA DO JOGO (CLIENT-SIDE) ---
-
-  function createBoard() {
-    boardElement.innerHTML = "";
-    const boardSize = currentBoardSize || 8;
-    let squareSizeCSS;
-
-    if (boardSize === 10) {
-      squareSizeCSS = "min(50px, 8.5vw)";
-      if (window.innerWidth <= 768) {
-        squareSizeCSS = "min(36px, 9vw)";
-      }
-    } else {
-      squareSizeCSS = "min(60px, 10vw)";
-      if (window.innerWidth <= 768) {
-        squareSizeCSS = "min(45px, 11vw)";
-      }
-    }
-
-    boardElement.style.gridTemplateColumns = `repeat(${boardSize}, ${squareSizeCSS})`;
-    boardElement.style.gridTemplateRows = `repeat(${boardSize}, ${squareSizeCSS})`;
-
-    for (let row = 0; row < boardSize; row++) {
-      for (let col = 0; col < boardSize; col++) {
-        const square = document.createElement("div");
-        square.classList.add(
-          "square",
-          (row + col) % 2 === 1 ? "dark" : "light"
-        );
-        square.dataset.row = row;
-        square.dataset.col = col;
-        boardElement.appendChild(square);
-      }
-    }
-    boardElement.addEventListener("click", handleBoardClick);
-  }
-
-  function renderPieces() {
-    document.querySelectorAll(".piece").forEach((p) => p.remove());
-    const boardSize = currentBoardSize || 8;
-
-    for (let row = 0; row < boardSize; row++) {
-      for (let col = 0; col < boardSize; col++) {
-        const pieceType = boardState[row][col];
-        if (pieceType !== 0) {
-          const piece = document.createElement("div");
-          piece.classList.add("piece");
-          const isBlack = pieceType.toLowerCase() === "p";
-          piece.classList.add(isBlack ? "black-piece" : "white-piece");
-          const isKing = pieceType === "P" || pieceType === "B";
-          if (isKing) {
-            piece.classList.add("king");
-          }
-          const square = document.querySelector(
-            `.square[data-row='${row}'][data-col='${col}']`
-          );
-          if (square) {
-            square.appendChild(piece);
-          }
-        }
-      }
-    }
-  }
-
-  function handleBoardClick(e) {
-    // BLOQUEIA INTERAÇÃO PARA ESPECTADORES
-    if (isSpectator) return;
-
-    if (!myColor) return;
-    const square = e.target.closest(".square");
-    if (!square) return;
-
-    const row = parseInt(square.dataset.row);
-    const col = parseInt(square.dataset.col);
-    const clickedPieceElement = e.target.closest(".piece");
-
-    if (selectedPiece) {
-      if (square.classList.contains("valid-move-highlight")) {
-        socket.emit("playerMove", {
-          from: { row: selectedPiece.row, col: selectedPiece.col },
-          to: { row, col },
-          room: currentRoom,
-        });
-        unselectPiece();
-        return;
-      }
-      if (selectedPiece.row === row && selectedPiece.col === col) {
-        unselectPiece();
-        return;
-      }
-      if (clickedPieceElement) {
-        const pieceColor = clickedPieceElement.classList.contains("white-piece")
-          ? "b"
-          : "p";
-        if (pieceColor === myColor) {
-          selectPiece(clickedPieceElement, row, col);
-          return;
-        }
-      }
-      return;
-    }
-
-    if (clickedPieceElement) {
-      const pieceColor = clickedPieceElement.classList.contains("white-piece")
-        ? "b"
-        : "p";
-
-      if (pieceColor === myColor) {
-        const mandatoryPieces = document.querySelectorAll(".mandatory-capture");
-        if (mandatoryPieces.length > 0) {
-          if (clickedPieceElement.classList.contains("mandatory-capture")) {
-            selectPiece(clickedPieceElement, row, col);
-          }
-        } else {
-          selectPiece(clickedPieceElement, row, col);
-        }
-      }
-    }
-  }
-
-  function selectPiece(pieceElement, row, col) {
-    unselectPiece();
-    selectedPiece = { element: pieceElement, row, col };
-    socket.emit("getValidMoves", { row, col, roomCode: currentRoom });
-  }
-
-  function unselectPiece() {
-    document.querySelectorAll(".valid-move-highlight").forEach((square) => {
-      square.classList.remove("valid-move-highlight");
-    });
-    if (selectedPiece) {
-      selectedPiece = null;
-    }
-  }
-
-  function updateGame(gameState) {
-    const oldPieceCount = boardState.flat().filter((p) => p !== 0).length;
-    const newPieceCount = gameState.boardState
-      .flat()
-      .filter((p) => p !== 0).length;
-
-    if (newPieceCount > 0 && oldPieceCount > 0) {
-      if (newPieceCount < oldPieceCount) {
-        captureSound.currentTime = 0;
-        captureSound.play();
-      } else {
-        moveSound.currentTime = 0;
-        moveSound.play();
-      }
-    }
-
-    boardState = gameState.boardState;
-    renderPieces();
-    turnDisplay.textContent =
-      gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
-  }
-
-  function highlightMandatoryPieces(piecesToHighlight) {
-    document
-      .querySelectorAll(".mandatory-capture")
-      .forEach((p) => p.classList.remove("mandatory-capture"));
-    // Espectadores não precisam ver obrigações de captura (opcional, aqui estamos mantendo para visualização)
-    if (piecesToHighlight && piecesToHighlight.length > 0) {
-      piecesToHighlight.forEach((pos) => {
-        const square = document.querySelector(
-          `.square[data-row='${pos.row}'][data-col='${pos.col}']`
-        );
-        if (square && square.firstChild) {
-          square.firstChild.classList.add("mandatory-capture");
-        }
-      });
-    }
-  }
-
-  function formatTime(seconds) {
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    return `${min}:${sec < 10 ? "0" : ""}${sec}`;
-  }
-
-  // --- SOCKET.IO EVENT HANDLERS ---
-
-  socket.on("connect", () => {
-    console.log("Conectado ao servidor com o ID:", socket.id);
-    if (currentUser) {
-      socket.emit("enterLobby");
-    }
-    const savedRoom = localStorage.getItem("checkersCurrentRoom");
-    if (currentUser && savedRoom) {
-      currentRoom = savedRoom;
-      socket.emit("rejoinActiveGame", {
-        roomCode: currentRoom,
-        user: currentUser,
-      });
-      if (mainContainer) mainContainer.classList.add("hidden");
-      lobbyContainer.classList.add("hidden");
-      gameContainer.classList.remove("hidden");
-    }
-  });
-
-  socket.on("roomCreated", (data) => {
-    roomCodeDisplay.textContent = data.roomCode;
-    waitingArea.classList.remove("hidden");
-  });
-
-  socket.on("roomCancelled", () => {
-    resetLobbyUI();
-  });
-
-  socket.on("updateLobby", (data) => {
-    // Agora recebe { waiting: [...], active: [...] }
-    renderOpenRooms(data.waiting);
-    renderActiveRooms(data.active);
-  });
-
-  socket.on("joinError", (data) => {
-    lobbyErrorMessage.textContent = data.message;
-    resetLobbyUI();
-  });
-
-  socket.on("confirmBet", (data) => {
-    confirmBetAmount.textContent = data.bet;
-    tempRoomCode = data.roomCode;
-
-    let timeMsg = "";
-    if (data.timeControl === "match") {
-      timeMsg = " (Tempo por Partida)";
-    } else {
-      timeMsg = " (Tempo por Jogada)";
-    }
-
-    if (data.gameMode === "tablita") {
-      confirmGameMode.textContent =
-        "Modo Tablita (ida e volta)" + timeMsg + ".";
-    } else if (data.gameMode === "international") {
-      confirmGameMode.textContent =
-        "Modo Internacional (10x10)" + timeMsg + ".";
-    } else {
-      confirmGameMode.textContent = "Modo Clássico (8x8)" + timeMsg + ".";
-    }
-    confirmBetOverlay.classList.remove("hidden");
-  });
-
-  // --- EVENTO DE ENTRADA DO ESPECTADOR ---
-  socket.on("spectatorJoined", (data) => {
-    isSpectator = true;
-    currentRoom = data.gameState.roomCode;
-
-    lobbyContainer.classList.add("hidden");
-    gameContainer.classList.remove("hidden");
-
-    // Ajusta UI para espectador
-    spectatorIndicator.classList.remove("hidden");
-    resignBtn.classList.add("hidden");
-    drawBtn.classList.add("hidden");
-    spectatorLeaveBtn.classList.remove("hidden");
-
-    currentBoardSize = data.gameState.boardSize;
-    createBoard();
-
-    updateGame(data.gameState);
-    highlightMandatoryPieces(data.gameState.mandatoryPieces);
-
-    // Atualiza o tempo inicial
-    if (data.timeControl === "match") {
-      const turnColor =
-        data.gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
-      let timeToShow = 0;
-      if (turnColor === "Brancas") timeToShow = data.whiteTime;
-      else timeToShow = data.blackTime;
-      timerDisplay.textContent = formatTime(timeToShow);
-    } else {
-      timerDisplay.textContent = (data.timeLeft || 0) + "s";
-    }
-  });
-
-  socket.on("gameStart", (gameState) => {
-    if (isSpectator) return; // Espectadores usam spectatorJoined e gameStateUpdate
-
-    isGameOver = false;
-    overlay.classList.add("hidden");
-    winnerScreen.classList.add("hidden");
-    loserScreen.classList.add("hidden");
-    drawScreen.classList.add("hidden");
-    if (nextGameOverlay) nextGameOverlay.classList.add("hidden");
-    if (drawRequestOverlay) drawRequestOverlay.classList.add("hidden");
-
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    drawCooldownInterval = null;
-    if (drawBtn) {
-      drawBtn.disabled = false;
-      drawBtn.textContent = "Empate";
-    }
-    if (nextGameInterval) clearInterval(nextGameInterval);
-
-    lobbyContainer.classList.add("hidden");
-    gameContainer.classList.remove("hidden");
-
-    currentBoardSize = gameState.boardSize;
-    createBoard();
-
-    currentRoom = gameState.roomCode;
-    localStorage.setItem("checkersCurrentRoom", currentRoom);
-    myColor = socket.id === gameState.players.white ? "b" : "p";
-
-    let statusText = `Você joga com as ${
-      myColor === "b" ? "Brancas" : "Pretas"
-    }.`;
-    if (gameState.openingName) {
-      statusText += `<br><span style="font-size: 0.9em; color: #f39c12;">Sorteio: ${gameState.openingName}</span>`;
-    }
-    gameStatus.innerHTML = statusText;
-
-    boardElement.classList.remove("board-flipped");
-    if (myColor === "p") {
-      boardElement.classList.add("board-flipped");
-    }
-    updateGame(gameState);
-    highlightMandatoryPieces(gameState.mandatoryPieces);
-  });
-
-  socket.on("timerUpdate", (data) => {
-    if (data.timeLeft !== undefined) {
-      timerDisplay.textContent = data.timeLeft + "s";
-    } else if (data.whiteTime !== undefined && data.blackTime !== undefined) {
-      const turnColor = turnDisplay.textContent;
-      let timeToShow = 0;
-      if (turnColor === "Brancas") timeToShow = data.whiteTime;
-      else timeToShow = data.blackTime;
-      timerDisplay.textContent = formatTime(timeToShow);
-    }
-  });
-
-  socket.on("timerPaused", (data) => {
-    if (data.timeLeft !== undefined) {
-      timerDisplay.textContent = `${data.timeLeft}s (Pausado)`;
-    } else {
-      timerDisplay.textContent = "Pausado";
-    }
-  });
-
-  socket.on("gameStateUpdate", (gameState) => {
-    updateGame(gameState);
-    highlightMandatoryPieces(gameState.mandatoryPieces);
-  });
-
-  socket.on("invalidMove", (data) => {
-    console.warn("Movimento Inválido:", data.message);
-  });
-
-  socket.on("opponentConnectionLost", (data) => {
-    if (isSpectator) return;
-    connectionLostMessage.textContent = `Conexão do oponente lenta, aguarde ${data.waitTime} segundos para a conexão restabelecer...`;
-    connectionLostOverlay.classList.remove("hidden");
-  });
-
-  socket.on("gameResumed", (data) => {
-    // Se for espectador, não processa o 'gameResumed' padrão pois ele re-seta myColor baseado em socket.id
     if (isSpectator) return;
 
     connectionLostOverlay.classList.add("hidden");

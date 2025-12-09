@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // --- Elementos do DOM (Existentes) ---
+  // --- Elementos do DOM ---
   const authContainer = document.getElementById("auth-admin-container");
   const adminContainer = document.getElementById("admin-container");
   const secretForm = document.getElementById("secret-form");
@@ -7,7 +7,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const authMessage = document.getElementById("auth-admin-message");
   const searchInput = document.getElementById("search-input");
   const usersTableBody = document.querySelector("#users-table tbody");
+  const withdrawalsTableBody = document.querySelector(
+    "#withdrawals-table tbody"
+  ); // NOVO
   const resetAllSaldosBtn = document.getElementById("reset-all-saldos-btn");
+  const refreshWithdrawalsBtn = document.getElementById(
+    "refresh-withdrawals-btn"
+  ); // NOVO
 
   let adminSecretKey = null;
   let allUsers = [];
@@ -23,10 +29,18 @@ document.addEventListener("DOMContentLoaded", () => {
       authMessage.style.color = "red";
       return;
     }
-    loadUsers();
+    loadData(); // Agora carrega tudo
   });
 
-  // 2. Função para carregar os utilizadores do servidor
+  async function loadData() {
+    await loadUsers();
+    await loadWithdrawals(); // Carrega saques também
+    authContainer.classList.add("hidden");
+    adminContainer.classList.remove("hidden");
+    initializeTestBoard();
+  }
+
+  // 2. Carrega Utilizadores
   async function loadUsers() {
     try {
       const response = await fetch("/api/admin/users", {
@@ -42,21 +56,122 @@ document.addEventListener("DOMContentLoaded", () => {
         adminSecretKey = null;
         return;
       }
-      if (!response.ok) {
-        throw new Error("Falha ao carregar utilizadores.");
-      }
-
-      authContainer.classList.add("hidden");
-      adminContainer.classList.remove("hidden");
+      if (!response.ok) throw new Error("Falha ao carregar utilizadores.");
 
       allUsers = await response.json();
       renderTable(allUsers);
-
-      // Inicializa o tabuleiro de teste SÓ DEPOIS do login
-      initializeTestBoard();
     } catch (error) {
       authMessage.textContent = `Erro: ${error.message}`;
       authMessage.style.color = "red";
+    }
+  }
+
+  // --- 2.5 Carrega Solicitações de Saque (NOVO) ---
+  async function loadWithdrawals() {
+    try {
+      const response = await fetch("/api/admin/withdrawals", {
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret-key": adminSecretKey,
+        },
+      });
+      if (!response.ok) throw new Error("Falha ao carregar saques.");
+      const withdrawals = await response.json();
+      renderWithdrawalsTable(withdrawals);
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao carregar lista de saques.");
+    }
+  }
+
+  // --- Renderiza Tabela de Saques (NOVO) ---
+  function renderWithdrawalsTable(withdrawals) {
+    withdrawalsTableBody.innerHTML = "";
+    if (withdrawals.length === 0) {
+      withdrawalsTableBody.innerHTML =
+        "<tr><td colspan='5' style='text-align:center;'>Nenhuma solicitação pendente.</td></tr>";
+      return;
+    }
+
+    withdrawals.forEach((w) => {
+      const row = document.createElement("tr");
+      const date = new Date(w.createdAt).toLocaleString();
+      row.innerHTML = `
+            <td>${date}</td>
+            <td>${w.email}</td>
+            <td style="font-family: monospace; background: #222; color: #f1c40f; padding: 5px;">${
+              w.pixKey
+            }</td>
+            <td>R$ ${w.amount.toFixed(2)}</td>
+            <td>
+                <button class="approve-btn" data-id="${w._id}" data-amount="${
+        w.amount
+      }">Concluir (Pagar)</button>
+                <button class="reject-btn" data-id="${w._id}">Rejeitar</button>
+            </td>
+          `;
+      withdrawalsTableBody.appendChild(row);
+    });
+  }
+
+  // --- Eventos da Tabela de Saques (NOVO) ---
+  withdrawalsTableBody.addEventListener("click", async (e) => {
+    const target = e.target;
+    const id = target.dataset.id;
+
+    if (target.classList.contains("approve-btn")) {
+      const amount = target.dataset.amount;
+      if (
+        confirm(
+          `Confirma que enviou R$ ${amount} para o usuário? Isso irá remover o saldo da conta dele.`
+        )
+      ) {
+        await approveWithdrawal(id);
+      }
+    }
+
+    if (target.classList.contains("reject-btn")) {
+      if (
+        confirm(
+          "Deseja rejeitar esta solicitação? O saldo do usuário não será alterado."
+        )
+      ) {
+        await rejectWithdrawal(id);
+      }
+    }
+  });
+
+  if (refreshWithdrawalsBtn) {
+    refreshWithdrawalsBtn.addEventListener("click", loadWithdrawals);
+  }
+
+  async function approveWithdrawal(id) {
+    try {
+      const response = await fetch("/api/admin/approve-withdrawal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: adminSecretKey, withdrawalId: id }),
+      });
+      const data = await response.json();
+      alert(data.message);
+      loadData(); // Recarrega tudo para atualizar saldos também
+    } catch (error) {
+      alert("Erro ao aprovar.");
+    }
+  }
+
+  async function rejectWithdrawal(id) {
+    try {
+      const response = await fetch("/api/admin/reject-withdrawal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: adminSecretKey, withdrawalId: id }),
+      });
+      const data = await response.json();
+      alert(data.message);
+      loadWithdrawals();
+    } catch (error) {
+      alert("Erro ao rejeitar.");
     }
   }
 
@@ -68,11 +183,13 @@ document.addEventListener("DOMContentLoaded", () => {
       row.innerHTML = `
         <td>${user.email}</td>
         <td data-email="${user.email}">
-          <span>${user.saldo}</span>
+          <span>${user.saldo.toFixed(2)}</span>
         </td>
         <td>
           <button class="edit-btn" data-email="${user.email}">Editar</button>
-          <button class="delete-btn" data-email="${user.email}" style="background-color: #c0392b;">Excluir</button>
+          <button class="delete-btn" data-email="${
+            user.email
+          }" style="background-color: #c0392b;">Excluir</button>
         </td>
       `;
       usersTableBody.appendChild(row);
@@ -183,14 +300,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ) {
         return;
       }
-      if (
-        !confirm(
-          "Último aviso: Confirma que deseja zerar o saldo de todos os utilizadores?"
-        )
-      ) {
-        return;
-      }
-
       try {
         const response = await fetch("/api/admin/reset-all-saldos", {
           method: "POST",
@@ -199,10 +308,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Falha ao executar a operação.");
-        }
+        if (!response.ok) throw new Error(data.message);
 
         alert(data.message);
         loadUsers();
@@ -213,7 +319,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- ### NOVA LÓGICA DO TABULEIRO DE TESTE ### ---
-
+  // (Mantido igual, apenas para referência de que está aqui)
   const standardOpening = [
     [0, "p", 0, "p", 0, "p", 0, "p"],
     ["p", 0, "p", 0, "p", 0, "p", 0],
@@ -229,7 +335,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedPiece = null;
   let lastTestGameState = null;
 
-  // Elementos do DOM do tabuleiro de teste
   const toggleTestBoardBtn = document.getElementById("toggle-test-board-btn");
   const testBoardContainer = document.getElementById("test-board-container");
   const boardElement = document.getElementById("board");
@@ -240,7 +345,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const testTurnSpan = document.getElementById("test-turn");
 
   function initializeTestBoard() {
-    // Liga os botões
     toggleTestBoardBtn.addEventListener("click", () => {
       testBoardContainer.classList.toggle("hidden");
     });
@@ -251,16 +355,14 @@ document.addEventListener("DOMContentLoaded", () => {
       updateTestGameUI();
     });
 
-    // Configura o tabuleiro
     createBoard();
     startTestGame();
   }
 
-  // <--- ADICIONE ESTA FUNÇÃO NOVA ---
   function handleUndoMove() {
     if (lastTestGameState) {
-      testGame = JSON.parse(JSON.stringify(lastTestGameState)); // Restaura o estado anterior
-      lastTestGameState = null; // Limpa o "undo" para não voltar duas vezes
+      testGame = JSON.parse(JSON.stringify(lastTestGameState));
+      lastTestGameState = null;
       renderPieces();
       updateTestGameUI();
       testStatus.textContent = "Jogada anterior restaurada.";
@@ -272,8 +374,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function startTestGame() {
     testGame = {
       boardState: JSON.parse(JSON.stringify(standardOpening)),
-      boardSize: 8, // <<< ADICIONADO: Garante que o teste use a lógica 8x8
-      currentPlayer: "b", // Começa com as brancas
+      boardSize: 8,
+      currentPlayer: "b",
     };
     selectedPiece = null;
     lastTestGameState = null;
@@ -377,7 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
           move.to,
           testGame.currentPlayer,
           testGame,
-          true // Ignora a regra da maioria para o teste
+          true
         );
 
         if (isValid.valid) {
@@ -424,7 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 2. TENTATIVA DE SELEÇÃO
-    unselectPiece(); // Limpa seleção anterior
+    unselectPiece();
 
     if (clickedPieceElement) {
       const pieceColor = clickedPieceElement.classList.contains("white-piece")
@@ -472,7 +574,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ### FUNÇÃO CORRIGIDA E LIMPA ###
   function showValidMoves(row, col) {
     const piece = testGame.boardState[row][col];
     if (piece === 0) return;
@@ -486,13 +587,11 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     if (bestCaptures.length > 0) {
-      // Se há capturas obrigatórias
       const capturesForThisPiece = bestCaptures.filter(
         (seq) => seq[0].row === row && seq[0].col === col
       );
       validMoves = capturesForThisPiece.map((seq) => seq[1]);
     } else {
-      // Se não há capturas, calcula movimentos normais
       for (let toRow = 0; toRow < 8; toRow++) {
         for (let toCol = 0; toCol < 8; toCol++) {
           const result = window.gameLogic.isMoveValid(
@@ -500,12 +599,9 @@ document.addEventListener("DOMContentLoaded", () => {
             { row: toRow, col: toCol },
             playerColor,
             testGame,
-            true // Ignora a regra da maioria
+            true
           );
 
-          // ### CORREÇÃO APLICADA AQUI ###
-          // Só adiciona o movimento se for válido E NÃO for uma captura
-          // (pois este bloco 'else' só deve correr se não houver capturas obrigatórias)
           if (result.valid && !result.isCapture) {
             validMoves.push({ row: toRow, col: toCol });
           }
@@ -513,7 +609,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Destaca os quadrados
     validMoves.forEach((move) => {
       const square = document.querySelector(
         `#board .square[data-row='${move.row}'][data-col='${move.col}']`
