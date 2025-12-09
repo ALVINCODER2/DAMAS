@@ -1,3 +1,5 @@
+/* style.css */
+
 /* --- ESTILOS GERAIS E NOVOS PARA LOGIN PROFISSIONAL --- */
 
 /* Reset básico e configuração do corpo da página */
@@ -971,33 +973,57 @@ body {
   color: #bdc3c7;
 }
 
-/* ESTILOS PARA TABELA DE HISTÓRICO */
+/* --- ESTILOS PARA TABELA DE HISTÓRICO (AJUSTADO PARA MOBILE) --- */
+#history-list {
+  /* Garante que se a tabela for larga, apareça barra de rolagem horizontal */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85em;
+  font-size: 0.8em; /* Fonte menor para caber mais info */
+  min-width: 300px; /* Garante que a tabela não fique esmagada demais */
 }
+
 .history-table th,
 .history-table td {
-  padding: 8px;
+  padding: 8px 5px; /* Menos espaçamento lateral */
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  text-align: left;
+  text-align: center; /* Centraliza para alinhar melhor */
+  white-space: nowrap; /* Evita que o texto quebre e ocupe muita altura */
 }
+
 .history-table th {
   background-color: rgba(0, 0, 0, 0.3);
   color: #e85d40;
-}
-.history-win {
-  color: #2ecc71; /* Verde */
-}
-.history-loss {
-  color: #e74c3c; /* Vermelho */
-}
-.history-draw {
-  color: #95a5a6; /* Cinza */
+  font-weight: 600;
 }
 
-/* --- HUD DE JOGADORES (JÁ EXISTENTE) --- */
+.history-win {
+  color: #2ecc71; /* Verde */
+  font-weight: bold;
+}
+
+.history-loss {
+  color: #e74c3c; /* Vermelho */
+  font-weight: bold;
+}
+
+.history-draw {
+  color: #95a5a6; /* Cinza */
+  font-weight: bold;
+}
+
+/* Opcional: Ajuste específico para a coluna de oponente não ficar gigante */
+.history-table td:nth-child(3) {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- NOVO: HUD DOS JOGADORES (NOMES ACIMA DO TABULEIRO) --- */
 .players-hud {
   display: flex;
   justify-content: space-between;
