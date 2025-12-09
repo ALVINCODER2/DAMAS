@@ -292,14 +292,13 @@
         <p>
           <strong>Chave:</strong>
           <span
-            id="pix-key">00020126580014br.gov.bcb.pix01362b3485a0-d28c-4d37-9b5d-b2efcac4cee65204000053039865802BR5919TIAGO
-            SOUZA SANTANA6008Salvador6211050726f78796304D315</span>
+            id="pix-key">00020126580014br.gov.bcb.pix01362b3485a0-d28c-4d37-9b5d-b2efcac4cee65204000053039865802BR5919TIAGO SOUZA SANTANA6008Salvador6211050726f78796304D315</span>
         </p>
         <p><strong>Nome:</strong> Tiago Souza Santana</p>
       </div>
       <button id="copy-pix-key-btn">Copiar Chave</button>
       <p class="instructions">
-        Após o pagamento, envie o comprovative e seu Email para o nosso WhatsApp para que
+        Após o pagamento, envie o comprovative e o seu Email para o nosso WhatsApp para que
         o saldo seja adicionado à sua conta.
       </p>
       <a href="https://wa.me/5571920007957?text=Ol%C3%A1%21%20Estou%20enviando%20o%20comprovativo%20do%20meu%20pagamento%20PIX."
@@ -308,15 +307,19 @@
     </div>
   </div>
 
-  <!-- OVERLAY DE SAQUE -->
+  <!-- OVERLAY DE SAQUE ATUALIZADO COM O AVISO DE MÍNIMO -->
   <div id="withdraw-overlay" class="hidden">
     <div class="modal-box">
       <h3>Solicitar Retirada</h3>
       <p>Preencha os dados para receber seu saldo via PIX.</p>
+      <!-- AVISO DE VALOR MÍNIMO -->
+      <p style="color: #f39c12; font-size: 0.9em; margin-bottom: 10px;">⚠️ O valor mínimo para retirada é de <strong>R$
+          30,00</strong>.</p>
 
       <form id="withdraw-form" style="display: flex; flex-direction: column; gap: 10px;">
         <input type="text" id="withdraw-pix-key" placeholder="Sua Chave PIX" required class="modal-input">
-        <input type="number" id="withdraw-amount" placeholder="Valor (R$)" min="1" required class="modal-input">
+        <!-- VALIDAÇÃO HTML PARA MÍNIMO 30 -->
+        <input type="number" id="withdraw-amount" placeholder="Valor (R$)" min="30" required class="modal-input">
         <button type="submit" style="background-color: #2ecc71; margin-top: 10px;">Solicitar</button>
       </form>
 

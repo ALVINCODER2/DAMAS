@@ -79,10 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
   );
   const referralsList = document.getElementById("referrals-list");
 
-  // Só inicializa o socket se não estiver na página de admin (opcional, mas boa prática)
-  // Como o admin usa outro script, aqui assumimos que é a página de jogo.
   const socket = io({ autoConnect: false });
-
   let currentUser = null;
   let myColor = null;
   let currentRoom = null;
@@ -95,10 +92,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let drawCooldownInterval = null;
   let isSpectator = false;
 
-  // --- LÓGICA DE URL E INDICAÇÃO ---
   const urlParams = new URLSearchParams(window.location.search);
   const refCode = urlParams.get("ref");
-
   if (refCode && referralCodeInput) {
     referralCodeInput.value = refCode;
     if (loginForm && registerForm) {
@@ -107,102 +102,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // --- LISTENERS DE LOGIN/REGISTRO (IMPORTANTE: Verificação de existência) ---
-
-  if (showRegisterLink) {
-    showRegisterLink.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (loginForm) loginForm.style.display = "none";
-      if (registerForm) registerForm.style.display = "block";
-      if (authMessage) authMessage.textContent = "";
-    });
-  }
-
-  if (showLoginLink) {
-    showLoginLink.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (registerForm) registerForm.style.display = "none";
-      if (loginForm) loginForm.style.display = "block";
-      if (authMessage) authMessage.textContent = "";
-    });
-  }
-
-  if (registerForm) {
-    registerForm.addEventListener("submit", async (e) => {
-      e.preventDefault(); // IMPEDE O RECARREGAMENTO DA PÁGINA
-      const email = document.getElementById("register-email").value;
-      const password = document.getElementById("register-password").value;
-      const referralCode = document.getElementById("referral-code-input")
-        ? document.getElementById("referral-code-input").value
-        : "";
-
-      try {
-        const response = await fetch("/api/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, referralCode }),
-        });
-        const data = await response.json();
-        if (authMessage) authMessage.textContent = data.message;
-
-        if (response.ok) {
-          if (authMessage) authMessage.style.color = "green";
-          setTimeout(() => {
-            if (showLoginLink) showLoginLink.click();
-          }, 2000);
-        } else {
-          if (authMessage) authMessage.style.color = "red";
-        }
-      } catch (error) {
-        if (authMessage) {
-          authMessage.textContent = "Erro ao conectar ao servidor.";
-          authMessage.style.color = "red";
-        }
-      }
-    });
-  }
-
-  if (loginForm) {
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault(); // IMPEDE O RECARREGAMENTO DA PÁGINA - CRUCIAL
-      const email = document.getElementById("login-email").value;
-      const password = document.getElementById("login-password").value;
-
-      try {
-        const response = await fetch("/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await response.json();
-
-        if (response.ok) {
-          currentUser = data.user;
-          localStorage.setItem("checkersUserEmail", currentUser.email);
-          if (mainContainer) mainContainer.classList.add("hidden");
-          if (authContainer) authContainer.classList.add("hidden"); // Garante que o auth suma
-          if (lobbyContainer) lobbyContainer.classList.remove("hidden");
-          if (lobbyWelcomeMessage)
-            lobbyWelcomeMessage.textContent = `Bem-vindo, ${
-              currentUser.email
-            }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
-          socket.connect();
-        } else {
-          if (authMessage) {
-            authMessage.textContent = data.message;
-            authMessage.style.color = "red";
-          }
-        }
-      } catch (error) {
-        if (authMessage) {
-          authMessage.textContent = "Erro ao conectar ao servidor.";
-          authMessage.style.color = "red";
-        }
-      }
-    });
-  }
-
-  // --- LÓGICA DO BOTÃO DE COPIAR LINK ---
   if (copyReferralBtn) {
     copyReferralBtn.addEventListener("click", () => {
       if (!currentUser) return;
@@ -226,10 +125,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // --- LÓGICA: VER INDICAÇÕES ---
   if (viewReferralsBtn) {
     viewReferralsBtn.addEventListener("click", async () => {
-      if (!currentUser) return;
       referralsOverlay.classList.remove("hidden");
       referralsList.innerHTML = "<p>Carregando...</p>";
 
@@ -298,7 +195,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateTimerOptions() {
-    if (!timerSelect || !timeControlSelect) return; // Segurança
     timerSelect.innerHTML = "";
     const controlType = timeControlSelect.value;
 
@@ -335,43 +231,39 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  if (timeControlSelect) {
-    updateTimerOptions();
-    timeControlSelect.addEventListener("change", updateTimerOptions);
-  }
+  updateTimerOptions();
+  timeControlSelect.addEventListener("change", updateTimerOptions);
 
   function resetLobbyUI() {
-    if (waitingArea) waitingArea.classList.add("hidden");
-    if (createRoomBtn) createRoomBtn.disabled = false;
-    if (betAmountInput) betAmountInput.disabled = false;
-    if (gameModeSelect) gameModeSelect.disabled = false;
-    if (timeControlSelect) timeControlSelect.disabled = false;
-    if (timerSelectionContainer) timerSelectionContainer.style.display = "flex";
+    waitingArea.classList.add("hidden");
+    createRoomBtn.disabled = false;
+    betAmountInput.disabled = false;
+    gameModeSelect.disabled = false;
+    timeControlSelect.disabled = false;
+    timerSelectionContainer.style.display = "flex";
   }
 
   function returnToLobby() {
     isGameOver = false;
     isSpectator = false;
-    if (gameContainer) gameContainer.classList.add("hidden");
-    if (overlay) overlay.classList.add("hidden");
-    if (winnerScreen) winnerScreen.classList.add("hidden");
-    if (loserScreen) loserScreen.classList.add("hidden");
-    if (drawScreen) drawScreen.classList.add("hidden");
-    if (spectatorEndScreen) spectatorEndScreen.classList.add("hidden");
-    if (nextGameOverlay) nextGameOverlay.classList.add("hidden");
-    if (drawRequestOverlay) drawRequestOverlay.classList.add("hidden");
-    if (connectionLostOverlay) connectionLostOverlay.classList.add("hidden");
+    gameContainer.classList.add("hidden");
+    overlay.classList.add("hidden");
+    winnerScreen.classList.add("hidden");
+    loserScreen.classList.add("hidden");
+    drawScreen.classList.add("hidden");
+    spectatorEndScreen.classList.add("hidden");
+    nextGameOverlay.classList.add("hidden");
+    drawRequestOverlay.classList.add("hidden");
+    connectionLostOverlay.classList.add("hidden");
 
-    if (spectatorIndicator) spectatorIndicator.classList.add("hidden");
-    if (spectatorLeaveBtn) spectatorLeaveBtn.classList.add("hidden");
-    if (resignBtn) resignBtn.classList.remove("hidden");
-    if (drawBtn) drawBtn.classList.remove("hidden");
+    spectatorIndicator.classList.add("hidden");
+    spectatorLeaveBtn.classList.add("hidden");
+    resignBtn.classList.remove("hidden");
+    drawBtn.classList.remove("hidden");
 
-    if (lobbyContainer) lobbyContainer.classList.remove("hidden");
-    if (boardElement) {
-      boardElement.classList.remove("board-flipped");
-      boardElement.innerHTML = "";
-    }
+    lobbyContainer.classList.remove("hidden");
+    boardElement.classList.remove("board-flipped");
+    boardElement.innerHTML = "";
     currentRoom = null;
     myColor = null;
     currentBoardSize = 8;
@@ -386,15 +278,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (currentUser) {
       socket.emit("enterLobby");
-      if (lobbyWelcomeMessage)
-        lobbyWelcomeMessage.textContent = `Bem-vindo, ${
-          currentUser.email
-        }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
+      lobbyWelcomeMessage.textContent = `Bem-vindo, ${
+        currentUser.email
+      }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
     }
   }
 
   function renderOpenRooms(rooms) {
-    if (!openRoomsList) return;
     openRoomsList.innerHTML = "";
     if (!rooms || rooms.length === 0) {
       openRoomsList.innerHTML =
@@ -448,7 +338,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderActiveRooms(rooms) {
-    if (!activeRoomsList) return;
     activeRoomsList.innerHTML = "";
     if (!rooms || rooms.length === 0) {
       activeRoomsList.innerHTML = "<p>Nenhum jogo em andamento.</p>";
@@ -516,11 +405,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (response.ok) {
           currentUser = data.user;
           if (mainContainer) mainContainer.classList.add("hidden");
-          if (lobbyContainer) lobbyContainer.classList.remove("hidden");
-          if (lobbyWelcomeMessage)
-            lobbyWelcomeMessage.textContent = `Bem-vindo, ${
-              currentUser.email
-            }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
+          lobbyContainer.classList.remove("hidden");
+          lobbyWelcomeMessage.textContent = `Bem-vindo, ${
+            currentUser.email
+          }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
           socket.connect();
         } else {
           localStorage.removeItem("checkersUserEmail");
@@ -553,9 +441,19 @@ document.addEventListener("DOMContentLoaded", () => {
     withdrawForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const pixKey = document.getElementById("withdraw-pix-key").value;
-      const amount = document.getElementById("withdraw-amount").value;
+      const amount = parseFloat(
+        document.getElementById("withdraw-amount").value
+      ); // Converte para número
 
       if (!pixKey || !amount) return;
+
+      // VALIDACAO DO VALOR MINIMO (30 REAIS)
+      if (amount < 30) {
+        withdrawMessage.textContent =
+          "O valor mínimo para retirada é de R$ 30,00.";
+        withdrawMessage.style.color = "orange";
+        return; // Impede o envio
+      }
 
       try {
         const response = await fetch("/api/withdraw", {
@@ -563,7 +461,7 @@ document.addEventListener("DOMContentLoaded", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: currentUser.email,
-            amount: parseFloat(amount),
+            amount: amount,
             pixKey,
           }),
         });
@@ -585,179 +483,223 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (createRoomBtn) {
-    createRoomBtn.addEventListener("click", () => {
-      if (
-        !betAmountInput ||
-        !gameModeSelect ||
-        !timerSelect ||
-        !timerSelectionContainer ||
-        !lobbyErrorMessage
-      ) {
-        console.error(
-          "ERRO: Elementos da UI para criar sala não foram encontrados!"
-        );
-        return;
-      }
+  createRoomBtn.addEventListener("click", () => {
+    if (
+      !betAmountInput ||
+      !gameModeSelect ||
+      !timerSelect ||
+      !timerSelectionContainer ||
+      !lobbyErrorMessage
+    ) {
+      console.error(
+        "ERRO: Elementos da UI para criar sala não foram encontrados!"
+      );
+      return;
+    }
 
-      const bet = parseInt(betAmountInput.value, 10);
-      const gameMode = gameModeSelect.value;
-      const timerDuration = timerSelect.value;
-      const timeControl = timeControlSelect.value;
+    const bet = parseInt(betAmountInput.value, 10);
+    const gameMode = gameModeSelect.value;
+    const timerDuration = timerSelect.value;
+    const timeControl = timeControlSelect.value;
 
-      const roomData = {
-        bet,
-        user: currentUser,
-        gameMode,
-        timerDuration,
-        timeControl,
-      };
+    const roomData = {
+      bet,
+      user: currentUser,
+      gameMode,
+      timerDuration,
+      timeControl,
+    };
 
-      if (bet > 0 && currentUser) {
-        socket.emit("createRoom", roomData);
+    if (bet > 0 && currentUser) {
+      socket.emit("createRoom", roomData);
+      lobbyErrorMessage.textContent = "";
+      createRoomBtn.disabled = true;
+      betAmountInput.disabled = true;
+      gameModeSelect.disabled = true;
+      timeControlSelect.disabled = true;
+      timerSelectionContainer.style.display = "none";
+    } else if (!currentUser) {
+      lobbyErrorMessage.textContent =
+        "Erro de autenticação. Tente fazer o login novamente.";
+    } else {
+      lobbyErrorMessage.textContent = "A aposta deve ser maior que zero.";
+    }
+  });
+
+  cancelRoomBtn.addEventListener("click", () => {
+    const roomCode = roomCodeDisplay.textContent;
+    if (roomCode) {
+      socket.emit("cancelRoom", { roomCode });
+    }
+  });
+
+  lobbyContainer.addEventListener("click", (e) => {
+    if (e.target.classList.contains("join-room-btn")) {
+      const roomCode = e.target.dataset.roomCode;
+      if (roomCode && currentUser) {
+        socket.emit("joinRoomRequest", { roomCode, user: currentUser });
         lobbyErrorMessage.textContent = "";
-        createRoomBtn.disabled = true;
-        betAmountInput.disabled = true;
-        gameModeSelect.disabled = true;
-        timeControlSelect.disabled = true;
-        timerSelectionContainer.style.display = "none";
-      } else if (!currentUser) {
-        lobbyErrorMessage.textContent =
-          "Erro de autenticação. Tente fazer o login novamente.";
-      } else {
-        lobbyErrorMessage.textContent = "A aposta deve ser maior que zero.";
       }
-    });
-  }
-
-  if (cancelRoomBtn) {
-    cancelRoomBtn.addEventListener("click", () => {
-      const roomCode = roomCodeDisplay.textContent;
+    }
+    if (e.target.classList.contains("watch-game-btn")) {
+      const roomCode = e.target.dataset.roomCode;
       if (roomCode) {
-        socket.emit("cancelRoom", { roomCode });
+        socket.emit("joinAsSpectator", { roomCode });
       }
-    });
-  }
+    }
+  });
 
-  if (lobbyContainer) {
-    lobbyContainer.addEventListener("click", (e) => {
-      if (e.target.classList.contains("join-room-btn")) {
-        const roomCode = e.target.dataset.roomCode;
-        if (roomCode && currentUser) {
-          socket.emit("joinRoomRequest", { roomCode, user: currentUser });
-          if (lobbyErrorMessage) lobbyErrorMessage.textContent = "";
-        }
-      }
-      if (e.target.classList.contains("watch-game-btn")) {
-        const roomCode = e.target.dataset.roomCode;
-        if (roomCode) {
-          socket.emit("joinAsSpectator", { roomCode });
-        }
-      }
-    });
-  }
+  addBalanceBtn.addEventListener("click", () => {
+    pixOverlay.classList.remove("hidden");
+  });
 
-  if (addBalanceBtn) {
-    addBalanceBtn.addEventListener("click", () => {
-      pixOverlay.classList.remove("hidden");
-    });
-  }
+  closePixOverlayBtn.addEventListener("click", () => {
+    pixOverlay.classList.add("hidden");
+  });
 
-  if (closePixOverlayBtn) {
-    closePixOverlayBtn.addEventListener("click", () => {
-      pixOverlay.classList.add("hidden");
-    });
-  }
+  copyPixKeyBtn.addEventListener("click", () => {
+    const pixKey = document.getElementById("pix-key").textContent;
+    const tempInput = document.createElement("input");
+    document.body.appendChild(tempInput);
+    tempInput.value = pixKey;
+    tempInput.select();
+    try {
+      document.execCommand("copy");
+      copyPixKeyBtn.textContent = "Copiado!";
+      setTimeout(() => {
+        copyPixKeyBtn.textContent = "Copiar Chave";
+      }, 2000);
+    } catch (err) {
+      alert("Não foi possível copiar a chave. Por favor, copie manually.");
+    }
+    document.body.removeChild(tempInput);
+  });
 
-  if (copyPixKeyBtn) {
-    copyPixKeyBtn.addEventListener("click", () => {
-      const pixKey = document.getElementById("pix-key").textContent;
-      const tempInput = document.createElement("input");
-      document.body.appendChild(tempInput);
-      tempInput.value = pixKey;
-      tempInput.select();
-      try {
-        document.execCommand("copy");
-        copyPixKeyBtn.textContent = "Copiado!";
-        setTimeout(() => {
-          copyPixKeyBtn.textContent = "Copiar Chave";
-        }, 2000);
-      } catch (err) {
-        alert("Não foi possível copiar a chave. Por favor, copie manually.");
-      }
-      document.body.removeChild(tempInput);
-    });
-  }
-
-  if (acceptBetBtn) {
-    acceptBetBtn.addEventListener("click", () => {
-      if (tempRoomCode && currentUser) {
-        socket.emit("acceptBet", { roomCode: tempRoomCode, user: currentUser });
-        confirmBetOverlay.classList.add("hidden");
-      }
-    });
-  }
-
-  if (declineBetBtn) {
-    declineBetBtn.addEventListener("click", () => {
+  acceptBetBtn.addEventListener("click", () => {
+    if (tempRoomCode && currentUser) {
+      socket.emit("acceptBet", { roomCode: tempRoomCode, user: currentUser });
       confirmBetOverlay.classList.add("hidden");
-      tempRoomCode = null;
-    });
-  }
+    }
+  });
 
-  if (resignBtn) {
-    resignBtn.addEventListener("click", () => {
-      if (
-        currentRoom &&
-        !isSpectator &&
-        confirm("Tem a certeza que deseja desistir da partida?")
-      ) {
-        socket.emit("playerResign");
+  declineBetBtn.addEventListener("click", () => {
+    confirmBetOverlay.classList.add("hidden");
+    tempRoomCode = null;
+  });
+
+  resignBtn.addEventListener("click", () => {
+    if (
+      currentRoom &&
+      !isSpectator &&
+      confirm("Tem a certeza que deseja desistir da partida?")
+    ) {
+      socket.emit("playerResign");
+    }
+  });
+
+  drawBtn.addEventListener("click", () => {
+    if (currentRoom && !isSpectator) {
+      drawBtn.disabled = true;
+      socket.emit("requestDraw", { roomCode: currentRoom });
+    }
+  });
+
+  spectatorLeaveBtn.addEventListener("click", () => {
+    socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
+    returnToLobby();
+  });
+
+  acceptDrawBtn.addEventListener("click", () => {
+    if (currentRoom) {
+      socket.emit("acceptDraw", { roomCode: currentRoom });
+      drawRequestOverlay.classList.add("hidden");
+    }
+  });
+
+  declineDrawBtn.addEventListener("click", () => {
+    if (currentRoom) {
+      socket.emit("declineDraw", { roomCode: currentRoom });
+      drawRequestOverlay.classList.add("hidden");
+    }
+  });
+
+  showRegisterLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    loginForm.style.display = "none";
+    registerForm.style.display = "block";
+    authMessage.textContent = "";
+  });
+
+  showLoginLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    registerForm.style.display = "none";
+    loginForm.style.display = "block";
+    authMessage.textContent = "";
+  });
+
+  registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("register-email").value;
+    const password = document.getElementById("register-password").value;
+    const referralCode = document.getElementById("referral-code-input").value;
+
+    try {
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, referralCode }),
+      });
+      const data = await response.json();
+      authMessage.textContent = data.message;
+      if (response.ok) {
+        authMessage.style.color = "green";
+        setTimeout(() => {
+          showLoginLink.click();
+        }, 2000);
+      } else {
+        authMessage.style.color = "red";
       }
-    });
-  }
+    } catch (error) {
+      authMessage.textContent = "Erro ao conectar ao servidor.";
+      authMessage.style.color = "red";
+    }
+  });
 
-  if (drawBtn) {
-    drawBtn.addEventListener("click", () => {
-      if (currentRoom && !isSpectator) {
-        drawBtn.disabled = true;
-        socket.emit("requestDraw", { roomCode: currentRoom });
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("login-email").value;
+    const password = document.getElementById("login-password").value;
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        currentUser = data.user;
+        localStorage.setItem("checkersUserEmail", currentUser.email);
+        if (mainContainer) mainContainer.classList.add("hidden");
+        lobbyContainer.classList.remove("hidden");
+        lobbyWelcomeMessage.textContent = `Bem-vindo, ${
+          currentUser.email
+        }! Saldo: R$ ${currentUser.saldo.toFixed(2)}`;
+        socket.connect();
+      } else {
+        authMessage.textContent = data.message;
+        authMessage.style.color = "red";
       }
-    });
-  }
+    } catch (error) {
+      authMessage.textContent = "Erro ao conectar ao servidor.";
+      authMessage.style.color = "red";
+    }
+  });
 
-  if (spectatorLeaveBtn) {
-    spectatorLeaveBtn.addEventListener("click", () => {
-      socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
-      returnToLobby();
-    });
-  }
-
-  if (acceptDrawBtn) {
-    acceptDrawBtn.addEventListener("click", () => {
-      if (currentRoom) {
-        socket.emit("acceptDraw", { roomCode: currentRoom });
-        drawRequestOverlay.classList.add("hidden");
-      }
-    });
-  }
-
-  if (declineDrawBtn) {
-    declineDrawBtn.addEventListener("click", () => {
-      if (currentRoom) {
-        socket.emit("declineDraw", { roomCode: currentRoom });
-        drawRequestOverlay.classList.add("hidden");
-      }
-    });
-  }
-
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      localStorage.removeItem("checkersUserEmail");
-      localStorage.removeItem("checkersCurrentRoom");
-      window.location.reload();
-    });
-  }
+  logoutBtn.addEventListener("click", () => {
+    localStorage.removeItem("checkersUserEmail");
+    localStorage.removeItem("checkersCurrentRoom");
+    window.location.reload();
+  });
 
   document.body.addEventListener("click", (e) => {
     if (e.target.classList.contains("revanche-btn")) {
@@ -781,9 +723,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // --- FUNÇÕES DE TABULEIRO E JOGO ---
   function createBoard() {
-    if (!boardElement) return;
     boardElement.innerHTML = "";
     const boardSize = currentBoardSize || 8;
     let squareSizeCSS;
@@ -934,9 +874,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     boardState = gameState.boardState;
     renderPieces();
-    if (turnDisplay)
-      turnDisplay.textContent =
-        gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
+    turnDisplay.textContent =
+      gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
   }
 
   function highlightMandatoryPieces(piecesToHighlight) {
@@ -976,14 +915,14 @@ document.addEventListener("DOMContentLoaded", () => {
         user: currentUser,
       });
       if (mainContainer) mainContainer.classList.add("hidden");
-      if (lobbyContainer) lobbyContainer.classList.add("hidden");
-      if (gameContainer) gameContainer.classList.remove("hidden");
+      lobbyContainer.classList.add("hidden");
+      gameContainer.classList.remove("hidden");
     }
   });
 
   socket.on("roomCreated", (data) => {
-    if (roomCodeDisplay) roomCodeDisplay.textContent = data.roomCode;
-    if (waitingArea) waitingArea.classList.remove("hidden");
+    roomCodeDisplay.textContent = data.roomCode;
+    waitingArea.classList.remove("hidden");
   });
 
   socket.on("roomCancelled", () => {
@@ -996,12 +935,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("joinError", (data) => {
-    if (lobbyErrorMessage) lobbyErrorMessage.textContent = data.message;
+    lobbyErrorMessage.textContent = data.message;
     resetLobbyUI();
   });
 
   socket.on("confirmBet", (data) => {
-    if (confirmBetAmount) confirmBetAmount.textContent = data.bet;
+    confirmBetAmount.textContent = data.bet;
     tempRoomCode = data.roomCode;
 
     let timeMsg = "";
@@ -1011,31 +950,29 @@ document.addEventListener("DOMContentLoaded", () => {
       timeMsg = " (Tempo por Jogada)";
     }
 
-    if (confirmGameMode) {
-      if (data.gameMode === "tablita") {
-        confirmGameMode.textContent =
-          "Modo Tablita (ida e volta)" + timeMsg + ".";
-      } else if (data.gameMode === "international") {
-        confirmGameMode.textContent =
-          "Modo Internacional (10x10)" + timeMsg + ".";
-      } else {
-        confirmGameMode.textContent = "Modo Clássico (8x8)" + timeMsg + ".";
-      }
+    if (data.gameMode === "tablita") {
+      confirmGameMode.textContent =
+        "Modo Tablita (ida e volta)" + timeMsg + ".";
+    } else if (data.gameMode === "international") {
+      confirmGameMode.textContent =
+        "Modo Internacional (10x10)" + timeMsg + ".";
+    } else {
+      confirmGameMode.textContent = "Modo Clássico (8x8)" + timeMsg + ".";
     }
-    if (confirmBetOverlay) confirmBetOverlay.classList.remove("hidden");
+    confirmBetOverlay.classList.remove("hidden");
   });
 
   socket.on("spectatorJoined", (data) => {
     isSpectator = true;
     currentRoom = data.gameState.roomCode;
 
-    if (lobbyContainer) lobbyContainer.classList.add("hidden");
-    if (gameContainer) gameContainer.classList.remove("hidden");
+    lobbyContainer.classList.add("hidden");
+    gameContainer.classList.remove("hidden");
 
-    if (spectatorIndicator) spectatorIndicator.classList.remove("hidden");
-    if (resignBtn) resignBtn.classList.add("hidden");
-    if (drawBtn) drawBtn.classList.add("hidden");
-    if (spectatorLeaveBtn) spectatorLeaveBtn.classList.remove("hidden");
+    spectatorIndicator.classList.remove("hidden");
+    resignBtn.classList.add("hidden");
+    drawBtn.classList.add("hidden");
+    spectatorLeaveBtn.classList.remove("hidden");
 
     currentBoardSize = data.gameState.boardSize;
     createBoard();
@@ -1049,9 +986,9 @@ document.addEventListener("DOMContentLoaded", () => {
       let timeToShow = 0;
       if (turnColor === "Brancas") timeToShow = data.whiteTime;
       else timeToShow = data.blackTime;
-      if (timerDisplay) timerDisplay.textContent = formatTime(timeToShow);
+      timerDisplay.textContent = formatTime(timeToShow);
     } else {
-      if (timerDisplay) timerDisplay.textContent = (data.timeLeft || 0) + "s";
+      timerDisplay.textContent = (data.timeLeft || 0) + "s";
     }
   });
 
@@ -1059,10 +996,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isSpectator) return;
 
     isGameOver = false;
-    if (overlay) overlay.classList.add("hidden");
-    if (winnerScreen) winnerScreen.classList.add("hidden");
-    if (loserScreen) loserScreen.classList.add("hidden");
-    if (drawScreen) drawScreen.classList.add("hidden");
+    overlay.classList.add("hidden");
+    winnerScreen.classList.add("hidden");
+    loserScreen.classList.add("hidden");
+    drawScreen.classList.add("hidden");
     if (nextGameOverlay) nextGameOverlay.classList.add("hidden");
     if (drawRequestOverlay) drawRequestOverlay.classList.add("hidden");
 
@@ -1074,8 +1011,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (nextGameInterval) clearInterval(nextGameInterval);
 
-    if (lobbyContainer) lobbyContainer.classList.add("hidden");
-    if (gameContainer) gameContainer.classList.remove("hidden");
+    lobbyContainer.classList.add("hidden");
+    gameContainer.classList.remove("hidden");
 
     currentBoardSize = gameState.boardSize;
     createBoard();
@@ -1090,24 +1027,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (gameState.openingName) {
       statusText += `<br><span style="font-size: 0.9em; color: #f39c12;">Sorteio: ${gameState.openingName}</span>`;
     }
-    if (gameStatus) gameStatus.innerHTML = statusText;
+    gameStatus.innerHTML = statusText;
 
-    if (boardElement) {
-      boardElement.classList.remove("board-flipped");
-      if (myColor === "p") {
-        boardElement.classList.add("board-flipped");
-      }
+    boardElement.classList.remove("board-flipped");
+    if (myColor === "p") {
+      boardElement.classList.add("board-flipped");
     }
     updateGame(gameState);
     highlightMandatoryPieces(gameState.mandatoryPieces);
   });
 
   socket.on("timerUpdate", (data) => {
-    if (!timerDisplay) return;
     if (data.timeLeft !== undefined) {
       timerDisplay.textContent = data.timeLeft + "s";
     } else if (data.whiteTime !== undefined && data.blackTime !== undefined) {
-      const turnColor = turnDisplay ? turnDisplay.textContent : "";
+      const turnColor = turnDisplay.textContent;
       let timeToShow = 0;
       if (turnColor === "Brancas") timeToShow = data.whiteTime;
       else timeToShow = data.blackTime;
@@ -1116,7 +1050,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("timerPaused", (data) => {
-    if (!timerDisplay) return;
     if (data.timeLeft !== undefined) {
       timerDisplay.textContent = `${data.timeLeft}s (Pausado)`;
     } else {
@@ -1135,35 +1068,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("opponentConnectionLost", (data) => {
     if (isSpectator) return;
-    if (connectionLostMessage)
-      connectionLostMessage.textContent = `Conexão do oponente lenta, aguarde ${data.waitTime} segundos para a conexão restabelecer...`;
-    if (connectionLostOverlay) connectionLostOverlay.classList.remove("hidden");
+    connectionLostMessage.textContent = `Conexão do oponente lenta, aguarde ${data.waitTime} segundos para a conexão restabelecer...`;
+    connectionLostOverlay.classList.remove("hidden");
   });
 
   socket.on("gameResumed", (data) => {
     if (isSpectator) return;
 
-    if (connectionLostOverlay) connectionLostOverlay.classList.add("hidden");
+    connectionLostOverlay.classList.add("hidden");
 
     currentBoardSize = data.gameState.boardSize;
     createBoard();
 
     updateGame(data.gameState);
 
-    if (timerDisplay) {
-      if (data.timeLeft !== undefined) {
-        timerDisplay.textContent = data.timeLeft + "s";
-      } else if (data.whiteTime !== undefined) {
-        timerDisplay.textContent = "A sincronizar...";
-      }
+    if (data.timeLeft !== undefined) {
+      timerDisplay.textContent = data.timeLeft + "s";
+    } else if (data.whiteTime !== undefined) {
+      timerDisplay.textContent = "A sincronizar...";
     }
 
     myColor = socket.id === data.gameState.players.white ? "b" : "p";
-    if (boardElement) {
-      boardElement.classList.remove("board-flipped");
-      if (myColor === "p") {
-        boardElement.classList.add("board-flipped");
-      }
+    boardElement.classList.remove("board-flipped");
+    if (myColor === "p") {
+      boardElement.classList.add("board-flipped");
     }
   });
 
@@ -1175,22 +1103,21 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("gameOver", (data) => {
     if (isGameOver) return;
     isGameOver = true;
-    if (connectionLostOverlay) connectionLostOverlay.classList.add("hidden");
+    connectionLostOverlay.classList.add("hidden");
     if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    if (drawBtn) drawBtn.disabled = true;
+    drawBtn.disabled = true;
     resetEndGameUI();
-    if (overlay) overlay.classList.remove("hidden");
+    overlay.classList.remove("hidden");
 
     if (isSpectator) {
-      if (spectatorEndScreen) spectatorEndScreen.classList.remove("hidden");
+      spectatorEndScreen.classList.remove("hidden");
       const winnerText = data.winner === "b" ? "Brancas" : "Pretas";
-      if (spectatorEndMessage)
-        spectatorEndMessage.textContent = `O jogador das ${winnerText} venceu! Motivo: ${data.reason}`;
+      spectatorEndMessage.textContent = `O jogador das ${winnerText} venceu! Motivo: ${data.reason}`;
     } else {
       if (data.winner === myColor) {
-        if (winnerScreen) winnerScreen.classList.remove("hidden");
+        winnerScreen.classList.remove("hidden");
       } else {
-        if (loserScreen) loserScreen.classList.remove("hidden");
+        loserScreen.classList.remove("hidden");
       }
     }
   });
@@ -1198,19 +1125,18 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("gameDraw", (data) => {
     if (isGameOver) return;
     isGameOver = true;
-    if (connectionLostOverlay) connectionLostOverlay.classList.add("hidden");
+    connectionLostOverlay.classList.add("hidden");
     if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    if (drawBtn) drawBtn.disabled = true;
-    if (drawReason) drawReason.textContent = data.reason;
+    drawBtn.disabled = true;
+    drawReason.textContent = data.reason;
     resetEndGameUI();
-    if (overlay) overlay.classList.remove("hidden");
+    overlay.classList.remove("hidden");
 
     if (isSpectator) {
-      if (spectatorEndScreen) spectatorEndScreen.classList.remove("hidden");
-      if (spectatorEndMessage)
-        spectatorEndMessage.textContent = `O jogo terminou em empate. Motivo: ${data.reason}`;
+      spectatorEndScreen.classList.remove("hidden");
+      spectatorEndMessage.textContent = `O jogo terminou em empate. Motivo: ${data.reason}`;
     } else {
-      if (drawScreen) drawScreen.classList.remove("hidden");
+      drawScreen.classList.remove("hidden");
     }
   });
 
@@ -1235,15 +1161,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (titleElement && data.title) {
       titleElement.textContent = data.title;
     }
-    if (matchScoreDisplay)
-      matchScoreDisplay.textContent = `Placar: ${data.score[0]} - ${data.score[1]}`;
-    if (nextGameOverlay) nextGameOverlay.classList.remove("hidden");
+    matchScoreDisplay.textContent = `Placar: ${data.score[0]} - ${data.score[1]}`;
+    nextGameOverlay.classList.remove("hidden");
     let countdown = 10;
-    if (nextGameTimer) nextGameTimer.textContent = countdown;
+    nextGameTimer.textContent = countdown;
     if (nextGameInterval) clearInterval(nextGameInterval);
     nextGameInterval = setInterval(() => {
       countdown--;
-      if (nextGameTimer) nextGameTimer.textContent = countdown;
+      nextGameTimer.textContent = countdown;
       if (countdown <= 0) {
         clearInterval(nextGameInterval);
       }
@@ -1257,54 +1182,46 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("drawRequestSent", () => {
-    if (drawBtn) {
-      drawBtn.disabled = true;
-      drawBtn.textContent = "Pedido Enviado";
-    }
+    drawBtn.disabled = true;
+    drawBtn.textContent = "Pedido Enviado";
   });
 
   socket.on("drawRequested", () => {
     if (isSpectator) return;
-    if (drawRequestOverlay) drawRequestOverlay.classList.remove("hidden");
+    drawRequestOverlay.classList.remove("hidden");
   });
 
   socket.on("drawDeclined", () => {
-    const originalStatusHTML = gameStatus ? gameStatus.innerHTML : "";
-    if (gameStatus)
-      gameStatus.innerHTML = "O oponente recusou o pedido de empate.";
+    const originalStatusHTML = gameStatus.innerHTML;
+    gameStatus.innerHTML = "O oponente recusou o pedido de empate.";
     setTimeout(() => {
-      if (
-        gameStatus &&
-        gameStatus.innerHTML === "O oponente recusou o pedido de empate."
-      ) {
+      if (gameStatus.innerHTML === "O oponente recusou o pedido de empate.") {
         gameStatus.innerHTML = originalStatusHTML;
       }
     }, 3000);
 
-    if (drawBtn) {
-      drawBtn.disabled = true;
-      let countdown = 30;
-      drawBtn.textContent = `Empate (${countdown}s)`;
+    drawBtn.disabled = true;
+    let countdown = 30;
+    drawBtn.textContent = `Empate (${countdown}s)`;
 
-      if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-      drawCooldownInterval = setInterval(() => {
-        countdown--;
-        if (countdown > 0) {
-          drawBtn.textContent = `Empate (${countdown}s)`;
-        } else {
-          clearInterval(drawCooldownInterval);
-          drawCooldownInterval = null;
-          if (!isGameOver) {
-            drawBtn.disabled = false;
-            drawBtn.textContent = "Empate";
-          }
+    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
+    drawCooldownInterval = setInterval(() => {
+      countdown--;
+      if (countdown > 0) {
+        drawBtn.textContent = `Empate (${countdown}s)`;
+      } else {
+        clearInterval(drawCooldownInterval);
+        drawCooldownInterval = null;
+        if (!isGameOver) {
+          drawBtn.disabled = false;
+          drawBtn.textContent = "Empate";
         }
-      }, 1000);
-    }
+      }
+    }, 1000);
   });
 
   socket.on("drawOfferCancelled", () => {
-    if (drawRequestOverlay) drawRequestOverlay.classList.add("hidden");
+    drawRequestOverlay.classList.add("hidden");
   });
 
   socket.on("revancheDeclined", (data) => {
@@ -1318,7 +1235,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .forEach((btn) => (btn.disabled = true));
 
     setTimeout(() => {
-      if (overlay && !overlay.classList.contains("hidden")) {
+      if (!overlay.classList.contains("hidden")) {
         returnToLobby();
       }
     }, 3000);
