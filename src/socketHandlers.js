@@ -1,4 +1,4 @@
-// src/socketHandlers.js (CORREÇÃO DE REPETIÇÃO DE SORTEIO + 20 ABERTURAS)
+// src/socketHandlers.js (COM CAPTURA AUTOMÁTICA EM CADEIA)
 
 const User = require("../models/User");
 const {
@@ -12,6 +12,7 @@ const {
   hasValidMoves,
   getAllPossibleCapturesForPiece,
   findBestCaptureMoves,
+  getUniqueCaptureMove, // Importado
 } = require("./gameLogic");
 const { startTimer, resetTimer, processEndOfGame } = require("./gameManager");
 
@@ -79,11 +80,8 @@ function initializeSocket(io) {
       boardState = JSON.parse(JSON.stringify(standardOpening10x10));
       boardSize = 10;
     } else if (room.gameMode === "tablita") {
-      // --- LÓGICA DE SORTEIO ANTI-REPETIÇÃO ---
       let randomIndex;
       let attempts = 0;
-
-      // Tenta sortear um número diferente do anterior até 5 vezes
       do {
         randomIndex = Math.floor(Math.random() * idfTablitaOpenings.length);
         attempts++;
@@ -93,7 +91,6 @@ function initializeSocket(io) {
         attempts < 5
       );
 
-      // Salva o índice atual para a próxima comparação
       room.lastOpeningIndex = randomIndex;
 
       const selectedOpening = idfTablitaOpenings[randomIndex];
@@ -164,10 +161,202 @@ function initializeSocket(io) {
     io.to(room.roomCode).emit("gameStart", gameState);
   }
 
-  // ... (RESTO DO CÓDIGO PERMANECE IGUAL) ...
+  // --- LÓGICA DE MOVIMENTO PRINCIPAL ---
+  // Extraída para uma função para ser reutilizada pelo Auto-Move
+  async function executeMove(roomCode, from, to, socketId) {
+    const gameRoom = gameRooms[roomCode];
+    if (!gameRoom || !gameRoom.game) return;
+    const game = gameRoom.game;
+
+    // Identifica cor do jogador que está "movendo" (mesmo que automático)
+    // Se for automação, socketId pode ser simulado ou usamos o currentPlayer
+    const playerColor = game.currentPlayer;
+
+    // Validação de segurança se for movimento manual
+    if (socketId) {
+      const socketPlayerColor = game.players.white === socketId ? "b" : "p";
+      if (socketPlayerColor !== playerColor) return;
+    }
+
+    if (game.isFirstMove) {
+      game.isFirstMove = false;
+      startTimer(roomCode);
+    }
+
+    const isValid = isMoveValid(from, to, playerColor, game);
+
+    if (isValid.valid) {
+      // 1. Processa Movimento e Captura
+      const pieceBeforeMove = game.boardState[from.row][from.col];
+      const isPieceDama = pieceBeforeMove.toUpperCase() === pieceBeforeMove;
+
+      if (!isPieceDama || isValid.isCapture) {
+        game.damaMovesWithoutCaptureOrPawnMove = 0;
+        game.movesSinceCapture = 0;
+      } else if (isPieceDama && !isValid.isCapture) {
+        game.damaMovesWithoutCaptureOrPawnMove++;
+        game.movesSinceCapture++;
+      }
+
+      game.boardState[to.row][to.col] = game.boardState[from.row][from.col];
+      game.boardState[from.row][from.col] = 0;
+
+      let canCaptureAgain = false;
+      let wasPromotion = false;
+
+      if (isValid.isCapture) {
+        game.boardState[isValid.capturedPos.row][isValid.capturedPos.col] = 0;
+        const nextCaptures = getAllPossibleCapturesForPiece(
+          to.row,
+          to.col,
+          game
+        );
+        canCaptureAgain = nextCaptures.length > 0;
+      }
+
+      // 2. Promoção
+      if (!canCaptureAgain) {
+        const currentPiece = game.boardState[to.row][to.col];
+        if (currentPiece === "b" && to.row === 0) {
+          game.boardState[to.row][to.col] = "B";
+          wasPromotion = true;
+        } else if (currentPiece === "p" && to.row === game.boardSize - 1) {
+          game.boardState[to.row][to.col] = "P";
+          wasPromotion = true;
+        }
+      }
+
+      if (wasPromotion) {
+        canCaptureAgain = false;
+        game.movesSinceCapture = 0;
+        game.damaMovesWithoutCaptureOrPawnMove = 0;
+      }
+
+      // 3. Verifica Fim de Jogo (Empates e Vitórias)
+      let whitePieces = 0;
+      let whiteDames = 0;
+      let blackPieces = 0;
+      let blackDames = 0;
+
+      for (let r = 0; r < game.boardSize; r++) {
+        for (let c = 0; c < game.boardSize; c++) {
+          const p = game.boardState[r][c];
+          if (p !== 0) {
+            if (p.toString().toLowerCase() === "b") {
+              whitePieces++;
+              if (p === "B") whiteDames++;
+            } else {
+              blackPieces++;
+              if (p === "P") blackDames++;
+            }
+          }
+        }
+      }
+
+      const isWhite3vs1 =
+        whiteDames >= 3 &&
+        whitePieces === whiteDames &&
+        blackPieces === 1 &&
+        blackDames === 1;
+      const isBlack3vs1 =
+        blackDames >= 3 &&
+        blackPieces === blackDames &&
+        whitePieces === 1 &&
+        whiteDames === 1;
+
+      if (gameRoom.gameMode !== "international") {
+        if (game.damaMovesWithoutCaptureOrPawnMove >= 40)
+          return processEndOfGame(
+            null,
+            null,
+            gameRoom,
+            "Empate por 20 lances de Damas."
+          );
+
+        if (game.movesSinceCapture >= 40) {
+          if (isWhite3vs1 || isBlack3vs1) {
+            return processEndOfGame(
+              null,
+              null,
+              gameRoom,
+              "Empate: 3 Damas contra 1 (20 lances)."
+            );
+          }
+          return processEndOfGame(
+            null,
+            null,
+            gameRoom,
+            "Empate por 20 jogadas sem captura."
+          );
+        }
+      }
+
+      const winner = checkWinCondition(game.boardState, game.boardSize);
+      if (winner) {
+        const loser = winner === "b" ? "p" : "b";
+        return processEndOfGame(winner, loser, gameRoom, "Fim de jogo!");
+      }
+
+      // 4. Prepara Próximo Turno ou Captura em Cadeia
+      if (!canCaptureAgain) {
+        game.mustCaptureWith = null;
+        game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
+        if (!hasValidMoves(game.currentPlayer, game)) {
+          const winner = game.currentPlayer === "b" ? "p" : "b";
+          return processEndOfGame(
+            winner,
+            game.currentPlayer,
+            gameRoom,
+            "Oponente bloqueado!"
+          );
+        }
+        // Reseta timer apenas na troca de turno
+        resetTimer(roomCode);
+      } else {
+        game.mustCaptureWith = { row: to.row, col: to.col };
+      }
+
+      const bestCaptures = findBestCaptureMoves(game.currentPlayer, game);
+      const mandatoryPieces = canCaptureAgain
+        ? [{ row: to.row, col: to.col }]
+        : bestCaptures.map((seq) => seq[0]);
+
+      io.to(roomCode).emit("gameStateUpdate", { ...game, mandatoryPieces });
+
+      // ### AUTOMAÇÃO DE CAPTURA EM CADEIA ###
+      // Se pode capturar de novo, verifica se é único e agenda
+      if (canCaptureAgain) {
+        const uniqueMove = getUniqueCaptureMove(to.row, to.col, game);
+        if (uniqueMove) {
+          // Delay de 1 segundo (1000ms)
+          setTimeout(() => {
+            // Verifica se o jogo ainda existe e é o mesmo estado
+            if (gameRooms[roomCode] && !gameRooms[roomCode].isGameConcluded) {
+              executeMove(
+                roomCode,
+                { row: to.row, col: to.col },
+                uniqueMove.to,
+                null
+              );
+            }
+          }, 1000);
+        }
+      }
+    } else {
+      // Se veio de socket, avisa erro
+      if (socketId) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket) {
+          socket.emit("invalidMove", {
+            message: isValid.reason || "Movimento inválido.",
+          });
+        }
+      }
+    }
+  }
 
   io.on("connection", (socket) => {
-    // ... código de conexão existente ...
+    // ... (restante do código de conexão igual) ...
     console.log("Um novo usuário se conectou!", socket.id);
 
     socket.on("enterLobby", () => {
@@ -267,7 +456,7 @@ function initializeSocket(io) {
         drawOfferBy: null,
         disconnectTimeout: null,
         isGameConcluded: false,
-        lastOpeningIndex: -1, // Inicializa o índice do sorteio
+        lastOpeningIndex: -1,
       };
 
       socket.emit("roomCreated", { roomCode });
@@ -348,156 +537,9 @@ function initializeSocket(io) {
       }
     });
 
+    // SUBSTITUINDO O LISTENER ANTIGO PELO NOVO QUE USA A FUNÇÃO CENTRALIZADA
     socket.on("playerMove", async (moveData) => {
-      const { from, to, room } = moveData;
-      const gameRoom = gameRooms[room];
-      if (!gameRoom || !gameRoom.game) return;
-      const game = gameRoom.game;
-      const playerColor = game.players.white === socket.id ? "b" : "p";
-      if (playerColor !== game.currentPlayer) return;
-      if (game.isFirstMove) {
-        game.isFirstMove = false;
-        startTimer(room);
-      }
-
-      const isValid = isMoveValid(from, to, playerColor, game);
-
-      if (isValid.valid) {
-        const pieceBeforeMove = game.boardState[from.row][from.col];
-        const isPieceDama = pieceBeforeMove.toUpperCase() === pieceBeforeMove;
-
-        if (!isPieceDama || isValid.isCapture) {
-          game.damaMovesWithoutCaptureOrPawnMove = 0;
-          game.movesSinceCapture = 0;
-        } else if (isPieceDama && !isValid.isCapture) {
-          game.damaMovesWithoutCaptureOrPawnMove++;
-          game.movesSinceCapture++;
-        }
-
-        game.boardState[to.row][to.col] = game.boardState[from.row][from.col];
-        game.boardState[from.row][from.col] = 0;
-        let canCaptureAgain = false;
-        let wasPromotion = false;
-        if (isValid.isCapture) {
-          game.boardState[isValid.capturedPos.row][isValid.capturedPos.col] = 0;
-          const nextCaptures = getAllPossibleCapturesForPiece(
-            to.row,
-            to.col,
-            game
-          );
-          canCaptureAgain = nextCaptures.length > 0;
-        }
-
-        if (!canCaptureAgain) {
-          const currentPiece = game.boardState[to.row][to.col];
-          if (currentPiece === "b" && to.row === 0) {
-            game.boardState[to.row][to.col] = "B";
-            wasPromotion = true;
-          } else if (currentPiece === "p" && to.row === game.boardSize - 1) {
-            game.boardState[to.row][to.col] = "P";
-            wasPromotion = true;
-          }
-        }
-
-        if (wasPromotion) {
-          canCaptureAgain = false;
-          game.movesSinceCapture = 0;
-          game.damaMovesWithoutCaptureOrPawnMove = 0;
-        }
-
-        let whitePieces = 0;
-        let whiteDames = 0;
-        let blackPieces = 0;
-        let blackDames = 0;
-
-        for (let r = 0; r < game.boardSize; r++) {
-          for (let c = 0; c < game.boardSize; c++) {
-            const p = game.boardState[r][c];
-            if (p !== 0) {
-              if (p.toString().toLowerCase() === "b") {
-                whitePieces++;
-                if (p === "B") whiteDames++;
-              } else {
-                blackPieces++;
-                if (p === "P") blackDames++;
-              }
-            }
-          }
-        }
-
-        const isWhite3vs1 =
-          whiteDames >= 3 &&
-          whitePieces === whiteDames &&
-          blackPieces === 1 &&
-          blackDames === 1;
-        const isBlack3vs1 =
-          blackDames >= 3 &&
-          blackPieces === blackDames &&
-          whitePieces === 1 &&
-          whiteDames === 1;
-
-        if (gameRoom.gameMode !== "international") {
-          if (game.damaMovesWithoutCaptureOrPawnMove >= 40)
-            return processEndOfGame(
-              null,
-              null,
-              gameRoom,
-              "Empate por 20 lances de Damas."
-            );
-
-          if (game.movesSinceCapture >= 40) {
-            if (isWhite3vs1 || isBlack3vs1) {
-              return processEndOfGame(
-                null,
-                null,
-                gameRoom,
-                "Empate: 3 Damas contra 1 (20 lances)."
-              );
-            }
-            return processEndOfGame(
-              null,
-              null,
-              gameRoom,
-              "Empate por 20 jogadas sem captura."
-            );
-          }
-        }
-
-        const winner = checkWinCondition(game.boardState, game.boardSize);
-        if (winner) {
-          const loser = winner === "b" ? "p" : "b";
-          return processEndOfGame(winner, loser, gameRoom, "Fim de jogo!");
-        }
-
-        if (!canCaptureAgain) {
-          game.mustCaptureWith = null;
-          game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
-          if (!hasValidMoves(game.currentPlayer, game)) {
-            const winner = game.currentPlayer === "b" ? "p" : "b";
-            return processEndOfGame(
-              winner,
-              game.currentPlayer,
-              gameRoom,
-              "Oponente bloqueado!"
-            );
-          }
-        } else {
-          game.mustCaptureWith = { row: to.row, col: to.col };
-        }
-
-        resetTimer(room);
-
-        const bestCaptures = findBestCaptureMoves(game.currentPlayer, game);
-        const mandatoryPieces = canCaptureAgain
-          ? [{ row: to.row, col: to.col }]
-          : bestCaptures.map((seq) => seq[0]);
-
-        io.to(room).emit("gameStateUpdate", { ...game, mandatoryPieces });
-      } else {
-        socket.emit("invalidMove", {
-          message: isValid.reason || "Movimento inválido.",
-        });
-      }
+      await executeMove(moveData.room, moveData.from, moveData.to, socket.id);
     });
 
     socket.on("getValidMoves", (data) => {
