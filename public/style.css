@@ -1191,3 +1191,26 @@ body {
   border-color: #2ecc71 !important; /* Borda Verde */
   transition: border-color 0.3s ease;
 }
+
+/* --- NOVO: ESTILOS DO RODAPÉ (FOOTER) - AGORA INTERNO --- */
+.app-footer {
+  margin-top: 20px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+}
+
+.app-footer p {
+  margin: 2px 0;
+}
+
+.app-footer a {
+  color: #2ecc71;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.app-footer a:hover {
+  text-decoration: underline;
+  color: #27ae60;
+}
