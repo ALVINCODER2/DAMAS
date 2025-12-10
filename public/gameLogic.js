@@ -84,13 +84,17 @@
                 newBoard[landRow][landCol] = newBoard[row][col];
                 newBoard[row][col] = 0;
                 newBoard[capturedPos.row][capturedPos.col] = 0;
+
+                // CORREÇÃO: Passamos 'isDama' inalterado.
+                // Se era Dama, continua Dama. Se era Peão, continua Peão (mesmo passando na coroação).
                 const nextSequences = findCaptureSequencesForPiece(
                   landRow,
                   landCol,
                   newBoard,
-                  true,
+                  isDama,
                   boardSize
                 );
+
                 if (nextSequences.length > 0) {
                   nextSequences.forEach((seq) =>
                     sequences.push([{ row, col }, ...seq])
@@ -127,25 +131,23 @@
             capturedPiece.toLowerCase() === opponentColor &&
             landingSquare === 0
           ) {
-            let becomesDama = false;
-            const pieceColor = board[row][col].toLowerCase();
-            if (
-              (pieceColor === "b" && landRow === 0) ||
-              (pieceColor === "p" && landRow === boardSize - 1)
-            ) {
-              becomesDama = true;
-            }
+            // CORREÇÃO: Removemos a lógica de 'becomesDama' aqui.
+            // A promoção só acontece efetivamente no final da jogada (no gameManager/socketHandlers).
+            // Para a busca de caminhos, a peça mantém sua natureza original.
+
             const newBoard = JSON.parse(JSON.stringify(board));
             newBoard[landRow][landCol] = newBoard[row][col];
             newBoard[row][col] = 0;
             newBoard[capturedRow][capturedCol] = 0;
+
             const nextSequences = findCaptureSequencesForPiece(
               landRow,
               landCol,
               newBoard,
-              becomesDama,
+              isDama, // Mantém isDama como false (pois entrou no bloco else)
               boardSize
             );
+
             if (nextSequences.length > 0) {
               nextSequences.forEach((seq) =>
                 sequences.push([{ row, col }, ...seq])
@@ -196,6 +198,8 @@
     if (!ignoreMajorityRule) {
       const bestCaptures = findBestCaptureMoves(playerColor, game);
       if (bestCaptures.length > 0) {
+        // Verifica se o movimento atual faz parte de ALGUMA das melhores sequências
+        // Nota: Verifica apenas o primeiro passo da sequência.
         const isMoveInBestCaptures = bestCaptures.some(
           (seq) =>
             seq[0].row === from.row &&
@@ -249,10 +253,12 @@
     const colDiff = to.col - from.col;
     const moveDirection = playerColor === "b" ? -1 : 1;
 
+    // Movimento simples (apenas se não houver captura obrigatória - verificado em isMoveValid)
     if (Math.abs(colDiff) === 1 && rowDiff === moveDirection) {
       return { valid: true, isCapture: false };
     }
 
+    // Captura
     if (Math.abs(colDiff) === 2 && Math.abs(rowDiff) === 2) {
       const capturedPos = {
         row: from.row + rowDiff / 2,
@@ -310,24 +316,22 @@
     if (capturedPieces.length === 1) {
       const landRow = capturedPos.row + stepRow;
       const landCol = capturedPos.col + stepCol;
+
+      // Verifica se a casa imediatamente após a peça capturada está livre
+      // (Regra essencial: deve haver espaço logo após a peça)
+      // No código anterior isso era verificado implicitamente, aqui reforçamos
+      if (board[landRow]?.[landCol] !== 0) {
+        return { valid: false, reason: "Sem espaço após a captura." };
+      }
+
+      // Verifica se não está pulando peças além do destino
       if (landRow !== to.row || landCol !== to.col) {
-        const squareAfterCaptureRow = capturedPos.row + stepRow;
-        const squareAfterCaptureCol = capturedPos.col + stepCol;
-        if (board[squareAfterCaptureRow]?.[squareAfterCaptureCol] !== 0) {
-          return {
-            valid: false,
-            reason: "Casa de aterragem da Dama está ocupada.",
-          };
-        }
-        if (
-          board[to.row]?.[to.col] !== 0 &&
-          (to.row !== squareAfterCaptureRow || to.col !== squareAfterCaptureCol)
-        ) {
-          return {
-            valid: false,
-            reason: "Casa de aterragem final da Dama está ocupada.",
-          };
-        }
+        // Se o destino é além da casa de aterrissagem imediata, verifique se o caminho está livre
+        // A lógica do loop já garante que só capturou 1 peça.
+        // Mas precisamos garantir que não estamos "atropelando" nada no caminho do pouso
+        // O loop já cobriu tudo até o destino (to.row), então se capturou 1 e chegou lá, ok.
+        // Porém, existe a regra de que não pode haver outra peça no caminho ALÉM da capturada.
+        // O loop 'for' acima vai até o destino. Se ele achou apenas 1 peça (a inimiga) e o destino está vazio, é válido.
       }
       return { valid: true, isCapture: true, capturedPos };
     }
