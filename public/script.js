@@ -972,7 +972,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function updateGame(gameState) {
+  // ### ATUALIZADO: Aceita parâmetro suppressSound para evitar som no Sync ###
+  function updateGame(gameState, suppressSound = false) {
     // Atualiza Watchdog sempre que recebe estado
     lastPacketTime = Date.now();
 
@@ -981,7 +982,8 @@ document.addEventListener("DOMContentLoaded", () => {
       .flat()
       .filter((p) => p !== 0).length;
 
-    if (newPieceCount > 0 && oldPieceCount > 0) {
+    // Se suppressSound for true (ex: durante sync), não toca nada
+    if (!suppressSound && newPieceCount > 0 && oldPieceCount > 0) {
       if (newPieceCount < oldPieceCount) {
         captureSound.currentTime = 0;
         captureSound.play();
@@ -1105,7 +1107,8 @@ document.addEventListener("DOMContentLoaded", () => {
     currentBoardSize = data.gameState.boardSize;
     createBoard();
 
-    updateGame(data.gameState);
+    // Passamos true aqui para não tocar som ao entrar como espectador
+    updateGame(data.gameState, true);
     highlightMandatoryPieces(data.gameState.mandatoryPieces);
     updatePlayerNames(data.gameState.users);
 
@@ -1229,7 +1232,8 @@ document.addEventListener("DOMContentLoaded", () => {
     currentBoardSize = data.gameState.boardSize;
     createBoard();
 
-    updateGame(data.gameState);
+    // ### CORREÇÃO AQUI: Passa true para suprimir som no sync ###
+    updateGame(data.gameState, true);
     updatePlayerNames(data.gameState.users);
 
     if (data.timeLeft !== undefined) {
