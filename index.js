@@ -1,4 +1,4 @@
-// index.js (COM ROTA DE HISTÓRICO E CORS HABILITADO)
+// index.js (COM NOTIFICAÇÃO EM TEMPO REAL)
 require("dotenv").config();
 
 const express = require("express");
@@ -8,7 +8,10 @@ const mongoose = require("mongoose");
 const User = require("./models/User");
 const Withdrawal = require("./models/Withdrawal");
 const MatchHistory = require("./models/MatchHistory");
+const Transaction = require("./models/Transaction");
 const bcrypt = require("bcryptjs");
+
+const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 
 const { initializeSocket, gameRooms } = require("./src/socketHandlers");
 const { initializeManager } = require("./src/gameManager");
@@ -16,10 +19,14 @@ const { initializeManager } = require("./src/gameManager");
 const app = express();
 const server = http.createServer(app);
 
-// ### CORREÇÃO 1: Habilitar CORS para permitir conexão de outros dispositivos ###
+// Configuração do Mercado Pago
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
+});
+
 const io = socketIo(server, {
   cors: {
-    origin: "*", // Permite qualquer origem (celular, pc, etc)
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
@@ -27,12 +34,9 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
-if (!MONGO_URI)
-  console.warn("Atenção: A variável de ambiente MONGO_URI não está definida.");
-if (!process.env.ADMIN_SECRET_KEY)
-  console.warn(
-    "Atenção: A variável de ambiente ADMIN_SECRET_KEY não está definida."
-  );
+if (!MONGO_URI) console.warn("Atenção: MONGO_URI não definida.");
+if (!process.env.MERCADOPAGO_ACCESS_TOKEN)
+  console.warn("Atenção: MERCADOPAGO_ACCESS_TOKEN não definida.");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -77,30 +81,17 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email e senha são obrigatórios." });
-    }
+    if (!email || !password)
+      return res.status(400).json({ message: "Email e senha obrigatórios." });
 
     const emailLower = email.toLowerCase();
-    console.log(`[Login] Tentativa para: ${emailLower}`);
-
     const user = await User.findOne({ email: emailLower });
 
-    if (!user) {
-      console.log(`[Login] Falha: Usuário não encontrado (${emailLower})`);
-      return res.status(400).json({ message: "Email ou senha inválidos." });
-    }
+    if (!user) return res.status(400).json({ message: "Inválido." });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      console.log(`[Login] Falha: Senha incorreta para (${emailLower})`);
-      return res.status(400).json({ message: "Email ou senha inválidos." });
-    }
+    if (!isMatch) return res.status(400).json({ message: "Inválido." });
 
-    console.log(`[Login] Sucesso: ${emailLower}`);
     res.status(200).json({
       message: "Login bem-sucedido!",
       user: {
@@ -110,25 +101,18 @@ app.post("/api/login", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[Login] Erro no servidor:", error);
-    res.status(500).json({ message: "Ocorreu um erro no servidor." });
+    res.status(500).json({ message: "Erro no servidor." });
   }
 });
 
 app.post("/api/user/re-authenticate", async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email)
-      return res.status(400).json({ message: "Email não fornecido." });
-
-    const emailLower = email.toLowerCase();
-    const user = await User.findOne({ email: emailLower });
-
-    if (!user)
-      return res.status(404).json({ message: "Utilizador não encontrado." });
-
+    if (!email) return res.status(400).json({ message: "Email obrigatório." });
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) return res.status(404).json({ message: "Não encontrado." });
     res.status(200).json({
-      message: "Re-autenticado com sucesso!",
+      message: "Ok",
       user: {
         email: user.email,
         saldo: user.saldo,
@@ -136,47 +120,36 @@ app.post("/api/user/re-authenticate", async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Ocorreu um erro no servidor." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
 app.post("/api/user/referrals", async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email)
-      return res.status(400).json({ message: "Email não fornecido." });
-
-    const emailLower = email.toLowerCase();
+    if (!email) return res.status(400).json({ message: "Email obrigatório." });
     const referrals = await User.find(
-      { referredBy: emailLower },
+      { referredBy: email.toLowerCase() },
       "email hasDeposited firstDepositValue"
     );
-
     res.json(referrals);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Erro ao buscar indicações." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
-// --- ROTA DE HISTÓRICO DE PARTIDAS ---
 app.post("/api/user/history", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: "Email obrigatório." });
-
-    // Busca partidas onde o usuário foi player1 OU player2
-    const emailLower = email.toLowerCase();
     const history = await MatchHistory.find({
-      $or: [{ player1: emailLower }, { player2: emailLower }],
+      $or: [{ player1: email.toLowerCase() }, { player2: email.toLowerCase() }],
     })
-      .sort({ createdAt: -1 }) // Mais recentes primeiro
-      .limit(50); // Limita às últimas 50 partidas
-
+      .sort({ createdAt: -1 })
+      .limit(50);
     res.json(history);
   } catch (err) {
-    console.error("Erro ao buscar histórico:", err);
-    res.status(500).json({ message: "Erro ao buscar histórico." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -201,15 +174,139 @@ app.post("/api/withdraw", async (req, res) => {
       status: "pending",
     });
     await newWithdrawal.save();
-
-    res.status(201).json({
-      message: "Solicitação de saque enviada com sucesso! Aguarde a aprovação.",
-    });
+    res.status(201).json({ message: "Solicitação enviada." });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao processar solicitação." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
+// --- NOVAS ROTAS DE PAGAMENTO (MERCADO PAGO) ---
+
+app.post("/api/payment/create_preference", async (req, res) => {
+  try {
+    const { amount, email } = req.body;
+    const amountNum = Number(amount);
+
+    if (!amountNum || amountNum < 1) {
+      return res.status(400).json({ message: "Valor mínimo de R$ 1,00" });
+    }
+
+    const preference = new Preference(client);
+
+    const protocol = req.headers["x-forwarded-proto"] || "http";
+    const host = req.headers.host || "localhost:3000";
+    const notificationUrl = `${protocol}://${host}/api/payment/webhook`;
+    const backUrl = `${protocol}://${host}/`;
+
+    console.log(`[MP] Criando preferência. Notificação: ${notificationUrl}`);
+
+    const result = await preference.create({
+      body: {
+        items: [
+          {
+            title: "Créditos - Damas Online",
+            quantity: 1,
+            unit_price: amountNum,
+            currency_id: "BRL",
+          },
+        ],
+        payer: {
+          email: email,
+        },
+        payment_methods: {
+          excluded_payment_types: [
+            { id: "ticket" },
+            { id: "credit_card" },
+            { id: "debit_card" },
+          ],
+          installments: 1,
+        },
+        external_reference: email,
+        notification_url: notificationUrl,
+        back_urls: {
+          success: backUrl,
+          failure: backUrl,
+          pending: backUrl,
+        },
+      },
+    });
+
+    res.json({ init_point: result.init_point });
+  } catch (error) {
+    console.error("[MP] Erro ao criar preferência:", error);
+    res.status(500).json({ message: "Erro ao gerar pagamento." });
+  }
+});
+
+app.post("/api/payment/webhook", async (req, res) => {
+  const { data, type } = req.body;
+
+  res.sendStatus(200);
+
+  if (type === "payment" || req.body.action === "payment.created") {
+    try {
+      const paymentId = data ? data.id : req.body.data.id;
+
+      const paymentClient = new Payment(client);
+      const payment = await paymentClient.get({ id: paymentId });
+
+      if (payment && payment.status === "approved") {
+        const userEmail = payment.external_reference;
+        const amount = payment.transaction_amount;
+        const paymentIdStr = payment.id.toString();
+
+        const existingTx = await Transaction.findOne({
+          paymentId: paymentIdStr,
+        });
+        if (existingTx) {
+          console.log(`[Webhook] Pagamento ${paymentIdStr} já processado.`);
+          return;
+        }
+
+        await Transaction.create({
+          paymentId: paymentIdStr,
+          email: userEmail,
+          amount: amount,
+          status: payment.status,
+        });
+
+        const user = await User.findOne({ email: userEmail.toLowerCase() });
+        if (user) {
+          user.saldo += amount;
+
+          if (!user.hasDeposited) {
+            user.firstDepositValue = amount;
+            user.hasDeposited = true;
+
+            if (amount >= 5 && user.referredBy) {
+              const referrer = await User.findOne({ email: user.referredBy });
+              if (referrer) {
+                referrer.saldo += 1;
+                referrer.referralEarnings += 1;
+                await referrer.save();
+                console.log(
+                  `[Bônus] R$ 1,00 creditado para ${referrer.email} por indicação.`
+                );
+              }
+            }
+          }
+
+          await user.save();
+          console.log(
+            `[Depósito Automático] R$ ${amount} adicionados para ${userEmail}`
+          );
+
+          // ### NOVO: Avisa o Frontend para atualizar o saldo na hora ###
+          io.emit("balanceUpdate", { email: userEmail, newSaldo: user.saldo });
+        }
+      }
+    } catch (error) {
+      console.error("[Webhook] Erro ao processar:", error);
+    }
+  }
+});
+
+// --- ROTAS ADMIN (Mantidas) ---
 const adminAuthBody = (req, res, next) => {
   const { secret } = req.body;
   if (secret && secret === process.env.ADMIN_SECRET_KEY) next();
@@ -220,41 +317,30 @@ app.put("/api/admin/add-saldo-bonus", adminAuthBody, async (req, res) => {
   try {
     const { email, amountToAdd } = req.body;
     const amount = Number(amountToAdd);
-    const emailLower = email.toLowerCase();
-
-    const user = await User.findOne({ email: emailLower });
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user)
       return res.status(404).json({ message: "Usuário não encontrado." });
 
     user.saldo += amount;
-
     let bonusMessage = "";
 
     if (!user.hasDeposited) {
       user.firstDepositValue = amount;
       user.hasDeposited = true;
-
       if (amount >= 5 && user.referredBy) {
         const referrer = await User.findOne({ email: user.referredBy });
         if (referrer) {
           referrer.saldo += 1;
           referrer.referralEarnings += 1;
           await referrer.save();
-          bonusMessage = ` (Bônus de R$ 1,00 creditado para ${referrer.email}!)`;
+          bonusMessage = ` (Bônus creditado para ${referrer.email})`;
         }
-      } else if (amount < 5 && user.referredBy) {
-        bonusMessage = ` (Sem bônus: Depósito de R$ ${amount} é menor que R$ 5,00)`;
       }
     }
-
     await user.save();
-
-    res.json({
-      message: `Sucesso! R$ ${amount} adicionados para ${emailLower}.${bonusMessage}`,
-    });
+    res.json({ message: `Sucesso.${bonusMessage}` });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Erro ao adicionar saldo." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -272,7 +358,7 @@ app.get("/api/admin/users", adminAuthHeader, async (req, res) => {
     ).sort({ email: 1 });
     res.json(users);
   } catch (error) {
-    res.status(500).json({ message: "Erro ao buscar usuários." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -283,7 +369,7 @@ app.get("/api/admin/withdrawals", adminAuthHeader, async (req, res) => {
     });
     res.json(withdrawals);
   } catch (error) {
-    res.status(500).json({ message: "Erro ao buscar solicitações." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -292,7 +378,7 @@ app.post("/api/admin/approve-withdrawal", adminAuthBody, async (req, res) => {
     const { withdrawalId } = req.body;
     const withdrawal = await Withdrawal.findById(withdrawalId);
     if (!withdrawal)
-      return res.status(404).json({ message: "Solicitação não encontrada." });
+      return res.status(404).json({ message: "Não encontrada." });
     if (withdrawal.status !== "pending")
       return res.status(400).json({ message: "Já processado." });
 
@@ -306,10 +392,9 @@ app.post("/api/admin/approve-withdrawal", adminAuthBody, async (req, res) => {
     await user.save();
     withdrawal.status = "completed";
     await withdrawal.save();
-
-    res.json({ message: "Saque aprovado com sucesso!" });
+    res.json({ message: "Saque aprovado." });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao aprovar." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -318,13 +403,12 @@ app.post("/api/admin/reject-withdrawal", adminAuthBody, async (req, res) => {
     const { withdrawalId } = req.body;
     const withdrawal = await Withdrawal.findById(withdrawalId);
     if (!withdrawal)
-      return res.status(404).json({ message: "Solicitação não encontrada." });
-
+      return res.status(404).json({ message: "Não encontrada." });
     withdrawal.status = "rejected";
     await withdrawal.save();
-    res.json({ message: "Solicitação rejeitada." });
+    res.json({ message: "Rejeitada." });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao rejeitar." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -335,11 +419,11 @@ app.put("/api/admin/update-saldo", adminAuthBody, async (req, res) => {
       { email: email.toLowerCase() },
       { $set: { saldo: Number(newSaldo) } }
     );
-    if (result.nModified === 0)
+    if (result.matchedCount === 0)
       return res.status(404).json({ message: "Usuário não encontrado." });
-    res.json({ message: "Saldo atualizado com sucesso!" });
+    res.json({ message: "Saldo atualizado." });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao atualizar." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -350,18 +434,18 @@ app.delete("/api/admin/user/:email", adminAuthBody, async (req, res) => {
     });
     if (result.deletedCount === 0)
       return res.status(404).json({ message: "Usuário não encontrado." });
-    res.json({ message: "Usuário excluído com sucesso!" });
+    res.json({ message: "Excluído." });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao excluir." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
 app.post("/api/admin/reset-all-saldos", adminAuthBody, async (req, res) => {
   try {
     await User.updateMany({}, { $set: { saldo: 0 } });
-    res.json({ message: "Todos os saldos foram zerados!" });
+    res.json({ message: "Saldos zerados." });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao zerar." });
+    res.status(500).json({ message: "Erro." });
   }
 });
 
@@ -370,5 +454,5 @@ initializeSocket(io);
 
 const HOST = process.env.HOST || "0.0.0.0";
 server.listen(PORT, HOST, () => {
-  console.log(`Servidor a rodar em http://${HOST}:${PORT}.`);
+  console.log(`Servidor rodando em http://${HOST}:${PORT}`);
 });

@@ -11,6 +11,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="style.css" />
+  <!-- SDK Mercado Pago -->
+  <script src="https://sdk.mercadopago.com/js/v2"></script>
 </head>
 
 <body>
@@ -35,7 +37,6 @@
       </form>
       <p id="auth-message" class="message"></p>
 
-      <!-- RODAPÉ INTERNO (LOGIN) -->
       <div class="app-footer">
         <p>© 2025 - Desenvolvido por <strong>ALVINCODER</strong></p>
         <p>Contato: <a href="https://wa.me/5571920007957" target="_blank" class="whatsapp-link">+55 71 92000-7957</a>
@@ -76,7 +77,7 @@
         Partidas</button>
     </div>
 
-    <button id="add-balance-btn">Adicionar Saldo</button>
+    <button id="add-balance-btn">Adicionar Saldo (Automático)</button>
 
     <button id="withdraw-btn" style="background-color: #2ecc71;">Retirar Saldo</button>
 
@@ -138,8 +139,6 @@
           ">
         <label for="timer-select">Tempo por Jogada:</label>
         <select id="timer-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc">
-          <!-- OPÇÕES SERÃO POPULADAS PELO SCRIPT.JS -->
-          <!-- A opção de 7 segundos será adicionada lá -->
         </select>
       </div>
 
@@ -175,7 +174,6 @@
 
     <p id="lobby-error-message" class="error-message"></p>
 
-    <!-- RODAPÉ INTERNO (LOBBY) -->
     <div class="app-footer">
       <p>© 2025 - Desenvolvido por <strong>ALVINCODER</strong></p>
       <p>Contato: <a href="https://wa.me/5571920007957" target="_blank" class="whatsapp-link">+55 71 92000-7957</a></p>
@@ -297,31 +295,36 @@
     </div>
   </div>
 
+  <!-- ### ALTERADO: Modal de Depósito com Mercado Pago ### -->
   <div id="pix-overlay" class="hidden">
     <div class="modal-box">
-      <h3>Recarga Livre</h3>
-      <p>Envie o valor que desejar!</p>
+      <h3>Recarga Automática (PIX)</h3>
+      <p>O saldo cai na hora!</p>
 
-      <img src="qrcode.png" alt="QR Code PIX"
-        style="width: 200px; height: auto; margin: 15px auto; display: block; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-
-      <p>Ou copie a chave abaixo:</p>
-      <div class="pix-info">
-        <p><strong>Tipo de Chave:</strong> Copia e Cola (QR Code)</p>
-        <p>
-          <strong>Chave:</strong>
-          <span
-            id="pix-key">00020126580014br.gov.bcb.pix01362b3485a0-d28c-4d37-9b5d-b2efcac4cee65204000053039865802BR5919TIAGO SOUZA SANTANA6008Salvador6211050726f78796304D315</span>
-        </p>
-        <p><strong>Nome:</strong> Tiago Souza Santana</p>
+      <div style="margin: 20px 0;">
+        <label for="deposit-amount" style="display: block; margin-bottom: 5px; color: #ccc;">Valor (R$):</label>
+        <input type="number" id="deposit-amount" class="modal-input" placeholder="Ex: 10.00" min="1" step="0.01"
+          value="5.00">
       </div>
-      <button id="copy-pix-key-btn">Copiar Chave</button>
-      <p class="instructions">
-        Após o pagamento, envie o comprovante e o seu Email para o nosso WhatsApp para que
-        o saldo seja adicionado à sua conta.
+
+      <button id="pay-mercadopago-btn" style="background-color: #009ee3; font-weight: bold; margin-bottom: 15px;">
+        Pagar com PIX (Mercado Pago)
+      </button>
+
+      <div id="mp-loading" class="hidden" style="margin-bottom: 10px;">
+        <div class="loader" style="width: 20px; height: 20px; border-width: 2px;"></div>
+        <p style="font-size: 0.8em;">Gerando pagamento...</p>
+      </div>
+
+      <p class="instructions" style="font-size: 0.8em; color: #aaa; margin-top: 10px;">
+        Você será redirecionado para o pagamento seguro. Após pagar, o saldo será adicionado automaticamente.
       </p>
-      <!-- LINK DO WHATSAPP ATUALIZADO COM ID PARA EDIÇÃO NO JS -->
-      <a href="#" id="send-proof-btn" target="_blank" class="whatsapp-link">Enviar Comprovante!</a>
+
+      <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0;">
+
+      <p style="font-size: 0.8em;">Problemas? Envie o comprovante:</p>
+      <a href="#" id="send-proof-btn" target="_blank" class="whatsapp-link">Falar no WhatsApp</a>
+
       <button id="close-pix-overlay-btn">Fechar</button>
     </div>
   </div>
@@ -374,7 +377,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
 
-  <!-- ### ALTERAÇÃO: Lógica Unificada e Helpers ### -->
   <script src="gameLogic.js"></script>
   <script src="ui-helpers.js"></script>
   <script src="script.js"></script>
