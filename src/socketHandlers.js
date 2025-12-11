@@ -1,4 +1,4 @@
-// src/socketHandlers.js (CORRIGIDO PARA USAR LÓGICA COMPARTILHADA)
+// src/socketHandlers.js
 
 const User = require("../models/User");
 const {
@@ -7,7 +7,7 @@ const {
   standardOpening10x10,
 } = require("../utils/constants");
 
-// ### IMPORTAÇÃO DO ARQUIVO COMPARTILHADO ###
+// ### IMPORTAÇÃO DA LÓGICA COMPARTILHADA ###
 const {
   isMoveValid,
   checkWinCondition,
@@ -15,11 +15,12 @@ const {
   getAllPossibleCapturesForPiece,
   findBestCaptureMoves,
   getUniqueCaptureMove,
-} = require("../public/gameLogic"); // Caminho atualizado para a pasta public
+} = require("../public/gameLogic");
 
 const { startTimer, resetTimer, processEndOfGame } = require("./gameManager");
 
 const gameRooms = {};
+let io; // Variável global para instância do Socket.IO
 
 function getLobbyInfo() {
   const waitingRooms = Object.values(gameRooms)
@@ -48,66 +49,78 @@ function getLobbyInfo() {
   return { waiting: waitingRooms, active: activeRooms };
 }
 
-function initializeSocket(io) {
-  function cleanupPreviousRooms(userEmail) {
-    const roomsToRemove = [];
-    Object.keys(gameRooms).forEach((code) => {
-      const r = gameRooms[code];
-      if (
-        r.players.length === 1 &&
-        !r.isGameConcluded &&
-        r.players[0].user.email === userEmail
-      ) {
-        roomsToRemove.push(code);
-      }
-    });
+// --- LÓGICA DE JOGO MOVIDA PARA ESCOPO GLOBAL DO MÓDULO ---
 
-    roomsToRemove.forEach((code) => {
-      delete gameRooms[code];
-      console.log(
-        `[Limpeza] Sala ${code} excluída automaticamente pois o criador (${userEmail}) iniciou outra ação.`
-      );
-    });
-
-    if (roomsToRemove.length > 0) {
-      io.emit("updateLobby", getLobbyInfo());
+function cleanupPreviousRooms(userEmail) {
+  const roomsToRemove = [];
+  Object.keys(gameRooms).forEach((code) => {
+    const r = gameRooms[code];
+    if (
+      r.players.length === 1 &&
+      !r.isGameConcluded &&
+      r.players[0].user.email === userEmail
+    ) {
+      roomsToRemove.push(code);
     }
+  });
+
+  roomsToRemove.forEach((code) => {
+    delete gameRooms[code];
+    console.log(
+      `[Limpeza] Sala ${code} excluída automaticamente pois o criador (${userEmail}) iniciou outra ação.`
+    );
+  });
+
+  if (roomsToRemove.length > 0 && io) {
+    io.emit("updateLobby", getLobbyInfo());
+  }
+}
+
+async function startGameLogic(room) {
+  if (!io) return;
+  const player1 = room.players[0];
+  const player2 = room.players[1];
+  room.isGameConcluded = false;
+  room.revancheRequests = new Set();
+  if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
+
+  let whitePlayer, blackPlayer;
+  // Verifica se é uma continuação de partida (Tablita ou Revanche)
+  if (room.game && room.game.players) {
+    console.log("[Novo Jogo/Revanche] Invertendo cores.");
+    const previousWhiteSocketId = room.game.players.white;
+
+    // Lógica para manter os jogadores corretos mesmo se reconectarem com novo socketId,
+    // mas priorizando a inversão baseada no jogo anterior
+    if (player1.socketId === previousWhiteSocketId) {
+      whitePlayer = player2;
+      blackPlayer = player1;
+    } else {
+      whitePlayer = player1;
+      blackPlayer = player2;
+    }
+  } else {
+    console.log("[Novo Jogo] Atribuindo cores aleatoriamente.");
+    const isPlayer1White = Math.random() < 0.5;
+    whitePlayer = isPlayer1White ? player1 : player2;
+    blackPlayer = isPlayer1White ? player2 : player1;
   }
 
-  async function startGameLogic(room) {
-    const player1 = room.players[0];
-    const player2 = room.players[1];
-    room.isGameConcluded = false;
-    room.revancheRequests = new Set();
-    if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
+  let boardState;
+  let boardSize;
+  let openingName = null;
 
-    let whitePlayer, blackPlayer;
-    if (room.game && room.game.players && room.gameMode !== "tablita") {
-      console.log("[Revanche] Invertendo cores.");
-      const previousWhiteSocketId = room.game.players.white;
-
-      if (player1.socketId === previousWhiteSocketId) {
-        whitePlayer = player2;
-        blackPlayer = player1;
-      } else {
-        whitePlayer = player1;
-        blackPlayer = player2;
-      }
+  if (room.gameMode === "international") {
+    boardState = JSON.parse(JSON.stringify(standardOpening10x10));
+    boardSize = 10;
+  } else if (room.gameMode === "tablita") {
+    // Se for a segunda partida do match (currentGame == 2), usamos a MESMA abertura
+    if (room.match && room.match.currentGame === 2) {
+      boardState = JSON.parse(JSON.stringify(room.match.openingBoard));
+      openingName = room.match.opening.name;
+      boardSize = 8;
     } else {
-      console.log("[Novo Jogo] Atribuindo cores aleatoriamente.");
-      const isPlayer1White = Math.random() < 0.5;
-      whitePlayer = isPlayer1White ? player1 : player2;
-      blackPlayer = isPlayer1White ? player2 : player1;
-    }
-
-    let boardState;
-    let boardSize;
-    let openingName = null;
-
-    if (room.gameMode === "international") {
-      boardState = JSON.parse(JSON.stringify(standardOpening10x10));
-      boardSize = 10;
-    } else if (room.gameMode === "tablita") {
+      // Primeira partida: sorteia abertura
       let randomIndex;
       let attempts = 0;
       do {
@@ -120,7 +133,6 @@ function initializeSocket(io) {
       );
 
       room.lastOpeningIndex = randomIndex;
-
       const selectedOpening = idfTablitaOpenings[randomIndex];
       boardState = JSON.parse(JSON.stringify(selectedOpening.board));
       openingName = selectedOpening.name;
@@ -133,6 +145,7 @@ function initializeSocket(io) {
       room.match.openingBoard = JSON.parse(
         JSON.stringify(selectedOpening.board)
       );
+      // Salva referência persistente dos jogadores
       room.match.player1 = {
         email: player1.user.email,
         socketId: player1.socketId,
@@ -141,238 +154,249 @@ function initializeSocket(io) {
         email: player2.user.email,
         socketId: player2.socketId,
       };
-    } else {
-      boardState = JSON.parse(JSON.stringify(standardOpening));
-      boardSize = 8;
     }
-
-    room.game = {
-      players: { white: whitePlayer.socketId, black: blackPlayer.socketId },
-      users: { white: whitePlayer.user.email, black: blackPlayer.user.email },
-      boardState: boardState,
-      boardSize: boardSize,
-      currentPlayer: "b",
-      isFirstMove: true,
-      movesSinceCapture: 0,
-      damaMovesWithoutCaptureOrPawnMove: 0,
-      openingName: openingName,
-      mustCaptureWith: null,
-      lastMove: null,
-    };
-
-    if (!hasValidMoves(room.game.currentPlayer, room.game)) {
-      return processEndOfGame(
-        null,
-        null,
-        room,
-        "Empate por bloqueio na abertura."
-      );
-    }
-
-    if (room.timeControl === "match") {
-      room.whiteTime = room.timerDuration;
-      room.blackTime = room.timerDuration;
-    } else {
-      room.timeLeft = room.timerDuration;
-    }
-
-    const bestCaptures = findBestCaptureMoves(
-      room.game.currentPlayer,
-      room.game
-    );
-    const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
-
-    const gameState = {
-      ...room.game,
-      roomCode: room.roomCode,
-      mandatoryPieces,
-    };
-
-    io.to(room.roomCode).emit("gameStart", gameState);
-    io.to(whitePlayer.socketId).emit("gameStart", gameState);
-    io.to(blackPlayer.socketId).emit("gameStart", gameState);
+  } else {
+    boardState = JSON.parse(JSON.stringify(standardOpening));
+    boardSize = 8;
   }
 
-  async function executeMove(roomCode, from, to, socketId) {
-    const gameRoom = gameRooms[roomCode];
-    if (!gameRoom || !gameRoom.game) return;
-    const game = gameRoom.game;
+  room.game = {
+    players: { white: whitePlayer.socketId, black: blackPlayer.socketId },
+    users: { white: whitePlayer.user.email, black: blackPlayer.user.email },
+    boardState: boardState,
+    boardSize: boardSize,
+    currentPlayer: "b",
+    isFirstMove: true,
+    movesSinceCapture: 0,
+    damaMovesWithoutCaptureOrPawnMove: 0,
+    openingName: openingName,
+    mustCaptureWith: null,
+    lastMove: null,
+  };
 
-    const playerColor = game.currentPlayer;
+  if (!hasValidMoves(room.game.currentPlayer, room.game)) {
+    return processEndOfGame(
+      null,
+      null,
+      room,
+      "Empate por bloqueio na abertura."
+    );
+  }
 
-    if (socketId) {
-      const socketPlayerColor = game.players.white === socketId ? "b" : "p";
-      if (socketPlayerColor !== playerColor) return;
+  if (room.timeControl === "match") {
+    room.whiteTime = room.timerDuration;
+    room.blackTime = room.timerDuration;
+  } else {
+    room.timeLeft = room.timerDuration;
+  }
+
+  const bestCaptures = findBestCaptureMoves(room.game.currentPlayer, room.game);
+  const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
+
+  const gameState = {
+    ...room.game,
+    roomCode: room.roomCode,
+    mandatoryPieces,
+  };
+
+  io.to(room.roomCode).emit("gameStart", gameState);
+  io.to(whitePlayer.socketId).emit("gameStart", gameState);
+  io.to(blackPlayer.socketId).emit("gameStart", gameState);
+}
+
+async function executeMove(roomCode, from, to, socketId) {
+  if (!io) return;
+  const gameRoom = gameRooms[roomCode];
+  if (!gameRoom || !gameRoom.game) return;
+  const game = gameRoom.game;
+
+  const playerColor = game.currentPlayer;
+
+  if (socketId) {
+    const socketPlayerColor = game.players.white === socketId ? "b" : "p";
+    if (socketPlayerColor !== playerColor) return;
+  }
+
+  if (game.isFirstMove) {
+    game.isFirstMove = false;
+    startTimer(roomCode);
+  }
+
+  const isValid = isMoveValid(from, to, playerColor, game);
+
+  if (isValid.valid) {
+    const pieceBeforeMove = game.boardState[from.row][from.col];
+    const isPieceDama = pieceBeforeMove.toUpperCase() === pieceBeforeMove;
+
+    if (!isPieceDama || isValid.isCapture) {
+      game.damaMovesWithoutCaptureOrPawnMove = 0;
+      game.movesSinceCapture = 0;
+    } else if (isPieceDama && !isValid.isCapture) {
+      game.damaMovesWithoutCaptureOrPawnMove++;
+      game.movesSinceCapture++;
     }
 
-    if (game.isFirstMove) {
-      game.isFirstMove = false;
-      startTimer(roomCode);
+    game.boardState[to.row][to.col] = game.boardState[from.row][from.col];
+    game.boardState[from.row][from.col] = 0;
+
+    game.lastMove = { from, to };
+
+    let canCaptureAgain = false;
+    let wasPromotion = false;
+
+    if (isValid.isCapture) {
+      game.boardState[isValid.capturedPos.row][isValid.capturedPos.col] = 0;
+      const nextCaptures = getAllPossibleCapturesForPiece(to.row, to.col, game);
+      canCaptureAgain = nextCaptures.length > 0;
     }
 
-    const isValid = isMoveValid(from, to, playerColor, game);
-
-    if (isValid.valid) {
-      const pieceBeforeMove = game.boardState[from.row][from.col];
-      const isPieceDama = pieceBeforeMove.toUpperCase() === pieceBeforeMove;
-
-      if (!isPieceDama || isValid.isCapture) {
-        game.damaMovesWithoutCaptureOrPawnMove = 0;
-        game.movesSinceCapture = 0;
-      } else if (isPieceDama && !isValid.isCapture) {
-        game.damaMovesWithoutCaptureOrPawnMove++;
-        game.movesSinceCapture++;
+    if (!canCaptureAgain) {
+      const currentPiece = game.boardState[to.row][to.col];
+      if (currentPiece === "b" && to.row === 0) {
+        game.boardState[to.row][to.col] = "B";
+        wasPromotion = true;
+      } else if (currentPiece === "p" && to.row === game.boardSize - 1) {
+        game.boardState[to.row][to.col] = "P";
+        wasPromotion = true;
       }
+    }
 
-      game.boardState[to.row][to.col] = game.boardState[from.row][from.col];
-      game.boardState[from.row][from.col] = 0;
+    if (wasPromotion) {
+      canCaptureAgain = false;
+      game.movesSinceCapture = 0;
+      game.damaMovesWithoutCaptureOrPawnMove = 0;
+    }
 
-      game.lastMove = { from, to };
+    let whitePieces = 0;
+    let whiteDames = 0;
+    let blackPieces = 0;
+    let blackDames = 0;
 
-      let canCaptureAgain = false;
-      let wasPromotion = false;
-
-      if (isValid.isCapture) {
-        game.boardState[isValid.capturedPos.row][isValid.capturedPos.col] = 0;
-        const nextCaptures = getAllPossibleCapturesForPiece(
-          to.row,
-          to.col,
-          game
-        );
-        canCaptureAgain = nextCaptures.length > 0;
-      }
-
-      if (!canCaptureAgain) {
-        const currentPiece = game.boardState[to.row][to.col];
-        if (currentPiece === "b" && to.row === 0) {
-          game.boardState[to.row][to.col] = "B";
-          wasPromotion = true;
-        } else if (currentPiece === "p" && to.row === game.boardSize - 1) {
-          game.boardState[to.row][to.col] = "P";
-          wasPromotion = true;
-        }
-      }
-
-      if (wasPromotion) {
-        canCaptureAgain = false;
-        game.movesSinceCapture = 0;
-        game.damaMovesWithoutCaptureOrPawnMove = 0;
-      }
-
-      let whitePieces = 0;
-      let whiteDames = 0;
-      let blackPieces = 0;
-      let blackDames = 0;
-
-      for (let r = 0; r < game.boardSize; r++) {
-        for (let c = 0; c < game.boardSize; c++) {
-          const p = game.boardState[r][c];
-          if (p !== 0) {
-            if (p.toString().toLowerCase() === "b") {
-              whitePieces++;
-              if (p === "B") whiteDames++;
-            } else {
-              blackPieces++;
-              if (p === "P") blackDames++;
-            }
+    for (let r = 0; r < game.boardSize; r++) {
+      for (let c = 0; c < game.boardSize; c++) {
+        const p = game.boardState[r][c];
+        if (p !== 0) {
+          if (p.toString().toLowerCase() === "b") {
+            whitePieces++;
+            if (p === "B") whiteDames++;
+          } else {
+            blackPieces++;
+            if (p === "P") blackDames++;
           }
         }
       }
+    }
 
-      const isWhite3vs1 =
-        whiteDames >= 3 &&
-        whitePieces === whiteDames &&
-        blackPieces === 1 &&
-        blackDames === 1;
-      const isBlack3vs1 =
-        blackDames >= 3 &&
-        blackPieces === blackDames &&
-        whitePieces === 1 &&
-        whiteDames === 1;
+    const isWhite3vs1 =
+      whiteDames >= 3 &&
+      whitePieces === whiteDames &&
+      blackPieces === 1 &&
+      blackDames === 1;
+    const isBlack3vs1 =
+      blackDames >= 3 &&
+      blackPieces === blackDames &&
+      whitePieces === 1 &&
+      whiteDames === 1;
 
-      if (gameRoom.gameMode !== "international") {
-        if (game.damaMovesWithoutCaptureOrPawnMove >= 40)
+    if (gameRoom.gameMode !== "international") {
+      if (game.damaMovesWithoutCaptureOrPawnMove >= 40)
+        return processEndOfGame(
+          null,
+          null,
+          gameRoom,
+          "Empate por 20 lances de Damas."
+        );
+
+      if (game.movesSinceCapture >= 40) {
+        if (isWhite3vs1 || isBlack3vs1) {
           return processEndOfGame(
             null,
             null,
             gameRoom,
-            "Empate por 20 lances de Damas."
+            "Empate: 3 Damas contra 1 (20 lances)."
           );
+        }
+        return processEndOfGame(
+          null,
+          null,
+          gameRoom,
+          "Empate por 20 jogadas sem captura."
+        );
+      }
+    }
 
-        if (game.movesSinceCapture >= 40) {
-          if (isWhite3vs1 || isBlack3vs1) {
-            return processEndOfGame(
-              null,
-              null,
-              gameRoom,
-              "Empate: 3 Damas contra 1 (20 lances)."
+    const winner = checkWinCondition(game.boardState, game.boardSize);
+    if (winner) {
+      const loser = winner === "b" ? "p" : "b";
+      return processEndOfGame(winner, loser, gameRoom, "Fim de jogo!");
+    }
+
+    if (!canCaptureAgain) {
+      game.mustCaptureWith = null;
+      game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
+      if (!hasValidMoves(game.currentPlayer, game)) {
+        const winner = game.currentPlayer === "b" ? "p" : "b";
+        return processEndOfGame(
+          winner,
+          game.currentPlayer,
+          gameRoom,
+          "Oponente bloqueado!"
+        );
+      }
+      resetTimer(roomCode);
+    } else {
+      game.mustCaptureWith = { row: to.row, col: to.col };
+    }
+
+    const bestCaptures = findBestCaptureMoves(game.currentPlayer, game);
+    const mandatoryPieces = canCaptureAgain
+      ? [{ row: to.row, col: to.col }]
+      : bestCaptures.map((seq) => seq[0]);
+
+    io.to(roomCode).emit("gameStateUpdate", { ...game, mandatoryPieces });
+
+    if (canCaptureAgain) {
+      const uniqueMove = getUniqueCaptureMove(to.row, to.col, game);
+      if (uniqueMove) {
+        setTimeout(() => {
+          if (gameRooms[roomCode] && !gameRooms[roomCode].isGameConcluded) {
+            executeMove(
+              roomCode,
+              { row: to.row, col: to.col },
+              uniqueMove.to,
+              null
             );
           }
-          return processEndOfGame(
-            null,
-            null,
-            gameRoom,
-            "Empate por 20 jogadas sem captura."
-          );
-        }
+        }, 1000);
       }
-
-      const winner = checkWinCondition(game.boardState, game.boardSize);
-      if (winner) {
-        const loser = winner === "b" ? "p" : "b";
-        return processEndOfGame(winner, loser, gameRoom, "Fim de jogo!");
-      }
-
-      if (!canCaptureAgain) {
-        game.mustCaptureWith = null;
-        game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
-        if (!hasValidMoves(game.currentPlayer, game)) {
-          const winner = game.currentPlayer === "b" ? "p" : "b";
-          return processEndOfGame(
-            winner,
-            game.currentPlayer,
-            gameRoom,
-            "Oponente bloqueado!"
-          );
-        }
-        resetTimer(roomCode);
-      } else {
-        game.mustCaptureWith = { row: to.row, col: to.col };
-      }
-
-      const bestCaptures = findBestCaptureMoves(game.currentPlayer, game);
-      const mandatoryPieces = canCaptureAgain
-        ? [{ row: to.row, col: to.col }]
-        : bestCaptures.map((seq) => seq[0]);
-
-      io.to(roomCode).emit("gameStateUpdate", { ...game, mandatoryPieces });
-
-      if (canCaptureAgain) {
-        const uniqueMove = getUniqueCaptureMove(to.row, to.col, game);
-        if (uniqueMove) {
-          setTimeout(() => {
-            if (gameRooms[roomCode] && !gameRooms[roomCode].isGameConcluded) {
-              executeMove(
-                roomCode,
-                { row: to.row, col: to.col },
-                uniqueMove.to,
-                null
-              );
-            }
-          }, 1000);
-        }
-      }
-    } else {
-      if (socketId) {
-        const socket = io.sockets.sockets.get(socketId);
-        if (socket) {
-          socket.emit("invalidMove", {
-            message: isValid.reason || "Movimento inválido.",
-          });
-        }
+    }
+  } else {
+    if (socketId) {
+      const socket = io.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.emit("invalidMove", {
+          message: isValid.reason || "Movimento inválido.",
+        });
       }
     }
   }
+}
+
+// Função para ser chamada externamente pelo gameManager (evita referência circular direta na inicialização)
+async function startNextTablitaGame(roomCode) {
+  const room = gameRooms[roomCode];
+  if (room) {
+    console.log(`[Tablita] Iniciando próxima partida para sala ${roomCode}`);
+    await startGameLogic(room);
+  } else {
+    console.log(
+      `[Tablita] Sala ${roomCode} não encontrada para próxima partida.`
+    );
+  }
+}
+
+function initializeSocket(ioInstance) {
+  io = ioInstance; // Configura a instância global
 
   io.on("connection", (socket) => {
     socket.on("enterLobby", () => {
@@ -868,4 +892,5 @@ function initializeSocket(io) {
 module.exports = {
   initializeSocket,
   gameRooms,
+  startNextTablitaGame,
 };

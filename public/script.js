@@ -1215,7 +1215,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById(
       "match-score-display"
     ).textContent = `Placar: ${data.score[0]} - ${data.score[1]}`;
-    let cd = 10;
+
+    // ALTERADO DE 10 PARA 5 SEGUNDOS
+    let cd = 5;
     const tEl = document.getElementById("next-game-timer");
     tEl.textContent = cd;
     if (nextGameInterval) clearInterval(nextGameInterval);

@@ -299,19 +299,17 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       title: nextGameTitle,
     });
     setTimeout(() => {
-      // Precisamos importar de socketHandlers ou reestruturar, mas por simplicidade:
-      // O gameManager original não exportava startNextTablitaGame para uso externo,
-      // mas ele estava no escopo do arquivo. Se for necessário, podemos adicionar.
-      // O código original já tinha essa chamada internamente.
-      const { startNextTablitaGame } = require("./socketHandlers"); // Potencial problema circular, melhor deixar a lógica interna se possível
-      // Como o código original tinha startNextTablitaGame dentro do module.exports, apenas chamamos se estiver no escopo.
-      // No arquivo original, startNextTablitaGame estava no final. Assumindo que está disponível.
-    }, 10000);
+      // Importa a função aqui para evitar dependência circular no carregamento
+      // Agora chamamos explicitamente a função exportada
+      const { startNextTablitaGame } = require("./socketHandlers");
+      if (startNextTablitaGame) {
+        startNextTablitaGame(room.roomCode);
+      } else {
+        console.error("Erro: startNextTablitaGame não encontrado.");
+      }
+    }, 5000); // ALTERADO DE 10000 PARA 5000 (5 SEGUNDOS)
   }
 }
-
-// Re-exportamos startNextTablitaGame se estava lá, ou assumimos que o arquivo original já tinha.
-// Vou manter o export como estava e adicionar setTournamentManager.
 
 module.exports = {
   initializeManager,
