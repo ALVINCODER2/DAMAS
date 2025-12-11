@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Importando os 3 arquivos CSS -->
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="game.css" />
-  <link rel="stylesheet" href="tournament.css" />
+  <!-- CORREÇÃO: Caminhos apontando para a pasta css/ -->
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/game.css" />
+  <link rel="stylesheet" href="css/tournament.css" />
 
   <!-- SDK Mercado Pago -->
   <script src="https://sdk.mercadopago.com/js/v2"></script>
@@ -190,7 +190,8 @@
     <!-- ### SEÇÃO TORNEIO (EXPANSÍVEL) ### -->
     <div class="tournament-card">
       <div class="tournament-header collapsible-header" onclick="toggleSection(this)">
-        🏆 TORNEIO DIÁRIO
+        🏆 TORNEIO DIÁRIO <span id="header-participants-count"
+          style="margin-left: 8px; font-size: 0.9em; opacity: 0.9;">(0)</span>
         <!-- BOTÃO DE INFO -->
         <span id="tournament-info-btn" class="info-icon" title="Como funciona?">?</span>
       </div>
@@ -611,11 +612,11 @@
 
   <script src="/socket.io/socket.io.js"></script>
 
-  <script src="gameLogic.js"></script>
-  <script src="ui-helpers.js"></script>
-  <!-- Novo arquivo de LOBBY carregado antes do SCRIPT principal -->
-  <script src="lobby.js"></script>
-  <script src="script.js"></script>
+  <!-- CORREÇÃO: Caminhos apontando para a pasta js/ -->
+  <script src="js/gameLogic.js"></script>
+  <script src="js/ui-helpers.js"></script>
+  <script src="js/lobby.js"></script>
+  <script src="js/script.js"></script>
 </body>
 
 </html>

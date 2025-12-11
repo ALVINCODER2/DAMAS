@@ -204,8 +204,15 @@ window.initLobby = function (socket, UI) {
       const data = await res.json();
 
       const countEl = document.getElementById("trn-participants-count");
+      const headerCountEl = document.getElementById(
+        "header-participants-count"
+      ); // NOVO: Elemento do cabeçalho
       const prizeEl = document.getElementById("trn-prize-pool");
+
       if (countEl) countEl.textContent = `Inscritos: ${data.participantsCount}`;
+      if (headerCountEl)
+        headerCountEl.textContent = `(${data.participantsCount})`; // NOVO: Atualiza o cabeçalho
+
       if (prizeEl)
         prizeEl.textContent = `Prêmio Atual: R$ ${data.prizePool.toFixed(2)}`;
 
@@ -711,8 +718,13 @@ window.initLobby = function (socket, UI) {
 
   socket.on("tournamentUpdate", (data) => {
     const countEl = document.getElementById("trn-participants-count");
+    const headerCountEl = document.getElementById("header-participants-count"); // NOVO
     const prizeEl = document.getElementById("trn-prize-pool");
+
     if (countEl) countEl.textContent = `Inscritos: ${data.participantsCount}`;
+    if (headerCountEl)
+      headerCountEl.textContent = `(${data.participantsCount})`; // NOVO
+
     if (prizeEl)
       prizeEl.textContent = `Prêmio Atual: R$ ${data.prizePool.toFixed(2)}`;
   });

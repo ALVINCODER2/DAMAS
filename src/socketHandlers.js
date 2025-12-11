@@ -7,7 +7,7 @@ const {
   standardOpening10x10,
 } = require("../utils/constants");
 
-// ### IMPORTAÇÃO DA LÓGICA COMPARTILHADA ###
+// ### ATUALIZADO: Caminho ajustado para a nova pasta 'js' ###
 const {
   isMoveValid,
   checkWinCondition,
@@ -15,7 +15,7 @@ const {
   getAllPossibleCapturesForPiece,
   findBestCaptureMoves,
   getUniqueCaptureMove,
-} = require("../public/gameLogic");
+} = require("../public/js/gameLogic");
 
 const { startTimer, resetTimer, processEndOfGame } = require("./gameManager");
 
@@ -382,7 +382,7 @@ async function executeMove(roomCode, from, to, socketId) {
   }
 }
 
-// Função para ser chamada externamente pelo gameManager (evita referência circular direta na inicialização)
+// Função para ser chamada externamente pelo gameManager
 async function startNextTablitaGame(roomCode) {
   const room = gameRooms[roomCode];
   if (room) {
@@ -396,7 +396,7 @@ async function startNextTablitaGame(roomCode) {
 }
 
 function initializeSocket(ioInstance) {
-  io = ioInstance; // Configura a instância global
+  io = ioInstance;
 
   io.on("connection", (socket) => {
     socket.on("enterLobby", () => {

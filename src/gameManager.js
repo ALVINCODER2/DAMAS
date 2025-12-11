@@ -1,7 +1,8 @@
 // src/gameManager.js
 const User = require("../models/User");
 const MatchHistory = require("../models/MatchHistory");
-const { findBestCaptureMoves } = require("../public/gameLogic");
+// ### ATUALIZADO: Caminho ajustado para a nova pasta 'js' ###
+const { findBestCaptureMoves } = require("../public/js/gameLogic");
 
 let io;
 let gameRooms;

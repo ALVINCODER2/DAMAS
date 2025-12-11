@@ -9,7 +9,8 @@
 
 body {
   font-family: "Poppins", sans-serif;
-  background-image: url("background-login.jpg");
+  /* ATENÇÃO: Ajustado caminho para a imagem de fundo que está na raiz de public */
+  background-image: url("../background-login.jpg");
   background-size: cover;
   background-position: center top;
   background-attachment: fixed;
