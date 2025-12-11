@@ -89,13 +89,21 @@ document.addEventListener("DOMContentLoaded", () => {
     withdrawals.forEach((w) => {
       const row = document.createElement("tr");
       const date = new Date(w.createdAt).toLocaleString();
+      const amountRequested = w.amount;
+      const amountToSend = amountRequested * 0.7; // 30% de taxa
+
       row.innerHTML = `
             <td>${date}</td>
             <td>${w.email}</td>
             <td style="font-family: monospace; background: #222; color: #f1c40f; padding: 5px;">${
               w.pixKey
             }</td>
-            <td>R$ ${w.amount.toFixed(2)}</td>
+            <td>
+              <div>Solicitado: R$ ${amountRequested.toFixed(2)}</div>
+              <div style="font-weight: bold; color: #2ecc71;">Enviar: R$ ${amountToSend.toFixed(
+                2
+              )}</div>
+            </td>
             <td>
                 <button class="approve-btn" data-id="${w._id}" data-amount="${
         w.amount
@@ -112,10 +120,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const id = target.dataset.id;
 
     if (target.classList.contains("approve-btn")) {
-      const amount = target.dataset.amount;
+      const amount = parseFloat(target.dataset.amount);
+      const amountToSend = (amount * 0.7).toFixed(2);
+
       if (
         confirm(
-          `Confirma que enviou R$ ${amount} para o usuário? Isso irá remover o saldo da conta dele.`
+          `Confirma que enviou R$ ${amountToSend} (já descontado 30%) para o usuário? O sistema removerá R$ ${amount.toFixed(
+            2
+          )} do saldo dele.`
         )
       ) {
         await approveWithdrawal(id);

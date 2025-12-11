@@ -392,6 +392,75 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("withdraw-overlay").classList.add("hidden");
       });
 
+    // ### CORREÇÃO AQUI: ADICIONANDO O LISTENER DO FORMULÁRIO DE SAQUE ###
+    const withdrawForm = document.getElementById("withdraw-form");
+    if (withdrawForm) {
+      withdrawForm.addEventListener("submit", async (e) => {
+        e.preventDefault(); // Impede o recarregamento da página
+
+        if (!currentUser) return;
+
+        const pixKey = document.getElementById("withdraw-pix-key").value;
+        const amount = parseFloat(
+          document.getElementById("withdraw-amount").value
+        );
+        const msgElement = document.getElementById("withdraw-message");
+
+        if (!pixKey || !amount) {
+          msgElement.textContent = "Preencha todos os campos.";
+          msgElement.style.color = "red";
+          return;
+        }
+
+        if (amount < 30) {
+          msgElement.textContent = "O valor mínimo é R$ 30,00.";
+          msgElement.style.color = "red";
+          return;
+        }
+
+        const submitBtn = withdrawForm.querySelector("button[type='submit']");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Enviando...";
+
+        try {
+          const response = await fetch("/api/withdraw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: currentUser.email,
+              amount: amount,
+              pixKey: pixKey,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            msgElement.textContent =
+              "Solicitação enviada! Aguarde a aprovação.";
+            msgElement.style.color = "green";
+            setTimeout(() => {
+              document
+                .getElementById("withdraw-overlay")
+                .classList.add("hidden");
+              document.getElementById("withdraw-pix-key").value = "";
+              document.getElementById("withdraw-amount").value = "";
+              msgElement.textContent = "";
+            }, 2000);
+          } else {
+            msgElement.textContent = data.message || "Erro ao solicitar.";
+            msgElement.style.color = "red";
+          }
+        } catch (error) {
+          msgElement.textContent = "Erro de conexão.";
+          msgElement.style.color = "red";
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Solicitar";
+        }
+      });
+    }
+
     const copyReferralBtn = document.getElementById("copy-referral-btn");
     if (copyReferralBtn) {
       copyReferralBtn.addEventListener("click", () => {
