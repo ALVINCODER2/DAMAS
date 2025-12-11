@@ -1,4 +1,4 @@
-// src/gameManager.js (COM HISTÓRICO DE PARTIDAS E IMPORT UNIFICADO)
+// src/gameManager.js (CORREÇÃO DE BUG: INCLUINDO ROOMCODE NO TIMER)
 const User = require("../models/User");
 const MatchHistory = require("../models/MatchHistory");
 
@@ -37,9 +37,11 @@ function startTimer(roomCode) {
         if (room.blackTime <= 0) timeOver = true;
       }
 
+      // CORREÇÃO: Enviamos o roomCode para o cliente filtrar
       io.to(roomCode).emit("timerUpdate", {
         whiteTime: room.whiteTime,
         blackTime: room.blackTime,
+        roomCode: roomCode,
       });
 
       if (timeOver) {
@@ -50,7 +52,11 @@ function startTimer(roomCode) {
       }
     }, 1000);
   } else {
-    io.to(roomCode).emit("timerUpdate", { timeLeft: room.timeLeft });
+    // CORREÇÃO: Enviamos o roomCode para o cliente filtrar
+    io.to(roomCode).emit("timerUpdate", {
+      timeLeft: room.timeLeft,
+      roomCode: roomCode,
+    });
 
     room.timerInterval = setInterval(() => {
       if (!gameRooms[roomCode]) {
@@ -58,7 +64,11 @@ function startTimer(roomCode) {
         return;
       }
       room.timeLeft--;
-      io.to(roomCode).emit("timerUpdate", { timeLeft: room.timeLeft });
+      // CORREÇÃO: Enviamos o roomCode para o cliente filtrar
+      io.to(roomCode).emit("timerUpdate", {
+        timeLeft: room.timeLeft,
+        roomCode: roomCode,
+      });
       if (room.timeLeft <= 0) {
         clearInterval(room.timerInterval);
         const loserColor = room.game.currentPlayer;
@@ -78,7 +88,11 @@ function resetTimer(roomCode) {
       startTimer(roomCode);
     } else {
       room.timeLeft = room.timerDuration;
-      io.to(roomCode).emit("timerUpdate", { timeLeft: room.timeLeft });
+      // CORREÇÃO: Enviamos o roomCode para o cliente filtrar
+      io.to(roomCode).emit("timerUpdate", {
+        timeLeft: room.timeLeft,
+        roomCode: roomCode,
+      });
       startTimer(roomCode);
     }
   }

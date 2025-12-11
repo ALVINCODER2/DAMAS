@@ -509,6 +509,34 @@ document.addEventListener("DOMContentLoaded", () => {
     UI.clearHighlights();
     pieceElement.classList.add("selected");
     selectedPiece = { element: pieceElement, row, col };
+
+    // ### LÓGICA DE CAPTURA AUTOMÁTICA (AUTO-CAPTURE) ###
+    if (window.gameLogic && window.gameLogic.getUniqueCaptureMove) {
+      const tempGame = {
+        boardState: boardState,
+        boardSize: currentBoardSize,
+        currentPlayer: myColor,
+        mustCaptureWith: null,
+      };
+
+      const uniqueMove = window.gameLogic.getUniqueCaptureMove(
+        row,
+        col,
+        tempGame
+      );
+
+      if (uniqueMove) {
+        socket.emit("playerMove", {
+          from: { row, col },
+          to: uniqueMove.to,
+          room: currentRoom,
+        });
+        UI.clearHighlights();
+        selectedPiece = null;
+        return;
+      }
+    }
+
     socket.emit("getValidMoves", { row, col, roomCode: currentRoom });
   }
 
@@ -528,22 +556,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (currentUser) socket.emit("enterLobby");
   }
 
-  // ### LÓGICA DE ATUALIZAÇÃO DO JOGO (COM ANIMAÇÃO) ###
   async function processGameUpdate(gameState, suppressSound = false) {
     if (!gameState || !gameState.boardState) return;
     lastPacketTime = Date.now();
 
-    // 1. Verificar se houve um movimento válido para animar
     if (gameState.lastMove && !suppressSound && !isSpectator) {
-      // Tenta animar
       await UI.animatePieceMove(
         gameState.lastMove.from,
         gameState.lastMove.to,
         gameState.boardSize
       );
-    }
-    // Se for espectador, também anima (opcional, mas bom pra fluidez)
-    else if (gameState.lastMove && isSpectator) {
+    } else if (gameState.lastMove && isSpectator) {
       await UI.animatePieceMove(
         gameState.lastMove.from,
         gameState.lastMove.to,
@@ -551,7 +574,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
 
-    // 2. Tocar sons (lógica anterior)
     let oldPieceCount = 0;
     boardState.forEach((r) =>
       r.forEach((p) => {
@@ -571,9 +593,8 @@ document.addEventListener("DOMContentLoaded", () => {
       else UI.playAudio("move");
     }
 
-    // 3. Atualizar Estado Lógico e Renderizar Final
     boardState = gameState.boardState;
-    UI.renderPieces(boardState, gameState.boardSize); // Agora usa diffing, não pisca
+    UI.renderPieces(boardState, gameState.boardSize);
 
     if (UI.elements.turnDisplay)
       UI.elements.turnDisplay.textContent =
@@ -699,7 +720,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // CORREÇÃO: Filtrar atualizações de timer de outras salas
   socket.on("timerUpdate", (data) => {
+    if (data.roomCode && currentRoom && data.roomCode !== currentRoom) return;
     lastPacketTime = Date.now();
     startWatchdog();
     UI.updateTimer(data);
