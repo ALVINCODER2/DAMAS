@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
 
-  <!-- CORREÇÃO: Caminhos apontando para a pasta css/ -->
+  <!-- Importando os 3 arquivos CSS -->
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/game.css" />
   <link rel="stylesheet" href="css/tournament.css" />
@@ -140,6 +140,11 @@
 <body>
   <div id="main-container">
     <div id="auth-container">
+      <!-- BOTÃO DE TUTORIAL (NOVO) -->
+      <button id="tutorial-btn" style="background-color: #8e44ad; margin-bottom: 15px;">
+        ℹ️ Como Funciona
+      </button>
+
       <form id="login-form">
         <h2>LOGIN</h2>
         <input type="email" id="login-email" placeholder="Email" required />
@@ -181,6 +186,67 @@
         <li>O ganho acontece quando se captura todas as peças do adversário ou quando o seu oponente não tem onde mexer.
         </li>
       </ul>
+    </div>
+  </div>
+
+  <!-- MODAL DE TUTORIAL GERAL (NOVO) -->
+  <div id="general-tutorial-overlay" class="hidden" style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      z-index: 2000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(8px);
+      padding: 20px;
+    ">
+    <div class="modal-box" style="max-width: 600px; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <h2
+        style="color: #f1c40f; text-align: center; margin-bottom: 20px; border-bottom: 2px solid #f1c40f; padding-bottom: 10px;">
+        📖 Como Funciona o Site
+      </h2>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #2ecc71;">🎮 1. Partidas Valendo Dinheiro</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          Você pode criar ou entrar em salas de aposta. O vencedor leva o valor apostado pelo oponente (menos uma
+          pequena taxa da banca, se houver).
+          <br><strong>Modos:</strong> Clássico, Tablita (Sorteio de Abertura) e Internacional (10x10).
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #f39c12;">🏆 2. Torneio Diário</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          Todos os dias às <strong>19:00</strong>. Inscrição barata e prêmios divididos entre Campeão (50%) e Vice
+          (30%). É mata-mata: perdeu, saiu!
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #3498db;">💰 3. Depósitos e Saques (PIX)</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          <strong>Depósito:</strong> Automático via PIX QR Code. O saldo cai na hora!<br>
+          <strong>Saque:</strong> Solicite a retirada para sua chave PIX. Mínimo de R$ 30,00 (taxa de 30% aplicada no
+          saque).
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #9b59b6;">💸 4. Ganhe Indicando Amigos</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          Envie seu link de indicação. Se seu amigo se cadastrar e fizer um primeiro depósito de pelo menos R$ 5,00,
+          você ganha <strong>R$ 1,00</strong> de bônus automaticamente!
+        </p>
+      </div>
+
+      <div style="text-align: center; margin-top: 25px;">
+        <button id="close-tutorial-btn" style="background-color: #e74c3c; width: 50%;">Fechar Tutorial</button>
+      </div>
     </div>
   </div>
 
@@ -608,6 +674,30 @@
         body.style.display = "block";
       }
     }
+
+    // --- SCRIPT PARA O MODAL DE TUTORIAL ---
+    document.addEventListener("DOMContentLoaded", () => {
+      const tutorialBtn = document.getElementById("tutorial-btn");
+      const tutorialOverlay = document.getElementById("general-tutorial-overlay");
+      const closeTutorialBtn = document.getElementById("close-tutorial-btn");
+
+      if (tutorialBtn && tutorialOverlay && closeTutorialBtn) {
+        tutorialBtn.addEventListener("click", () => {
+          tutorialOverlay.classList.remove("hidden");
+        });
+
+        closeTutorialBtn.addEventListener("click", () => {
+          tutorialOverlay.classList.add("hidden");
+        });
+
+        // Fechar ao clicar fora
+        tutorialOverlay.addEventListener("click", (e) => {
+          if (e.target === tutorialOverlay) {
+            tutorialOverlay.classList.add("hidden");
+          }
+        });
+      }
+    });
   </script>
 
   <script src="/socket.io/socket.io.js"></script>

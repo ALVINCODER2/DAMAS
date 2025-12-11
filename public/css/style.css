@@ -52,6 +52,26 @@ body {
   color: #ffffff;
 }
 
+/* Botão de Tutorial */
+#tutorial-btn {
+  background-color: #8e44ad;
+  color: white;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s;
+  width: 100%;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+#tutorial-btn:hover {
+  background-color: #9b59b6;
+  transform: translateY(-2px);
+}
+
 #auth-container form {
   display: flex;
   flex-direction: column;
@@ -78,7 +98,7 @@ body {
   border-color: #e85d40;
 }
 
-#auth-container button {
+#auth-container button[type="submit"] {
   background-color: #e85d40;
   color: white;
   padding: 14px;
@@ -90,7 +110,7 @@ body {
   transition: background-color 0.3s, transform 0.2s;
 }
 
-#auth-container button:hover {
+#auth-container button[type="submit"]:hover {
   background-color: #d74c30;
   transform: translateY(-2px);
 }
@@ -303,7 +323,8 @@ body {
 #pix-overlay,
 #withdraw-overlay,
 #referrals-overlay,
-#history-overlay {
+#history-overlay,
+#general-tutorial-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -398,14 +419,16 @@ body {
 #close-pix-overlay-btn,
 #close-withdraw-overlay-btn,
 #close-referrals-overlay-btn,
-#close-history-overlay-btn {
+#close-history-overlay-btn,
+#close-tutorial-btn {
   background-color: #95a5a6;
   margin-top: 15px;
 }
 #close-pix-overlay-btn:hover,
 #close-withdraw-overlay-btn:hover,
 #close-referrals-overlay-btn:hover,
-#close-history-overlay-btn:hover {
+#close-history-overlay-btn:hover,
+#close-tutorial-btn:hover {
   background-color: #7f8c8d;
 }
 
