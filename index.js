@@ -246,6 +246,7 @@ app.post("/api/payment/create_preference", async (req, res) => {
       return res.status(400).json({ message: "Valor mínimo de R$ 1,00" });
 
     // ### REAJUSTE DE TAXA: Adiciona 1% ao valor total ###
+    // O valor pago cobrirá a taxa de ~0.99% do PIX
     const amountWithFee = amountNum * 1.01;
     // Arredonda para 2 casas decimais
     const finalAmountToPay = Math.round(amountWithFee * 100) / 100;
@@ -256,12 +257,12 @@ app.post("/api/payment/create_preference", async (req, res) => {
     const notificationUrl = `${protocol}://${host}/api/payment/webhook`;
     const backUrl = `${protocol}://${host}/`;
 
-    // ### ALTERAÇÃO AQUI: EXCLUINDO CARTÕES E BOLETO, DEIXANDO SÓ PIX ###
+    // ### ALTERAÇÃO AQUI: EXCLUINDO TUDO MENOS PIX ###
     const result = await preference.create({
       body: {
         items: [
           {
-            title: `Créditos Damas (${amountNum.toFixed(2)}) + Taxa`,
+            title: `Créditos Damas (${amountNum.toFixed(2)}) + Taxa PIX`,
             quantity: 1,
             unit_price: finalAmountToPay, // Cobra o valor com taxa
             currency_id: "BRL",
@@ -273,6 +274,8 @@ app.post("/api/payment/create_preference", async (req, res) => {
             { id: "credit_card" }, // Cartão de Crédito
             { id: "debit_card" }, // Cartão de Débito
             { id: "account_money" }, // ### NOVO: Bloqueia pagamento com Saldo MP ###
+            { id: "digital_currency" }, // Criptomoedas
+            { id: "digital_wallet" }, // Carteiras digitais
           ],
           installments: 1,
         },
@@ -323,10 +326,9 @@ app.post("/api/payment/webhook", async (req, res) => {
           }
         } catch (e) {
           // Se falhar o parse, assume formato antigo (apenas email)
-          // Nesse caso, o valor creditado será o valor PAGO (sem desconto de taxa na lógica legada)
-          // ou podemos aplicar a lógica reversa se quisermos forçar a taxa em tudo.
-          // Para segurança, vamos assumir que se não tem JSON, é o valor pago total.
           userEmail = payment.external_reference;
+          // Se for formato antigo, usamos o valor total pago como crédito
+          // (ou poderíamos descontar a taxa manualmente aqui, mas é mais seguro dar o crédito full)
           creditsToAdd = payment.transaction_amount;
         }
 
