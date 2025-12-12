@@ -259,6 +259,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- LISTENERS DE SOCKET DO JOGO ---
 
+  // ### CORREÇÃO: Listener para movimentos inválidos ###
+  socket.on("invalidMove", (data) => {
+    // Vibra o celular para dar feedback tátil de erro
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate([100, 50, 100]);
+      } catch (e) {}
+    }
+
+    // Exibe o motivo do erro na área de status do jogo
+    const gs = UI.elements.gameStatus;
+    const originalText = gs.innerHTML;
+    
+    gs.innerHTML = `<span style="color: #e74c3c; font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 4px;">❌ ${data.message}</span>`;
+    
+    // Restaura o texto original após 4 segundos
+    setTimeout(() => {
+      if (gs.innerHTML.includes("❌")) {
+        gs.innerHTML = originalText;
+      }
+    }, 4000);
+  });
+
   socket.on("connect", () => {
     if (window.currentUser) socket.emit("enterLobby", window.currentUser);
     const savedRoom = localStorage.getItem("checkersCurrentRoom");
