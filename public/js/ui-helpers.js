@@ -1,7 +1,8 @@
-// ui-helpers.js (COM RENDERIZAÇÃO INTELIGENTE E ANIMAÇÃO CORRIGIDA)
+// ui-helpers.js (OTIMIZADO PARA PERFORMANCE EM CELULARES)
 
 window.UI = {
   elements: {},
+  squaresCache: [], // Cache para armazenar referências das casas (Performance boost)
 
   init: function () {
     this.elements = {
@@ -46,13 +47,12 @@ window.UI = {
     };
   },
 
-  // --- ANIMAÇÃO DE MOVIMENTO (CORRIGIDA) ---
+  // --- ANIMAÇÃO DE MOVIMENTO (OTIMIZADA COM CACHE) ---
 
   animatePieceMove: function (from, to, boardSize) {
     return new Promise((resolve) => {
-      const square = document.querySelector(
-        `.square[data-row='${from.row}'][data-col='${from.col}']`
-      );
+      // Usa o cache em vez de querySelector (MUITO mais rápido)
+      const square = this.getSquare(from.row, from.col);
       if (!square) {
         resolve();
         return;
@@ -65,9 +65,8 @@ window.UI = {
       }
 
       const fromRect = square.getBoundingClientRect();
-      const toSquare = document.querySelector(
-        `.square[data-row='${to.row}'][data-col='${to.col}']`
-      );
+
+      const toSquare = this.getSquare(to.row, to.col);
       if (!toSquare) {
         resolve();
         return;
@@ -79,33 +78,56 @@ window.UI = {
 
       const isFlipped = this.elements.board.classList.contains("board-flipped");
 
-      piece.style.transition = "transform 0.2s ease-in-out";
-      piece.style.zIndex = 100;
+      // Usando requestAnimationFrame para garantir suavidade
+      requestAnimationFrame(() => {
+        piece.style.transition =
+          "transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)"; // Curva mais suave
+        piece.style.zIndex = 100;
 
-      if (isFlipped) {
-        piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
-      } else {
-        piece.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-      }
+        // Otimização de Hardware
+        piece.style.willChange = "transform";
 
-      setTimeout(() => {
-        resolve();
-      }, 200);
+        if (isFlipped) {
+          piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
+        } else {
+          piece.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+        }
+
+        // Limpeza após a animação
+        setTimeout(() => {
+          piece.style.willChange = "auto";
+          resolve();
+        }, 200);
+      });
     });
   },
 
-  // --- RENDERIZAÇÃO INTELIGENTE ---
+  // --- RENDERIZAÇÃO INTELIGENTE (OTIMIZADA COM CACHE) ---
+
+  // Helper para pegar quadrado do cache
+  getSquare: function (row, col) {
+    if (this.squaresCache[row] && this.squaresCache[row][col]) {
+      return this.squaresCache[row][col];
+    }
+    // Fallback caso o cache falhe (segurança)
+    return document.querySelector(
+      `.square[data-row='${row}'][data-col='${col}']`
+    );
+  },
 
   renderPieces: function (boardState, boardSize) {
+    // Fragmento de documento não é necessário aqui pois já temos as referências,
+    // mas evitamos leituras de layout desnecessárias.
+
     for (let row = 0; row < boardSize; row++) {
       for (let col = 0; col < boardSize; col++) {
-        const square = document.querySelector(
-          `.square[data-row='${row}'][data-col='${col}']`
-        );
+        // Acesso direto ao elemento via memória (O(1)) em vez de busca no DOM (O(N))
+        const square = this.getSquare(row, col);
         if (!square) continue;
 
         const pieceType = boardState[row][col];
-        const existingPiece = square.querySelector(".piece");
+        // Otimização: verificamos firstChild em vez de querySelector
+        const existingPiece = square.firstElementChild;
 
         if (pieceType !== 0) {
           const isBlack = pieceType.toString().toLowerCase() === "p";
@@ -113,12 +135,19 @@ window.UI = {
           const classColor = isBlack ? "black-piece" : "white-piece";
 
           if (existingPiece) {
+            // Só altera classes se necessário para evitar reflow
             if (!existingPiece.classList.contains(classColor)) {
               existingPiece.className = `piece ${classColor}`;
             }
-            if (isKing && !existingPiece.classList.contains("king")) {
+            // Verifica se estado de dama mudou
+            const hasKingClass = existingPiece.classList.contains("king");
+            if (isKing && !hasKingClass) {
               existingPiece.classList.add("king");
+            } else if (!isKing && hasKingClass) {
+              existingPiece.classList.remove("king");
             }
+
+            // Reseta estilos inline da animação
             existingPiece.style.transform = "";
             existingPiece.style.transition = "";
             existingPiece.style.zIndex = "";
@@ -140,6 +169,10 @@ window.UI = {
   createBoard: function (boardSize, clickHandler) {
     const board = this.elements.board;
     board.innerHTML = "";
+
+    // REINICIA O CACHE
+    this.squaresCache = [];
+
     let squareSizeCSS;
 
     // DETECÇÃO DE DISPOSITIVO (MOBILE VS DESKTOP)
@@ -147,20 +180,14 @@ window.UI = {
 
     if (boardSize === 10) {
       if (isMobile) {
-        // Mobile: Mantém layout compacto
         squareSizeCSS = "min(36px, 9vw)";
       } else {
-        // Desktop (Internacional 10x10): Aumenta o tamanho base para ficar mais visível
-        // Usa vmin para garantir que caiba na altura da tela sem scroll
         squareSizeCSS = "min(65px, 7.5vmin)";
       }
     } else {
       if (isMobile) {
-        // Mobile (Clássico 8x8)
         squareSizeCSS = "min(45px, 11vw)";
       } else {
-        // Desktop (Clássico 8x8): Aumenta bastante (de 60px para 80px)
-        // Usa vmin para responsividade vertical
         squareSizeCSS = "min(80px, 10vmin)";
       }
     }
@@ -168,18 +195,30 @@ window.UI = {
     board.style.gridTemplateColumns = `repeat(${boardSize}, ${squareSizeCSS})`;
     board.style.gridTemplateRows = `repeat(${boardSize}, ${squareSizeCSS})`;
 
+    // Usando DocumentFragment para inserir tudo de uma vez no DOM (menos reflow)
+    const fragment = document.createDocumentFragment();
+
     for (let row = 0; row < boardSize; row++) {
+      this.squaresCache[row] = []; // Inicializa linha do cache
       for (let col = 0; col < boardSize; col++) {
         const square = document.createElement("div");
         square.classList.add(
           "square",
           (row + col) % 2 === 1 ? "dark" : "light"
         );
+        // Dataset ainda é útil para o click handler
         square.dataset.row = row;
         square.dataset.col = col;
-        board.appendChild(square);
+
+        // SALVA NO CACHE
+        this.squaresCache[row][col] = square;
+
+        fragment.appendChild(square);
       }
     }
+
+    board.appendChild(fragment); // Inserção única
+
     board.removeEventListener("click", clickHandler);
     board.addEventListener("click", clickHandler);
   },
@@ -230,7 +269,6 @@ window.UI = {
 
       const creatorName = room.creatorEmail.split("@")[0];
 
-      // REMOVIDO: Lógica de Avatar na lista de salas
       card.innerHTML = `
             <div class="room-card-info">
                 <p><strong>Criador:</strong> ${creatorName}</p>
@@ -326,12 +364,10 @@ window.UI = {
       .querySelectorAll(".last-move")
       .forEach((el) => el.classList.remove("last-move"));
     if (lastMove) {
-      const fromSq = document.querySelector(
-        `.square[data-row='${lastMove.from.row}'][data-col='${lastMove.from.col}']`
-      );
-      const toSq = document.querySelector(
-        `.square[data-row='${lastMove.to.row}'][data-col='${lastMove.to.col}']`
-      );
+      // Usa o cache se disponível
+      const fromSq = this.getSquare(lastMove.from.row, lastMove.from.col);
+      const toSq = this.getSquare(lastMove.to.row, lastMove.to.col);
+
       if (fromSq) fromSq.classList.add("last-move");
       if (toSq) toSq.classList.add("last-move");
     }
@@ -343,11 +379,10 @@ window.UI = {
       .forEach((p) => p.classList.remove("mandatory-capture"));
     if (piecesToHighlight && piecesToHighlight.length > 0) {
       piecesToHighlight.forEach((pos) => {
-        const square = document.querySelector(
-          `.square[data-row='${pos.row}'][data-col='${pos.col}']`
-        );
-        if (square && square.firstChild) {
-          square.firstChild.classList.add("mandatory-capture");
+        const square = this.getSquare(pos.row, pos.col);
+        // Verifica firstElementChild para performance
+        if (square && square.firstElementChild) {
+          square.firstElementChild.classList.add("mandatory-capture");
         }
       });
     }
@@ -355,9 +390,7 @@ window.UI = {
 
   highlightValidMoves: function (moves) {
     moves.forEach((move) => {
-      const square = document.querySelector(
-        `.square[data-row='${move.row}'][data-col='${move.col}']`
-      );
+      const square = this.getSquare(move.row, move.col);
       if (square) {
         square.classList.add("valid-move-highlight");
       }
@@ -389,11 +422,10 @@ window.UI = {
 
     if (sound) {
       sound.currentTime = 0;
-      sound.play().catch((e) => console.log("Áudio bloqueado:", e));
+      sound.play().catch((e) => {}); // Silencia erros de autoplay
     }
   },
 
-  // --- ATUALIZADO: Removemos Avatares do HUD para manter estilo clássico ---
   updatePlayerNames: function (users) {
     if (!users) return;
     const whiteName =
@@ -406,7 +438,6 @@ window.UI = {
     if (this.elements.blackPlayerName)
       this.elements.blackPlayerName.textContent = blackName;
 
-    // REMOVIDO: Lógica de atualização de avatar no jogo para limpar o layout
     if (this.elements.whitePlayerAvatar) {
       this.elements.whitePlayerAvatar.classList.add("hidden");
     }
@@ -479,6 +510,9 @@ window.UI = {
     this.elements.board.classList.remove("board-flipped");
     this.elements.board.innerHTML = "";
     this.elements.playersHud.classList.add("hidden");
+
+    // Limpa o cache ao sair
+    this.squaresCache = [];
 
     this.resetLobbyUI();
   },
