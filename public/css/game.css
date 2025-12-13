@@ -49,8 +49,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  /* Otimização de renderização de célula */
-  contain: strict;
+  /* REMOVIDO contain: strict para evitar cortar a peça durante o movimento */
 }
 
 .dark {
@@ -60,8 +59,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  /* Otimização de renderização de célula */
-  contain: strict;
+  /* REMOVIDO contain: strict para evitar cortar a peça durante o movimento */
 }
 
 /* --- PEÇAS --- */
@@ -83,7 +81,7 @@
   /* Força a peça a ter sua própria camada na GPU */
   transform: translateZ(0);
   will-change: transform; /* Avisa o navegador que isso vai mexer */
-  contain: layout style paint; /* Isola a peça */
+  contain: layout style; /* Removido 'paint' para não cortar a sombra da peça */
 }
 
 .piece:hover {

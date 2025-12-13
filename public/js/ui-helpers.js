@@ -1,4 +1,4 @@
-// ui-helpers.js (OTIMIZADO PARA PERFORMANCE MOBILE)
+// ui-helpers.js (OTIMIZADO EXTREMO PARA FLUIDEZ MOBILE)
 
 window.UI = {
   elements: {},
@@ -47,12 +47,13 @@ window.UI = {
     };
   },
 
-  // --- ANIMAÇÃO DE MOVIMENTO OTIMIZADA ---
+  // --- ANIMAÇÃO DE MOVIMENTO SINCRONIZADA (RequestAnimationFrame) ---
 
   animatePieceMove: function (from, to, boardSize) {
     return new Promise((resolve) => {
-      // Usa o cache em vez de querySelector (muito mais rápido)
-      const square = this.boardCache[from.row] && this.boardCache[from.row][from.col];
+      // Usa o cache em vez de querySelector
+      const square =
+        this.boardCache[from.row] && this.boardCache[from.row][from.col];
       if (!square) {
         resolve();
         return;
@@ -65,8 +66,9 @@ window.UI = {
       }
 
       const fromRect = square.getBoundingClientRect();
-      
-      const toSquare = this.boardCache[to.row] && this.boardCache[to.row][to.col];
+
+      const toSquare =
+        this.boardCache[to.row] && this.boardCache[to.row][to.col];
       if (!toSquare) {
         resolve();
         return;
@@ -78,84 +80,93 @@ window.UI = {
 
       const isFlipped = this.elements.board.classList.contains("board-flipped");
 
-      // Otimização de GPU
-      piece.style.willChange = "transform"; 
-      piece.style.transition = "transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)";
+      // Otimização: Preparar a GPU antes do frame de animação
+      piece.style.willChange = "transform";
       piece.style.zIndex = 100;
 
-      if (isFlipped) {
-        piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
-      } else {
-        piece.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-      }
+      // Usa requestAnimationFrame para garantir que a animação comece no momento certo do refresh da tela
+      requestAnimationFrame(() => {
+        piece.style.transition = "transform 0.15s linear"; // Linear é mais fácil de calcular para CPUs fracas
 
-      setTimeout(() => {
-        piece.style.willChange = "auto"; // Libera memória da GPU
-        resolve();
-      }, 200);
+        if (isFlipped) {
+          piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
+        } else {
+          piece.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+        }
+
+        // Limpeza após animação
+        setTimeout(() => {
+          // Removemos will-change para liberar memória da GPU
+          piece.style.willChange = "auto";
+          piece.style.zIndex = "";
+          resolve();
+        }, 160); // Um pouco mais que 0.15s para segurança
+      });
     });
   },
 
-  // --- RENDERIZAÇÃO INTELIGENTE COM CACHE ---
+  // --- RENDERIZAÇÃO INTELIGENTE ---
 
   renderPieces: function (boardState, boardSize) {
-    for (let row = 0; row < boardSize; row++) {
-      for (let col = 0; col < boardSize; col++) {
-        // ACESSO DIRETO VIA CACHE (O(1)) - Elimina gargalo de performance
-        const square = this.boardCache[row] && this.boardCache[row][col];
-        if (!square) continue;
+    // requestAnimationFrame agrupa as operações DOM para o próximo paint
+    requestAnimationFrame(() => {
+      for (let row = 0; row < boardSize; row++) {
+        for (let col = 0; col < boardSize; col++) {
+          const square = this.boardCache[row] && this.boardCache[row][col];
+          if (!square) continue;
 
-        const pieceType = boardState[row][col];
-        // Verifica apenas o primeiro filho para evitar querySelector desnecessário
-        const existingPiece = square.firstElementChild && square.firstElementChild.classList.contains('piece') 
-          ? square.firstElementChild 
-          : null;
+          const pieceType = boardState[row][col];
+          const existingPiece =
+            square.firstElementChild &&
+            square.firstElementChild.classList.contains("piece")
+              ? square.firstElementChild
+              : null;
 
-        if (pieceType !== 0) {
-          const isBlack = pieceType.toString().toLowerCase() === "p";
-          const isKing = pieceType === "P" || pieceType === "B";
-          const classColor = isBlack ? "black-piece" : "white-piece";
+          if (pieceType !== 0) {
+            const isBlack = pieceType.toString().toLowerCase() === "p";
+            const isKing = pieceType === "P" || pieceType === "B";
+            const classColor = isBlack ? "black-piece" : "white-piece";
 
-          // Diffing simples: só recria se mudar algo crítico ou não existir
-          if (existingPiece) {
-            // Se já existe, apenas atualiza classes se necessário (mais leve que recriar DOM)
-            const currentClass = isBlack ? "black-piece" : "white-piece";
-            if (!existingPiece.classList.contains(currentClass)) {
-              existingPiece.className = `piece ${classColor}`;
-            }
-            
-            if (isKing) {
-               if (!existingPiece.classList.contains("king")) existingPiece.classList.add("king");
+            if (existingPiece) {
+              // Update leve
+              const currentClass = isBlack ? "black-piece" : "white-piece";
+              if (!existingPiece.classList.contains(currentClass)) {
+                existingPiece.className = `piece ${classColor}`;
+              }
+
+              if (isKing) {
+                if (!existingPiece.classList.contains("king"))
+                  existingPiece.classList.add("king");
+              } else {
+                if (existingPiece.classList.contains("king"))
+                  existingPiece.classList.remove("king");
+              }
+
+              // Reseta transformações da animação anterior
+              existingPiece.style.transform = "";
+              existingPiece.style.transition = "";
             } else {
-               if (existingPiece.classList.contains("king")) existingPiece.classList.remove("king");
+              // Criação nova (fragmento para evitar reflow? Não, aqui é um por um, mas o RAF ajuda)
+              const piece = document.createElement("div");
+              piece.className = `piece ${classColor}`;
+              if (isKing) piece.classList.add("king");
+              square.appendChild(piece);
             }
-
-            // Reseta estilos inline de animação anterior
-            existingPiece.style.transform = "";
-            existingPiece.style.transition = "";
-            existingPiece.style.zIndex = "";
           } else {
-            // Cria nova peça
-            const piece = document.createElement("div");
-            piece.className = `piece ${classColor}`;
-            if (isKing) piece.classList.add("king");
-            square.appendChild(piece);
-          }
-        } else {
-          // Remove peça se não deve ter nada
-          if (existingPiece) {
-            existingPiece.remove();
+            if (existingPiece) {
+              existingPiece.remove();
+            }
           }
         }
       }
-    }
+    });
   },
 
   createBoard: function (boardSize, clickHandler) {
     const board = this.elements.board;
+    // Otimização: remove innerHTML pesado se possível, mas aqui é reset
     board.innerHTML = "";
-    
-    // Reinicia o cache
+
     this.boardCache = [];
 
     let squareSizeCSS;
@@ -170,8 +181,11 @@ window.UI = {
     board.style.gridTemplateColumns = `repeat(${boardSize}, ${squareSizeCSS})`;
     board.style.gridTemplateRows = `repeat(${boardSize}, ${squareSizeCSS})`;
 
+    // Usa DocumentFragment para inserir tudo de uma vez no DOM (apenas 1 Reflow)
+    const fragment = document.createDocumentFragment();
+
     for (let row = 0; row < boardSize; row++) {
-      this.boardCache[row] = []; // Inicializa linha do cache
+      this.boardCache[row] = [];
       for (let col = 0; col < boardSize; col++) {
         const square = document.createElement("div");
         square.classList.add(
@@ -180,12 +194,17 @@ window.UI = {
         );
         square.dataset.row = row;
         square.dataset.col = col;
-        board.appendChild(square);
-        
-        // SALVA NO CACHE
+
+        // Armazena no fragmento, não no board diretamente ainda
+        fragment.appendChild(square);
+
+        // Cache (referência válida mesmo no fragmento)
         this.boardCache[row][col] = square;
       }
     }
+
+    board.appendChild(fragment); // Apenas 1 inserção no DOM real
+
     board.removeEventListener("click", clickHandler);
     board.addEventListener("click", clickHandler);
   },
@@ -330,12 +349,11 @@ window.UI = {
     document
       .querySelectorAll(".last-move")
       .forEach((el) => el.classList.remove("last-move"));
-    
+
     if (lastMove) {
-      // Otimização: Tenta usar o cache se possível, senão fallback
       const fromSq = this.boardCache[lastMove.from.row]?.[lastMove.from.col];
       const toSq = this.boardCache[lastMove.to.row]?.[lastMove.to.col];
-      
+
       if (fromSq) fromSq.classList.add("last-move");
       if (toSq) toSq.classList.add("last-move");
     }
@@ -345,7 +363,7 @@ window.UI = {
     document
       .querySelectorAll(".mandatory-capture")
       .forEach((p) => p.classList.remove("mandatory-capture"));
-      
+
     if (piecesToHighlight && piecesToHighlight.length > 0) {
       piecesToHighlight.forEach((pos) => {
         const square = this.boardCache[pos.row]?.[pos.col];
@@ -357,11 +375,14 @@ window.UI = {
   },
 
   highlightValidMoves: function (moves) {
-    moves.forEach((move) => {
-      const square = this.boardCache[move.row]?.[move.col];
-      if (square) {
-        square.classList.add("valid-move-highlight");
-      }
+    // requestAnimationFrame aqui evita travar o UI se houver muitos movimentos
+    requestAnimationFrame(() => {
+      moves.forEach((move) => {
+        const square = this.boardCache[move.row]?.[move.col];
+        if (square) {
+          square.classList.add("valid-move-highlight");
+        }
+      });
     });
   },
 
@@ -383,6 +404,7 @@ window.UI = {
   },
 
   playAudio: function (type) {
+    // Otimização de áudio: Não espera promessa e trata erro silenciosamente
     let sound;
     if (type === "capture") sound = this.elements.captureSound;
     else if (type === "join") sound = this.elements.joinSound;
@@ -390,7 +412,8 @@ window.UI = {
 
     if (sound) {
       sound.currentTime = 0;
-      sound.play().catch((e) => console.log("Áudio bloqueado:", e));
+      // .catch() vazio para evitar erros no console se o usuário não interagiu ainda
+      sound.play().catch(() => {});
     }
   },
 
