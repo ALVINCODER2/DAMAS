@@ -147,6 +147,8 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       winner: winnerColor,
       reason: `Torneio: ${reason} Vencedor avança!`,
       isTournament: true,
+      moveHistory: room.game.moveHistory, // Envia histórico
+      initialBoardState: room.game.initialBoardState, // Envia estado inicial
     });
 
     // Chama o gerenciador de torneio
@@ -176,7 +178,11 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           { email: room.players[1].user.email },
           { $inc: { saldo: room.bet } }
         );
-        io.to(room.roomCode).emit("gameDraw", { reason });
+        io.to(room.roomCode).emit("gameDraw", {
+          reason,
+          moveHistory: room.game.moveHistory, // Envia histórico
+          initialBoardState: room.game.initialBoardState, // Envia estado inicial
+        });
 
         await saveMatchHistory(room, null, reason);
       } catch (err) {
@@ -199,6 +205,8 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           io.to(room.roomCode).emit("gameOver", {
             winner: winnerColor,
             reason,
+            moveHistory: room.game.moveHistory, // Envia histórico
+            initialBoardState: room.game.initialBoardState, // Envia estado inicial
           });
           const winnerSocket = io.sockets.sockets.get(winnerData.socketId);
           if (winnerSocket && updatedWinner) {
@@ -256,6 +264,8 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         io.to(room.roomCode).emit("gameOver", {
           winner: winnerColorFinal,
           reason: finalReason,
+          moveHistory: room.game.moveHistory, // Envia histórico
+          initialBoardState: room.game.initialBoardState, // Envia estado inicial
         });
         const winnerSocket = io.sockets.sockets.get(finalWinnerData.socketId);
         if (winnerSocket && updatedWinner) {
@@ -281,6 +291,8 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
 
         io.to(room.roomCode).emit("gameDraw", {
           reason: finalReason,
+          moveHistory: room.game.moveHistory, // Envia histórico
+          initialBoardState: room.game.initialBoardState, // Envia estado inicial
         });
 
         await saveMatchHistory(room, null, finalReason);

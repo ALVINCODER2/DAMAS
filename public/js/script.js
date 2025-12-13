@@ -21,6 +21,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastPacketTime = Date.now();
   let watchdogInterval = null;
 
+  // --- VARIÁVEIS PARA REPLAY ---
+  let savedReplayData = null;
+  let isReplaying = false;
+
   // --- FILA DE ATUALIZAÇÕES (CORREÇÃO DE SYNC) ---
   // Impede que múltiplas capturas seguidas cheguem juntas e quebrem a animação
   let updateQueue = [];
@@ -85,6 +89,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("spectator-leave-btn")
     .addEventListener("click", () => {
+      if (isReplaying) {
+        // Se estiver no replay, este botão serve para sair dele
+        isReplaying = false; // Interrompe o loop
+        document.getElementById("game-over-overlay").classList.remove("hidden");
+        UI.elements.spectatorIndicator.classList.add("hidden");
+        UI.elements.spectatorLeaveBtn.classList.add("hidden");
+        // O restante é tratado no fim da função startReplay
+        return;
+      }
       socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
       returnToLobbyLogic();
     });
@@ -120,11 +133,70 @@ document.addEventListener("DOMContentLoaded", () => {
         socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
       returnToLobbyLogic();
     }
+    // ### LISTENER PARA BOTÃO DE REPLAY ###
+    if (e.target.classList.contains("replay-btn")) {
+      startReplay();
+    }
   });
+
+  // --- FUNÇÃO DE REPLAY ---
+  async function startReplay() {
+    if (
+      !savedReplayData ||
+      !savedReplayData.history ||
+      savedReplayData.history.length === 0
+    ) {
+      alert("Nenhum replay disponível.");
+      return;
+    }
+
+    isReplaying = true;
+    document.getElementById("game-over-overlay").classList.add("hidden");
+
+    // Configura UI para modo replay
+    UI.elements.gameStatus.innerHTML =
+      "<span style='color:#f1c40f'>REPLAY DA PARTIDA</span>";
+    // Mostra botão de sair para cancelar replay
+    UI.elements.spectatorLeaveBtn.classList.remove("hidden");
+    UI.elements.spectatorLeaveBtn.textContent = "Sair do Replay";
+    // Esconde indicador de turno normal
+    UI.updateTurnIndicator(false);
+
+    // Reseta o tabuleiro para o estado INICIAL
+    boardState = JSON.parse(JSON.stringify(savedReplayData.initialBoard));
+    const replayBoardSize = savedReplayData.boardSize || currentBoardSize;
+    UI.renderPieces(boardState, replayBoardSize);
+
+    // Loop de reprodução
+    for (const move of savedReplayData.history) {
+      if (!isReplaying) break; // Se usuário cancelou
+
+      // Pequena pausa antes do movimento
+      await new Promise((r) => setTimeout(r, 800));
+
+      if (!isReplaying) break;
+
+      // Animação
+      await UI.animatePieceMove(move.from, move.to, replayBoardSize);
+      UI.playAudio("move");
+
+      // Atualiza estado
+      boardState = move.boardState;
+      UI.renderPieces(boardState, replayBoardSize);
+    }
+
+    if (isReplaying) {
+      // Se terminou naturalmente
+      isReplaying = false;
+      alert("Replay finalizado.");
+      document.getElementById("game-over-overlay").classList.remove("hidden");
+      UI.elements.spectatorLeaveBtn.classList.add("hidden");
+    }
+  }
 
   // Interação com o Tabuleiro
   function handleBoardClick(e) {
-    if (window.isSpectator) return;
+    if (window.isSpectator || isReplaying) return; // Bloqueia cliques durante replay
     if (!myColor) return;
 
     // Se estiver processando animações de movimento do oponente, bloqueia clique
@@ -217,6 +289,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function returnToLobbyLogic() {
     isGameOver = false;
     window.isSpectator = false;
+    isReplaying = false;
+    savedReplayData = null;
     stopWatchdog();
     if (drawCooldownInterval) clearInterval(drawCooldownInterval);
     if (nextGameInterval) clearInterval(nextGameInterval);
@@ -458,6 +532,13 @@ document.addEventListener("DOMContentLoaded", () => {
     updateQueue = [];
     isProcessingQueue = false;
 
+    // Salva dados para REPLAY
+    savedReplayData = {
+      history: data.moveHistory,
+      initialBoard: data.initialBoardState,
+      boardSize: currentBoardSize,
+    };
+
     document.getElementById("connection-lost-overlay").classList.add("hidden");
     UI.resetEndGameUI();
     document.getElementById("game-over-overlay").classList.remove("hidden");
@@ -496,6 +577,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     updateQueue = [];
     isProcessingQueue = false;
+
+    // Salva dados para REPLAY
+    savedReplayData = {
+      history: data.moveHistory,
+      initialBoard: data.initialBoardState,
+      boardSize: currentBoardSize,
+    };
 
     document.getElementById("connection-lost-overlay").classList.add("hidden");
     UI.resetEndGameUI();

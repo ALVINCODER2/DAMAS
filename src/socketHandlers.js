@@ -188,6 +188,9 @@ async function startGameLogic(room) {
     openingName: openingName,
     mustCaptureWith: null,
     lastMove: null,
+    // ### NOVO: Histórico de jogadas para replay ###
+    moveHistory: [],
+    initialBoardState: JSON.parse(JSON.stringify(boardState)), // Salva estado inicial
   };
 
   if (!hasValidMoves(room.game.currentPlayer, room.game)) {
@@ -282,6 +285,14 @@ async function executeMove(roomCode, from, to, socketId) {
       game.movesSinceCapture = 0;
       game.damaMovesWithoutCaptureOrPawnMove = 0;
     }
+
+    // ### NOVO: Registrar Movimento no Histórico ###
+    game.moveHistory.push({
+      from,
+      to,
+      boardState: JSON.parse(JSON.stringify(game.boardState)), // Salva cópia do estado após o movimento
+      turn: playerColor,
+    });
 
     let whitePieces = 0;
     let whiteDames = 0;
