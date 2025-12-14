@@ -1,21 +1,19 @@
 // src/gameManager.js
 const User = require("../models/User");
 const MatchHistory = require("../models/MatchHistory");
-// ### ATUALIZADO: Caminho ajustado para a nova pasta 'js' ###
+// Certifique-se de que o caminho está correto conforme sua estrutura
 const { findBestCaptureMoves } = require("../public/js/gameLogic");
 
 let io;
 let gameRooms;
-// Injeta o tournamentManager depois (lazy load) para evitar ciclo, ou passamos via init
 let tournamentManager = null;
 
 function initializeManager(ioInstance, roomsInstance, tmInstance) {
   io = ioInstance;
   gameRooms = roomsInstance;
-  if (tmInstance) tournamentManager = tmInstance; // Passado opcionalmente
+  if (tmInstance) tournamentManager = tmInstance;
 }
 
-// Helper para setar o TM depois se necessário (circular dependency fix)
 function setTournamentManager(tm) {
   tournamentManager = tm;
 }
@@ -125,13 +123,18 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
   if (!room || room.isGameConcluded) {
     return;
   }
-  room.isGameConcluded = true;
+
+  // Em Tablita, só concluímos o jogo "oficialmente" no fim do Match (jogo 2)
+  // Se for jogo 1, apenas pausamos para o próximo.
+  // Marcamos isGameConcluded apenas se não for Tablita ou se for o fim do Match Tablita
+
   if (room.timerInterval) clearInterval(room.timerInterval);
   room.drawOfferBy = null;
   io.to(room.roomCode).emit("drawOfferCancelled");
 
   // ### LÓGICA DE TORNEIO ###
   if (room.isTournament) {
+    room.isGameConcluded = true; // Torneio encerra na hora
     const winnerSocketId =
       room.game.players[winnerColor === "b" ? "white" : "black"];
     const winnerData = room.players.find((p) => p.socketId === winnerSocketId);
@@ -147,11 +150,10 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       winner: winnerColor,
       reason: `Torneio: ${reason} Vencedor avança!`,
       isTournament: true,
-      moveHistory: room.game.moveHistory, // Envia histórico
-      initialBoardState: room.game.initialBoardState, // Envia estado inicial
+      moveHistory: room.game.moveHistory,
+      initialBoardState: room.game.initialBoardState,
     });
 
-    // Chama o gerenciador de torneio
     if (tournamentManager && winnerEmail) {
       await tournamentManager.handleTournamentGameEnd(
         winnerEmail,
@@ -162,13 +164,16 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
 
     room.cleanupTimeout = setTimeout(() => {
       if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
-    }, 10000); // Fecha sala rápido em torneio
+    }, 10000);
     return;
   }
   // ### FIM LÓGICA TORNEIO ###
 
+  // ### MODO CLÁSSICO / INTERNACIONAL (NÃO É TABLITA) ###
   if (!room.isTablita) {
+    room.isGameConcluded = true;
     if (!winnerColor) {
+      // Empate
       try {
         await User.findOneAndUpdate(
           { email: room.players[0].user.email },
@@ -189,6 +194,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         console.error("Erro ao processar empate clássico:", err);
       }
     } else {
+      // Vitória
       const winnerSocketId =
         room.game.players[winnerColor === "b" ? "white" : "black"];
       const winnerData = room.players.find(
@@ -225,7 +231,9 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
     return;
   }
 
-  // Lógica Tablita...
+  // ### MODO TABLITA (MATCH DE 2 JOGOS) ###
+
+  // Atualiza pontuação do jogo atual
   if (winnerColor) {
     const winnerSocketId =
       room.game.players[winnerColor === "b" ? "white" : "black"];
@@ -240,10 +248,16 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
   const p1Score = room.match.score[p1Email];
   const p2Score = room.match.score[p2Email];
 
+  // Verifica se o match acabou.
+  // Acaba se for o Jogo 2 (currentGame === 2)
+  // OU se alguém já fez 2 pontos (improvável no jogo 1 pois cada win vale 1, mas seguro checar).
   const matchOver =
-    room.match.currentGame === 2 || p1Score === 2 || p2Score === 2;
+    room.match.currentGame === 2 || p1Score >= 2 || p2Score >= 2;
 
   if (matchOver) {
+    // --- FIM DO MATCH (MOSTRAR REPLAY) ---
+    room.isGameConcluded = true;
+
     let finalWinnerData;
     if (p1Score > p2Score) finalWinnerData = room.match.player1;
     else if (p2Score > p1Score) finalWinnerData = room.match.player2;
@@ -257,15 +271,16 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           { new: true }
         );
         const winnerColorFinal =
-          room.game.users.white === finalWinnerData.email ? "b" : "p";
+          room.game.users.white === finalWinnerData.email ? "b" : "p"; // Cor do vencedor no ÚLTIMO jogo
 
         const finalReason = `Fim da partida! Placar: ${p1Score} a ${p2Score}. ${reason}`;
 
+        // EMITE O GAME OVER (COM O BOTÃO DE REPLAY E HISTÓRICO DA ÚLTIMA PARTIDA)
         io.to(room.roomCode).emit("gameOver", {
           winner: winnerColorFinal,
           reason: finalReason,
-          moveHistory: room.game.moveHistory, // Envia histórico
-          initialBoardState: room.game.initialBoardState, // Envia estado inicial
+          moveHistory: room.game.moveHistory, // Histórico do Jogo 2
+          initialBoardState: room.game.initialBoardState,
         });
         const winnerSocket = io.sockets.sockets.get(finalWinnerData.socketId);
         if (winnerSocket && updatedWinner) {
@@ -277,6 +292,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         console.error("Erro ao pagar prêmio Tablita:", err);
       }
     } else {
+      // Empate no placar geral (ex: 1 a 1 ou 0 a 0)
       try {
         await User.findOneAndUpdate(
           { email: p1Email },
@@ -287,12 +303,13 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           { $inc: { saldo: room.bet } }
         );
 
-        const finalReason = `Partida empatada! Placar final: ${p1Score} a ${p2Score}. ${reason}`;
+        const finalReason = `Match empatado! Placar final: ${p1Score} a ${p2Score}. ${reason}`;
 
+        // EMITE O GAME DRAW (COM O BOTÃO DE REPLAY)
         io.to(room.roomCode).emit("gameDraw", {
           reason: finalReason,
-          moveHistory: room.game.moveHistory, // Envia histórico
-          initialBoardState: room.game.initialBoardState, // Envia estado inicial
+          moveHistory: room.game.moveHistory,
+          initialBoardState: room.game.initialBoardState,
         });
 
         await saveMatchHistory(room, null, finalReason);
@@ -304,23 +321,26 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
     }, 60000);
   } else {
-    room.match.currentGame++;
+    // --- FIM DO JOGO 1 (NÃO MOSTRAR REPLAY) ---
+    // Apenas preparamos o próximo jogo. Não emitimos gameOver/gameDraw.
+
+    room.match.currentGame++; // Vai para 2
     const scoreArray = [p1Score, p2Score];
     const nextGameTitle = `Fim da 1ª Partida!`;
+
+    // Emite aviso que o próximo jogo vai começar (apenas overlay informativo)
     io.to(room.roomCode).emit("nextGameStarting", {
       score: scoreArray,
       title: nextGameTitle,
     });
+
     setTimeout(() => {
-      // Importa a função aqui para evitar dependência circular no carregamento
-      // Agora chamamos explicitamente a função exportada
+      // Import dinâmico para evitar dependência circular
       const { startNextTablitaGame } = require("./socketHandlers");
       if (startNextTablitaGame) {
         startNextTablitaGame(room.roomCode);
-      } else {
-        console.error("Erro: startNextTablitaGame não encontrado.");
       }
-    }, 5000); // ALTERADO DE 10000 PARA 5000 (5 SEGUNDOS)
+    }, 5000);
   }
 }
 

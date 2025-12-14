@@ -6,8 +6,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const socket = io({ autoConnect: false });
 
   // Variáveis Globais de Jogo
-  window.currentUser = null; // Gerenciado pelo lobby.js
-  window.isSpectator = false; // Gerenciado pelo lobby.js e aqui
+  window.currentUser = null;
+  window.isSpectator = false;
 
   // Variáveis Locais de Jogo
   let myColor = null;
@@ -25,8 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let savedReplayData = null;
   let isReplaying = false;
 
-  // --- FILA DE ATUALIZAÇÕES (CORREÇÃO DE SYNC) ---
-  // Impede que múltiplas capturas seguidas cheguem juntas e quebrem a animação
+  // --- FILA DE ATUALIZAÇÕES ---
   let updateQueue = [];
   let isProcessingQueue = false;
 
@@ -35,9 +34,8 @@ document.addEventListener("DOMContentLoaded", () => {
     isProcessingQueue = true;
 
     while (updateQueue.length > 0) {
-      const updateData = updateQueue.shift(); // Pega o primeiro da fila
+      const updateData = updateQueue.shift();
       try {
-        // Aguarda toda a animação e renderização terminar antes de ir para o próximo
         await processGameUpdate(updateData);
         UI.highlightMandatoryPieces(updateData.mandatoryPieces);
       } catch (e) {
@@ -48,7 +46,6 @@ document.addEventListener("DOMContentLoaded", () => {
     isProcessingQueue = false;
   }
 
-  // INICIALIZA O MÓDULO DE LOBBY
   if (window.initLobby) {
     window.initLobby(socket, UI);
   }
@@ -73,7 +70,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Botões de Jogo
   document.getElementById("resign-btn").addEventListener("click", () => {
     if (currentRoom && !window.isSpectator && confirm("Deseja desistir?"))
       socket.emit("playerResign");
@@ -90,12 +86,10 @@ document.addEventListener("DOMContentLoaded", () => {
     .getElementById("spectator-leave-btn")
     .addEventListener("click", () => {
       if (isReplaying) {
-        // Se estiver no replay, este botão serve para sair dele
-        isReplaying = false; // Interrompe o loop
+        isReplaying = false;
         document.getElementById("game-over-overlay").classList.remove("hidden");
         UI.elements.spectatorIndicator.classList.add("hidden");
         UI.elements.spectatorLeaveBtn.classList.add("hidden");
-        // O restante é tratado no fim da função startReplay
         return;
       }
       socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
@@ -139,7 +133,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // --- FUNÇÃO DE REPLAY ---
   async function startReplay() {
     if (
       !savedReplayData ||
@@ -153,40 +146,29 @@ document.addEventListener("DOMContentLoaded", () => {
     isReplaying = true;
     document.getElementById("game-over-overlay").classList.add("hidden");
 
-    // Configura UI para modo replay
     UI.elements.gameStatus.innerHTML =
       "<span style='color:#f1c40f'>REPLAY DA PARTIDA</span>";
-    // Mostra botão de sair para cancelar replay
     UI.elements.spectatorLeaveBtn.classList.remove("hidden");
     UI.elements.spectatorLeaveBtn.textContent = "Sair do Replay";
-    // Esconde indicador de turno normal
     UI.updateTurnIndicator(false);
 
-    // Reseta o tabuleiro para o estado INICIAL
     boardState = JSON.parse(JSON.stringify(savedReplayData.initialBoard));
     const replayBoardSize = savedReplayData.boardSize || currentBoardSize;
     UI.renderPieces(boardState, replayBoardSize);
 
-    // Loop de reprodução
     for (const move of savedReplayData.history) {
-      if (!isReplaying) break; // Se usuário cancelou
-
-      // Pequena pausa antes do movimento
+      if (!isReplaying) break;
       await new Promise((r) => setTimeout(r, 800));
-
       if (!isReplaying) break;
 
-      // Animação
       await UI.animatePieceMove(move.from, move.to, replayBoardSize);
       UI.playAudio("move");
 
-      // Atualiza estado
       boardState = move.boardState;
       UI.renderPieces(boardState, replayBoardSize);
     }
 
     if (isReplaying) {
-      // Se terminou naturalmente
       isReplaying = false;
       alert("Replay finalizado.");
       document.getElementById("game-over-overlay").classList.remove("hidden");
@@ -194,12 +176,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Interação com o Tabuleiro
   function handleBoardClick(e) {
-    if (window.isSpectator || isReplaying) return; // Bloqueia cliques durante replay
+    if (window.isSpectator || isReplaying) return;
     if (!myColor) return;
-
-    // Se estiver processando animações de movimento do oponente, bloqueia clique
     if (isProcessingQueue) return;
 
     const square = e.target.closest(".square");
@@ -259,7 +238,6 @@ document.addEventListener("DOMContentLoaded", () => {
     pieceElement.classList.add("selected");
     selectedPiece = { element: pieceElement, row, col };
 
-    // Verificação de movimento único para agilizar
     if (window.gameLogic && window.gameLogic.getUniqueCaptureMove) {
       const tempGame = {
         boardState: boardState,
@@ -298,7 +276,6 @@ document.addEventListener("DOMContentLoaded", () => {
     currentRoom = null;
     myColor = null;
     currentBoardSize = 8;
-    // Limpa fila ao sair
     updateQueue = [];
     isProcessingQueue = false;
 
@@ -314,7 +291,6 @@ document.addEventListener("DOMContentLoaded", () => {
     lastPacketTime = Date.now();
 
     if (gameState.lastMove && !suppressSound) {
-      // Aqui a mágica acontece: o 'await' segura a execução até a animação terminar
       await UI.animatePieceMove(
         gameState.lastMove.from,
         gameState.lastMove.to,
@@ -362,24 +338,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // --- LISTENERS DE SOCKET DO JOGO ---
-
   socket.on("invalidMove", (data) => {
     if (navigator.vibrate) {
       try {
         navigator.vibrate([100, 50, 100]);
       } catch (e) {}
     }
-
     const gs = UI.elements.gameStatus;
     const originalText = gs.innerHTML;
-
     gs.innerHTML = `<span style="color: #e74c3c; font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 4px;">❌ ${data.message}</span>`;
-
     setTimeout(() => {
-      if (gs.innerHTML.includes("❌")) {
-        gs.innerHTML = originalText;
-      }
+      if (gs.innerHTML.includes("❌")) gs.innerHTML = originalText;
     }, 4000);
   });
 
@@ -401,10 +370,8 @@ document.addEventListener("DOMContentLoaded", () => {
     window.isSpectator = true;
     currentRoom = data.gameState.roomCode;
     currentBoardSize = data.gameState.boardSize;
-
     UI.showGameScreen(true);
     UI.createBoard(currentBoardSize, handleBoardClick);
-
     processGameUpdate(data.gameState, true);
     UI.highlightMandatoryPieces(data.gameState.mandatoryPieces);
     UI.updatePlayerNames(data.gameState.users);
@@ -420,55 +387,44 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
       window.isSpectator = false;
     }
-
-    // CORREÇÃO: Removida a linha 'if (window.isSpectator) return;'
-    // Agora o espectador também recebe a atualização de tela limpa para o novo jogo.
-
     try {
       if (!gameState || !gameState.boardState)
         throw new Error("Dados inválidos");
 
       isGameOver = false;
       stopWatchdog();
-
-      // Limpa fila de jogos anteriores
       updateQueue = [];
       isProcessingQueue = false;
 
-      // Passa 'true' se for espectador para esconder botões de desistir/empatar
-      UI.showGameScreen(window.isSpectator);
+      // GARANTE QUE O OVERLAY DE GAME OVER/NEXT GAME ESTÁ FECHADO
+      document.getElementById("game-over-overlay").classList.add("hidden");
+      document.getElementById("next-game-overlay").classList.add("hidden");
 
+      UI.showGameScreen(window.isSpectator);
       currentBoardSize = gameState.boardSize;
       UI.createBoard(currentBoardSize, handleBoardClick);
-
       currentRoom = gameState.roomCode;
 
       if (!window.isSpectator) {
-        // Lógica exclusiva para JOGADORES
         localStorage.setItem("checkersCurrentRoom", currentRoom);
         myColor = socket.id === gameState.players.white ? "b" : "p";
-
         let statusText = `Você joga com as ${
           myColor === "b" ? "Brancas" : "Pretas"
         }.`;
         if (gameState.openingName)
           statusText += `<br><small>Sorteio: ${gameState.openingName}</small>`;
         UI.elements.gameStatus.innerHTML = statusText;
-
         UI.elements.board.classList.remove("board-flipped");
         if (myColor === "p") UI.elements.board.classList.add("board-flipped");
       } else {
-        // Lógica exclusiva para ESPECTADORES
         myColor = null;
         UI.elements.gameStatus.innerHTML = "Espectador: Nova partida iniciada";
-        UI.elements.board.classList.remove("board-flipped"); // Reseta visualização
+        UI.elements.board.classList.remove("board-flipped");
       }
 
       processGameUpdate(gameState, true);
       UI.highlightMandatoryPieces(gameState.mandatoryPieces);
       UI.updatePlayerNames(gameState.users);
-
-      // Toca som de início para todos (incluindo espectador, para alertar da nova partida)
       UI.playAudio("join");
     } catch (e) {
       console.error(e);
@@ -491,7 +447,6 @@ document.addEventListener("DOMContentLoaded", () => {
       UI.elements.timerDisplay.textContent = "Pausado";
   });
 
-  // Listener modificado para usar a FILA
   socket.on("gameStateUpdate", (gs) => {
     updateQueue.push(gs);
     processUpdateQueue();
@@ -504,20 +459,14 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("gameResumed", (data) => {
     lastPacketTime = Date.now();
     if (window.isSpectator) return;
-
     document.getElementById("connection-lost-overlay").classList.add("hidden");
-
-    // Limpa fila ao reconectar para evitar animações velhas
     updateQueue = [];
     isProcessingQueue = false;
-
     currentBoardSize = data.gameState.boardSize;
     UI.createBoard(currentBoardSize, handleBoardClick);
-
     processGameUpdate(data.gameState, true);
     UI.updatePlayerNames(data.gameState.users);
     UI.updateTimer(data);
-
     myColor = socket.id === data.gameState.players.white ? "b" : "p";
     UI.elements.board.classList.remove("board-flipped");
     if (myColor === "p") UI.elements.board.classList.add("board-flipped");
@@ -527,12 +476,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isGameOver) return;
     isGameOver = true;
     stopWatchdog();
-
-    // Limpa fila
     updateQueue = [];
     isProcessingQueue = false;
 
-    // Salva dados para REPLAY
     savedReplayData = {
       history: data.moveHistory,
       initialBoard: data.initialBoardState,
@@ -540,6 +486,9 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     document.getElementById("connection-lost-overlay").classList.add("hidden");
+    // Assegura que o overlay de "Próximo Jogo" suma se estiver por acaso aberto
+    document.getElementById("next-game-overlay").classList.add("hidden");
+
     UI.resetEndGameUI();
     document.getElementById("game-over-overlay").classList.remove("hidden");
 
@@ -574,11 +523,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isGameOver) return;
     isGameOver = true;
     stopWatchdog();
-
     updateQueue = [];
     isProcessingQueue = false;
 
-    // Salva dados para REPLAY
     savedReplayData = {
       history: data.moveHistory,
       initialBoard: data.initialBoardState,
@@ -586,6 +533,8 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     document.getElementById("connection-lost-overlay").classList.add("hidden");
+    document.getElementById("next-game-overlay").classList.add("hidden");
+
     UI.resetEndGameUI();
     document.getElementById("game-over-overlay").classList.remove("hidden");
 
@@ -603,8 +552,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("nextGameStarting", (data) => {
+    // AQUI É A CHAVE: NÃO MOSTRAR TELA DE FIM DE JOGO, SÓ O OVERLAY DE TRANSIÇÃO
     const nextOv = document.getElementById("next-game-overlay");
     nextOv.classList.remove("hidden");
+
+    // Garante que não haja modais de fim de jogo abertos
+    document.getElementById("game-over-overlay").classList.add("hidden");
+
     document.getElementById(
       "match-score-display"
     ).textContent = `Placar: ${data.score[0]} - ${data.score[1]}`;
@@ -635,7 +589,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const old = gs.innerHTML;
     gs.textContent = "Pedido recusado.";
     setTimeout(() => (gs.innerHTML = old), 3000);
-
     const btn = document.getElementById("draw-btn");
     btn.disabled = true;
     let cd = 30;
@@ -687,7 +640,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!window.isSpectator) returnToLobbyLogic();
   });
 
-  // --- Listeners de Torneio (Brackets e Match Ready) ---
   socket.on("tournamentStarted", (data) =>
     showTournamentBracket(data.bracket, 1)
   );
@@ -703,7 +655,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } (+R$ ${data.runnerUpPrize.toFixed(2)})`
     );
     if (window.updateTournamentStatus) window.updateTournamentStatus();
-    if (window.currentUser) window.location.reload(); // Recarrega para atualizar saldo/status limpo
+    if (window.currentUser) window.location.reload();
   });
   socket.on("tournamentCancelled", (data) => {
     alert(data.message);
@@ -737,13 +689,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const list = document.getElementById("tournament-matches-list");
     const roundTitle = document.getElementById("tournament-round-display");
     const closeBtn = document.getElementById("close-bracket-btn");
-
     overlay.classList.remove("hidden");
     if (matches.length === 4) roundTitle.textContent = "Quartas de Final";
     else if (matches.length === 2) roundTitle.textContent = "Semifinais";
     else if (matches.length === 1) roundTitle.textContent = "GRANDE FINAL";
     else roundTitle.textContent = `Rodada ${round}`;
-
     list.innerHTML = "";
     matches.forEach((m) => {
       const div = document.createElement("div");
