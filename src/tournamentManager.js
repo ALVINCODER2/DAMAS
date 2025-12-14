@@ -147,7 +147,8 @@ async function startTournament(tournament) {
   });
 
   // 2. Separar presentes e ausentes
-  const originalParticipants = tournament.participants;
+  // Clone para garantir que temos a lista original intacta para reembolso
+  const originalParticipants = [...tournament.participants];
   const presentPlayers = [];
   const absentPlayers = [];
 
@@ -178,13 +179,15 @@ async function startTournament(tournament) {
   }
 
   // 4. Verificar quórum mínimo DE PRESENTES (para ter jogo)
-  // Se tiver menos de 2 pessoas online, não tem como ter jogo, aí sim cancela e devolve tudo.
-  if (tournament.participants.length < 2) {
-    console.log("[Torneio] Cancelado: Menos de 2 jogadores online para jogar.");
+  // CORREÇÃO: Usar MIN_PLAYERS (8) em vez de apenas 2.
+  if (tournament.participants.length < MIN_PLAYERS) {
+    console.log(
+      `[Torneio] Cancelado: Apenas ${tournament.participants.length} jogadores online. Mínimo: ${MIN_PLAYERS}.`
+    );
     tournament.status = "cancelled";
     await tournament.save();
 
-    // Reembolsa TODOS da lista ORIGINAL (pois o torneio não rolou)
+    // Reembolsa TODOS da lista ORIGINAL (incluindo quem faltou, pois o evento não ocorreu)
     for (const email of originalParticipants) {
       const updatedUser = await User.findOneAndUpdate(
         { email },
@@ -200,8 +203,7 @@ async function startTournament(tournament) {
     }
 
     io.emit("tournamentCancelled", {
-      message:
-        "Torneio cancelado (falta de jogadores online). Todos foram reembolsados.",
+      message: `Torneio cancelado por falta de quórum (Mínimo ${MIN_PLAYERS} jogadores). Todos foram reembolsados.`,
     });
     return;
   }
@@ -254,10 +256,6 @@ async function processRoundMatches(tournament) {
         .toUpperCase()}`;
       match.roomCode = roomCode;
       match.status = "active";
-
-      // Cria a sala na memória (gameHandler precisa disso)
-      // Precisamos importar gameRooms de socketHandlers ou injetar
-      // AVISO: gameRooms é importado no topo.
 
       // Criação manual da sala no objeto gameRooms importado
       const { gameRooms } = require("./socketHandlers");
