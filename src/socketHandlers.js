@@ -228,6 +228,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
   if (!io) return;
   const gameRoom = gameRooms[roomCode];
   if (!gameRoom || !gameRoom.game) return;
+  if (gameRoom.isGameConcluded) return;
   const game = gameRoom.game;
 
   const playerColor = game.currentPlayer;
@@ -619,14 +620,12 @@ function initializeSocket(ioInstance) {
       socket.join(roomCode);
       room.players.push({ socketId: socket.id, user: socket.userData });
       try {
-        await User.findOneAndUpdate(
-          { email: room.players[0].user.email },
-          { $inc: { saldo: -room.bet } }
-        );
-        await User.findOneAndUpdate(
-          { email: room.players[1].user.email },
-          { $inc: { saldo: -room.bet } }
-        );
+        await User.findOneAndUpdate({ email: room.players[0].user.email }, [
+          { $set: { saldo: { $round: [{ $add: ["$saldo", -room.bet] }, 2] } } },
+        ]);
+        await User.findOneAndUpdate({ email: room.players[1].user.email }, [
+          { $set: { saldo: { $round: [{ $add: ["$saldo", -room.bet] }, 2] } } },
+        ]);
       } catch (err) {
         io.to(room.roomCode).emit("joinError", {
           message: "Erro ao processar a aposta.",
@@ -925,14 +924,20 @@ function initializeSocket(ioInstance) {
               delete gameRooms[room.roomCode];
               return;
             }
-            await User.findOneAndUpdate(
-              { email: player1.user.email },
-              { $inc: { saldo: -room.bet } }
-            );
-            await User.findOneAndUpdate(
-              { email: player2.user.email },
-              { $inc: { saldo: -room.bet } }
-            );
+            await User.findOneAndUpdate({ email: player1.user.email }, [
+              {
+                $set: {
+                  saldo: { $round: [{ $add: ["$saldo", -room.bet] }, 2] },
+                },
+              },
+            ]);
+            await User.findOneAndUpdate({ email: player2.user.email }, [
+              {
+                $set: {
+                  saldo: { $round: [{ $add: ["$saldo", -room.bet] }, 2] },
+                },
+              },
+            ]);
 
             // FIX: Reset match state for Tablita to force new opening on rematch
             if (room.gameMode === "tablita") {

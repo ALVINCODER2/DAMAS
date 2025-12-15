@@ -125,20 +125,23 @@ function findCaptureSequencesForPiece(
             // Para performance em JS, clonar array 8x8 é aceitável, mas vamos otimizar:
             // Criamos um board temporário APENAS para a recursão profunda se houver captura múltipla
 
-            const tempBoard = cloneBoard(board);
-            tempBoard[landRow][landCol] = tempBoard[row][col];
-            tempBoard[row][col] = 0;
-            // IMPORTANTE: NÃO remove a peça capturada do tempBoard (regra brasileira)
+            const movingPiece = board[row][col];
+            board[landRow][landCol] = movingPiece;
+            board[row][col] = 0;
 
             const nextSequences = findCaptureSequencesForPiece(
               landRow,
               landCol,
-              tempBoard,
+              board,
               true,
               boardSize,
               newCapturedSoFar,
               currentPieceChar
             );
+
+            // Backtracking: Restaura o tabuleiro
+            board[row][col] = movingPiece;
+            board[landRow][landCol] = 0;
 
             if (nextSequences.length > 0) {
               nextSequences.forEach((seq) =>
@@ -177,9 +180,9 @@ function findCaptureSequencesForPiece(
             { row: capRow, col: capCol },
           ];
 
-          const tempBoard = cloneBoard(board);
-          tempBoard[landRow][landCol] = tempBoard[row][col];
-          tempBoard[row][col] = 0;
+          const movingPiece = board[row][col];
+          board[landRow][landCol] = movingPiece;
+          board[row][col] = 0;
 
           // Verifica se virou Dama no meio da captura?
           // Regra Brasileira: Se passar pela coroa mas tiver que continuar comendo, NÃO vira dama.
@@ -188,12 +191,16 @@ function findCaptureSequencesForPiece(
           const nextSequences = findCaptureSequencesForPiece(
             landRow,
             landCol,
-            tempBoard,
+            board,
             false, // Continua como peça comum
             boardSize,
             newCapturedSoFar,
             currentPieceChar
           );
+
+          // Backtracking: Restaura o tabuleiro
+          board[row][col] = movingPiece;
+          board[landRow][landCol] = 0;
 
           if (nextSequences.length > 0) {
             nextSequences.forEach((seq) =>
@@ -210,10 +217,6 @@ function findCaptureSequencesForPiece(
     }
   }
   return sequences;
-}
-
-function cloneBoard(board) {
-  return board.map((row) => [...row]);
 }
 
 function isMoveValid(from, to, playerColor, game, ignoreMajorityRule = false) {

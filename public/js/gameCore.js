@@ -380,6 +380,20 @@ window.GameCore = (function () {
     let isMyMove = false;
     let moveDist = 0;
 
+    // FIX: Sincronização forçada com o servidor para evitar fantasmas
+    if (Array.isArray(gameState.turnCapturedPieces)) {
+      state.currentTurnCapturedPieces.forEach((pos) => {
+        const sq = document.querySelector(
+          `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
+        );
+        if (sq) {
+          const p = sq.querySelector(".piece");
+          if (p) p.style.opacity = "1";
+        }
+      });
+      state.currentTurnCapturedPieces = [...gameState.turnCapturedPieces];
+    }
+
     // 1. CÁLCULO E GESTÃO DE PEÇAS CAPTURADAS (Fantasmas)
     if (gameState.lastMove) {
       moveDist = Math.abs(
@@ -387,7 +401,7 @@ window.GameCore = (function () {
       );
 
       // Se houve salto, identifica as peças capturadas no caminho
-      if (moveDist > 1) {
+      if (moveDist > 1 && !Array.isArray(gameState.turnCapturedPieces)) {
         const dr = Math.sign(
           gameState.lastMove.to.row - gameState.lastMove.from.row
         );
@@ -413,16 +427,27 @@ window.GameCore = (function () {
       }
 
       // Verifica troca de turno
-      const destPiece =
-        gameState.boardState[gameState.lastMove.to.row][
-          gameState.lastMove.to.col
-        ];
-      let movedColor = null;
-      if (destPiece === "b" || destPiece === "B") movedColor = "b";
-      else if (destPiece === "p" || destPiece === "P") movedColor = "p";
+      if (!Array.isArray(gameState.turnCapturedPieces)) {
+        const destPiece =
+          gameState.boardState[gameState.lastMove.to.row][
+            gameState.lastMove.to.col
+          ];
+        let movedColor = null;
+        if (destPiece === "b" || destPiece === "B") movedColor = "b";
+        else if (destPiece === "p" || destPiece === "P") movedColor = "p";
 
-      if (movedColor && gameState.currentPlayer !== movedColor) {
-        state.currentTurnCapturedPieces = [];
+        if (movedColor && gameState.currentPlayer !== movedColor) {
+          state.currentTurnCapturedPieces.forEach((pos) => {
+            const sq = document.querySelector(
+              `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
+            );
+            if (sq) {
+              const p = sq.querySelector(".piece");
+              if (p) p.style.opacity = "1";
+            }
+          });
+          state.currentTurnCapturedPieces = [];
+        }
       }
 
       // Verifica Otimização

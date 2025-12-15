@@ -21,6 +21,7 @@ function setTournamentManager(tm) {
 function startTimer(roomCode) {
   const room = gameRooms[roomCode];
   if (!room) return;
+  if (room.isGameConcluded) return;
   if (room.timerInterval) clearInterval(room.timerInterval);
 
   if (room.timeControl === "match") {
@@ -175,14 +176,12 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
     if (!winnerColor) {
       // Empate
       try {
-        await User.findOneAndUpdate(
-          { email: room.players[0].user.email },
-          { $inc: { saldo: room.bet } }
-        );
-        await User.findOneAndUpdate(
-          { email: room.players[1].user.email },
-          { $inc: { saldo: room.bet } }
-        );
+        await User.findOneAndUpdate({ email: room.players[0].user.email }, [
+          { $set: { saldo: { $round: [{ $add: ["$saldo", room.bet] }, 2] } } },
+        ]);
+        await User.findOneAndUpdate({ email: room.players[1].user.email }, [
+          { $set: { saldo: { $round: [{ $add: ["$saldo", room.bet] }, 2] } } },
+        ]);
         io.to(room.roomCode).emit("gameDraw", {
           reason,
           moveHistory: room.game.moveHistory, // Envia histórico
@@ -205,7 +204,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           const prize = room.bet * 2;
           const updatedWinner = await User.findOneAndUpdate(
             { email: winnerData.user.email },
-            { $inc: { saldo: prize } },
+            [{ $set: { saldo: { $round: [{ $add: ["$saldo", prize] }, 2] } } }],
             { new: true }
           );
           io.to(room.roomCode).emit("gameOver", {
@@ -271,7 +270,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         const prize = room.bet * 2;
         const updatedWinner = await User.findOneAndUpdate(
           { email: finalWinnerData.email },
-          { $inc: { saldo: prize } },
+          [{ $set: { saldo: { $round: [{ $add: ["$saldo", prize] }, 2] } } }],
           { new: true }
         );
         const winnerColorFinal =
@@ -298,14 +297,12 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
     } else {
       // Empate no placar geral (ex: 1 a 1 ou 0 a 0)
       try {
-        await User.findOneAndUpdate(
-          { email: p1Email },
-          { $inc: { saldo: room.bet } }
-        );
-        await User.findOneAndUpdate(
-          { email: p2Email },
-          { $inc: { saldo: room.bet } }
-        );
+        await User.findOneAndUpdate({ email: p1Email }, [
+          { $set: { saldo: { $round: [{ $add: ["$saldo", room.bet] }, 2] } } },
+        ]);
+        await User.findOneAndUpdate({ email: p2Email }, [
+          { $set: { saldo: { $round: [{ $add: ["$saldo", room.bet] }, 2] } } },
+        ]);
 
         const finalReason = `Match empatado! Placar final: ${p1Score} a ${p2Score}. ${reason}`;
 
