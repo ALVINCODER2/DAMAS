@@ -103,23 +103,40 @@ window.UI = {
       piece.style.willChange = "transform";
       piece.style.zIndex = 100;
 
+      // --- MELHORIA: Evento Real de Fim de Transição ---
+      const onTransitionEnd = (e) => {
+        // Garante que é a transição correta (transform) e o elemento certo
+        if (e && e.propertyName !== "transform") return;
+
+        piece.removeEventListener("transitionend", onTransitionEnd);
+        piece.style.willChange = "auto";
+        piece.style.zIndex = "";
+        // Limpa styles inline para não afetar renders futuros
+        piece.style.transition = "";
+        piece.style.transform = "";
+        resolve();
+      };
+
       // Usa requestAnimationFrame para garantir que a animação comece no momento certo do refresh da tela
       requestAnimationFrame(() => {
         piece.style.transition = "transform 0.15s linear"; // Linear é mais fácil de calcular para CPUs fracas
+
+        // Adiciona ouvinte de evento em vez de setTimeout fixo
+        piece.addEventListener("transitionend", onTransitionEnd);
+
+        // Fallback de segurança: Se o transitionend falhar (ex: aba em background), resolve após tempo seguro (200ms)
+        // Isso impede travamentos se o navegador suspender animações CSS
+        setTimeout(() => {
+          // Se a promessa já foi resolvida pelo evento, isso não terá efeito negativo visual
+          // Apenas garante limpeza.
+          onTransitionEnd({ propertyName: "transform" });
+        }, 250);
 
         if (isFlipped) {
           piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
         } else {
           piece.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
         }
-
-        // Limpeza após animação
-        setTimeout(() => {
-          // Removemos will-change para liberar memória da GPU
-          piece.style.willChange = "auto";
-          piece.style.zIndex = "";
-          resolve();
-        }, 160); // Um pouco mais que 0.15s para segurança
       });
     });
   },
@@ -161,7 +178,7 @@ window.UI = {
                   existingPiece.classList.remove("king");
               }
 
-              // Reseta transformações da animação anterior
+              // Reseta transformações da animação anterior (segurança extra)
               existingPiece.style.transform = "";
               existingPiece.style.transition = "";
             } else {

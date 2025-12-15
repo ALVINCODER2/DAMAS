@@ -218,7 +218,8 @@ async function startGameLogic(room) {
   io.to(blackPlayer.socketId).emit("gameStart", gameState);
 }
 
-async function executeMove(roomCode, from, to, socketId) {
+// --- UPDATE: Agora aceita clientMoveId ---
+async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
   if (!io) return;
   const gameRoom = gameRooms[roomCode];
   if (!gameRoom || !gameRoom.game) return;
@@ -255,7 +256,13 @@ async function executeMove(roomCode, from, to, socketId) {
     game.boardState[to.row][to.col] = game.boardState[from.row][from.col];
     game.boardState[from.row][from.col] = 0;
 
-    game.lastMove = { from, to };
+    // --- NOVO: Geração/Persistência do ID do Movimento ---
+    // Se o cliente mandou um ID, usa ele. Se não, gera um novo.
+    const moveId =
+      clientMoveId ||
+      Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+    game.lastMove = { from, to, moveId };
 
     let canCaptureAgain = false;
     let wasPromotion = false;
@@ -303,6 +310,7 @@ async function executeMove(roomCode, from, to, socketId) {
       boardState: JSON.parse(JSON.stringify(game.boardState)),
       turn: playerColor,
       turnCapturedPieces: [...game.turnCapturedPieces], // Salva o estado das capturadas para replay fiel
+      moveId, // Salva também no histórico para debug
     });
 
     // Lógica de empate por repetição
@@ -409,7 +417,8 @@ async function executeMove(roomCode, from, to, socketId) {
               roomCode,
               { row: to.row, col: to.col },
               uniqueMove.to,
-              null
+              null,
+              moveId + "_auto" // Sufixo para identificar automoves derivados
             );
           }
         }, 1000);
@@ -648,7 +657,13 @@ function initializeSocket(ioInstance) {
     });
 
     socket.on("playerMove", async (moveData) => {
-      await executeMove(moveData.room, moveData.from, moveData.to, socket.id);
+      await executeMove(
+        moveData.room,
+        moveData.from,
+        moveData.to,
+        socket.id,
+        moveData.moveId
+      );
     });
 
     socket.on("getValidMoves", (data) => {

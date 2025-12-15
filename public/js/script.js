@@ -1,8 +1,7 @@
-// public/script.js - Gerencia Lógica do Jogo com OTIMIZAÇÃO OTIMISTA (Zero Lag)
+// public/script.js - Gerencia Lógica do Jogo com CORREÇÃO DE RENDERIZAÇÃO INICIAL
 document.addEventListener("DOMContentLoaded", () => {
   UI.init();
 
-  // Inicializa Socket Globalmente
   const socket = io({ autoConnect: false });
 
   // Variáveis Globais de Jogo
@@ -12,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Variáveis Locais de Jogo
   let myColor = null;
   let currentRoom = null;
-  let boardState = [];
+  let boardState = []; // Estado local
   let selectedPiece = null;
   let currentBoardSize = 8;
   let nextGameInterval = null;
@@ -21,12 +20,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastPacketTime = Date.now();
   let watchdogInterval = null;
 
-  // ### NOVO: Estado local das peças capturadas na animação atual ###
   let currentTurnCapturedPieces = [];
 
   // --- VARIÁVEIS PARA OTIMIZAÇÃO (Lag Zero) ---
-  let lastOptimisticMove = null; // Armazena o último movimento feito localmente
-  let pendingBoardSnapshot = null; // Backup do tabuleiro para caso de erro (rollback)
+  let lastOptimisticMove = null;
+  let pendingBoardSnapshot = null;
 
   // --- VARIÁVEIS PARA REPLAY ---
   let savedReplayData = null;
@@ -63,11 +61,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (watchdogInterval) return;
     lastPacketTime = Date.now();
     watchdogInterval = setInterval(() => {
-      if (currentRoom && !isGameOver && Date.now() - lastPacketTime > 5000) {
+      if (currentRoom && !isGameOver && Date.now() - lastPacketTime > 10000) {
         socket.emit("requestGameSync", { roomCode: currentRoom });
         lastPacketTime = Date.now();
       }
-    }, 1000);
+    }, 2000);
   }
 
   function stopWatchdog() {
@@ -182,31 +180,109 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // --- NOVA FUNÇÃO: Executa movimento localmente antes do servidor ---
-  async function performOptimisticMove(from, to) {
-    // 1. Salva backup caso precise desfazer
+  // --- OTIMIZAÇÃO: Executa movimento e calcula próxima captura localmente ---
+  async function performOptimisticMove(from, to, moveId) {
     pendingBoardSnapshot = JSON.parse(JSON.stringify(boardState));
 
-    // 2. Salva qual foi o movimento otimista para não animar de novo quando o server confirmar
     lastOptimisticMove = {
       from: { row: from.row, col: from.col },
       to: { row: to.row, col: to.col },
+      moveId: moveId,
     };
 
-    // 3. Atualiza estado local (simplificado: apenas move a peça)
-    // A lógica complexa de captura e remoção deixa pro servidor corrigir em ms,
-    // mas visualmente a peça já vai pro lugar.
     const movingPiece = boardState[from.row][from.col];
+    const isKing = movingPiece === "B" || movingPiece === "P";
     boardState[to.row][to.col] = movingPiece;
     boardState[from.row][from.col] = 0;
 
-    // 4. Animação imediata
-    UI.playAudio("move"); // Som instantâneo
+    let capturedPos = null;
+    const dist = Math.abs(to.row - from.row);
+
+    if (dist > 1) {
+      const dr = Math.sign(to.row - from.row);
+      const dc = Math.sign(to.col - from.col);
+      let r = from.row + dr;
+      let c = from.col + dc;
+      while (r !== to.row && c !== to.col) {
+        if (boardState[r][c] !== 0) {
+          capturedPos = { row: r, col: c };
+          break;
+        }
+        r += dr;
+        c += dc;
+      }
+    }
+
+    if (capturedPos) {
+      currentTurnCapturedPieces.push(capturedPos);
+      const capturedSquare = document.querySelector(
+        `.square[data-row="${capturedPos.row}"][data-col="${capturedPos.col}"]`
+      );
+      if (capturedSquare) {
+        const capturedPieceEl = capturedSquare.querySelector(".piece");
+        if (capturedPieceEl) capturedPieceEl.style.opacity = "0.5";
+      }
+      UI.playAudio("capture");
+    } else {
+      UI.playAudio("move");
+    }
+
+    let promoted = false;
+    if (!isKing) {
+      if (movingPiece === "b" && to.row === 0) {
+        boardState[to.row][to.col] = "B";
+        promoted = true;
+      } else if (movingPiece === "p" && to.row === currentBoardSize - 1) {
+        boardState[to.row][to.col] = "P";
+        promoted = true;
+      }
+    }
+
     await UI.animatePieceMove(from, to, currentBoardSize);
 
-    // 5. Renderiza tabuleiro no novo estado
     UI.renderPieces(boardState, currentBoardSize);
     UI.clearHighlights();
+
+    if (currentTurnCapturedPieces.length > 0) {
+      currentTurnCapturedPieces.forEach((pos) => {
+        const sq = document.querySelector(
+          `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
+        );
+        if (sq && sq.querySelector(".piece"))
+          sq.querySelector(".piece").style.opacity = "0.5";
+      });
+    }
+
+    // CHAIN MOVE: Predição Local
+    if (capturedPos && !promoted && window.gameLogic) {
+      const tempGame = {
+        boardState: boardState,
+        boardSize: currentBoardSize,
+        currentPlayer: myColor,
+        turnCapturedPieces: currentTurnCapturedPieces,
+      };
+
+      const nextCaptures = window.gameLogic.getAllPossibleCapturesForPiece(
+        to.row,
+        to.col,
+        tempGame
+      );
+
+      if (nextCaptures && nextCaptures.length > 0) {
+        const newSquare = document.querySelector(
+          `.square[data-row="${to.row}"][data-col="${to.col}"]`
+        );
+        const newPiece = newSquare ? newSquare.querySelector(".piece") : null;
+
+        if (newPiece) {
+          newPiece.classList.add("selected");
+          selectedPiece = { element: newPiece, row: to.row, col: to.col };
+          const validDestinations = nextCaptures.map((seq) => seq[1]);
+          UI.highlightValidMoves(validDestinations);
+          return;
+        }
+      }
+    }
     selectedPiece = null;
   }
 
@@ -226,14 +302,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (square.classList.contains("valid-move-highlight")) {
         const moveFrom = { row: selectedPiece.row, col: selectedPiece.col };
         const moveTo = { row, col };
+        const moveId =
+          Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-        // OTIMIZAÇÃO: Executa visualmente antes de enviar
-        performOptimisticMove(moveFrom, moveTo);
+        performOptimisticMove(moveFrom, moveTo, moveId).catch(console.error);
 
         socket.emit("playerMove", {
           from: moveFrom,
           to: moveTo,
           room: currentRoom,
+          moveId: moveId,
         });
         return;
       }
@@ -291,13 +369,17 @@ document.addEventListener("DOMContentLoaded", () => {
         tempGame
       );
       if (uniqueMove) {
-        // OTIMIZAÇÃO: Auto-captura instantânea
-        performOptimisticMove({ row, col }, uniqueMove.to);
+        const moveId =
+          Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        performOptimisticMove({ row, col }, uniqueMove.to, moveId).catch(
+          console.error
+        );
 
         socket.emit("playerMove", {
           from: { row, col },
           to: uniqueMove.to,
           room: currentRoom,
+          moveId: moveId,
         });
         return;
       }
@@ -320,8 +402,9 @@ document.addEventListener("DOMContentLoaded", () => {
     updateQueue = [];
     currentTurnCapturedPieces = [];
     isProcessingQueue = false;
-    lastOptimisticMove = null; // Reset
-    pendingBoardSnapshot = null; // Reset
+    lastOptimisticMove = null;
+    pendingBoardSnapshot = null;
+    boardState = [];
 
     localStorage.removeItem("checkersCurrentRoom");
 
@@ -336,25 +419,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
     currentTurnCapturedPieces = gameState.turnCapturedPieces || [];
 
-    // --- LÓGICA ANTI-LAG ---
     let skipAnimation = false;
     let isMyMove = false;
 
     if (gameState.lastMove) {
-      // Verifica se foi o MEU movimento que acabou de ser processado
-      // (Isso assume que o servidor envia 'currentPlayer' já trocado, então quem moveu foi o anterior)
-      // Mas podemos checar pelas coordenadas se bate com o lastOptimisticMove
       if (
+        lastOptimisticMove &&
+        gameState.lastMove.moveId === lastOptimisticMove.moveId
+      ) {
+        skipAnimation = true;
+        isMyMove = true;
+        lastOptimisticMove = null;
+        pendingBoardSnapshot = null;
+      } else if (
         lastOptimisticMove &&
         gameState.lastMove.from.row === lastOptimisticMove.from.row &&
         gameState.lastMove.from.col === lastOptimisticMove.from.col &&
         gameState.lastMove.to.row === lastOptimisticMove.to.row &&
         gameState.lastMove.to.col === lastOptimisticMove.to.col
       ) {
-        skipAnimation = true; // Já animamos localmente!
+        skipAnimation = true;
         isMyMove = true;
-        lastOptimisticMove = null; // Limpa para não bloquear próximos
-        pendingBoardSnapshot = null; // Sucesso, descarta backup
+        lastOptimisticMove = null;
+        pendingBoardSnapshot = null;
       }
     }
 
@@ -366,7 +453,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
 
-    // Tocar som se for movimento do OPONENTE ou se for meu mas eu não tinha previsto (ex: sync forçado)
     if (!suppressSound && !isMyMove) {
       if (gameState.lastMove) {
         const dist = Math.abs(
@@ -377,9 +463,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Atualiza o tabuleiro com a "Verdade" do servidor
-    boardState = gameState.boardState;
-    UI.renderPieces(boardState, gameState.boardSize);
+    // --- SMART SYNC (COM LÓGICA SEGURA) ---
+    // Verifica se houve mudança real.
+    // Nota: Como 'gameStart' agora força a atualização do 'boardState' e renderiza,
+    // esta lógica aqui serve apenas para as jogadas subsequentes e Watchdog.
+    const localStateJson = JSON.stringify(boardState);
+    const serverStateJson = JSON.stringify(gameState.boardState);
+
+    if (localStateJson !== serverStateJson) {
+      boardState = gameState.boardState;
+      UI.renderPieces(boardState, gameState.boardSize);
+    } else {
+      boardState = gameState.boardState;
+    }
 
     if (currentTurnCapturedPieces.length > 0) {
       currentTurnCapturedPieces.forEach((pos) => {
@@ -412,9 +508,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   socket.on("invalidMove", (data) => {
-    // --- ROLLBACK: Se o servidor rejeitou, desfaz o movimento local ---
     if (pendingBoardSnapshot) {
-      console.warn("Movimento inválido detectado. Revertendo tabuleiro...");
+      console.warn("Movimento inválido detectado. Revertendo...");
       boardState = pendingBoardSnapshot;
       UI.renderPieces(boardState, currentBoardSize);
       pendingBoardSnapshot = null;
@@ -453,7 +548,12 @@ document.addEventListener("DOMContentLoaded", () => {
     currentRoom = data.gameState.roomCode;
     currentBoardSize = data.gameState.boardSize;
     UI.showGameScreen(true);
+
+    // --- CORREÇÃO DE INICIALIZAÇÃO ---
+    boardState = data.gameState.boardState; // Define estado local
     UI.createBoard(currentBoardSize, handleBoardClick);
+    UI.renderPieces(boardState, currentBoardSize); // Força render
+
     processGameUpdate(data.gameState, true);
     UI.highlightMandatoryPieces(data.gameState.mandatoryPieces);
     UI.updatePlayerNames(data.gameState.users);
@@ -484,8 +584,14 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("next-game-overlay").classList.add("hidden");
 
       UI.showGameScreen(window.isSpectator);
+
+      // --- CORREÇÃO CRÍTICA: Inicialização Garantida ---
       currentBoardSize = gameState.boardSize;
-      UI.createBoard(currentBoardSize, handleBoardClick);
+      boardState = gameState.boardState; // 1. Define estado local explicitamente
+
+      UI.createBoard(currentBoardSize, handleBoardClick); // 2. Cria HTML
+      UI.renderPieces(boardState, currentBoardSize); // 3. Força render (bypassing smart sync)
+
       currentRoom = gameState.roomCode;
 
       if (!window.isSpectator) {
@@ -505,6 +611,7 @@ document.addEventListener("DOMContentLoaded", () => {
         UI.elements.board.classList.remove("board-flipped");
       }
 
+      // 4. Processa outros dados (sons, timers, etc), o render será pulado pois os estados são iguais
       processGameUpdate(gameState, true);
       UI.highlightMandatoryPieces(gameState.mandatoryPieces);
       UI.updatePlayerNames(gameState.users);
@@ -545,15 +652,26 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("connection-lost-overlay").classList.add("hidden");
     updateQueue = [];
     isProcessingQueue = false;
+
+    // --- CORREÇÃO DE INICIALIZAÇÃO ---
     currentBoardSize = data.gameState.boardSize;
+    boardState = data.gameState.boardState;
     UI.createBoard(currentBoardSize, handleBoardClick);
+    UI.renderPieces(boardState, currentBoardSize); // Força render
+
     processGameUpdate(data.gameState, true);
+
     UI.updatePlayerNames(data.gameState.users);
     UI.updateTimer(data);
     myColor = socket.id === data.gameState.players.white ? "b" : "p";
     UI.elements.board.classList.remove("board-flipped");
     if (myColor === "p") UI.elements.board.classList.add("board-flipped");
   });
+
+  // ... (RESTANTE DO CÓDIGO PERMANECE IGUAL) ...
+  // Mantive o restante do código (gameOver, gameDraw, etc) omitido para brevidade
+  // pois não foi alterado e o arquivo deve ser substituído por completo com as alterações acima.
+  // Vou incluir o restante para garantir que você tenha o arquivo completo.
 
   socket.on("gameOver", (data) => {
     if (isGameOver) return;
