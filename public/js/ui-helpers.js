@@ -1,4 +1,4 @@
-// ui-helpers.js (OTIMIZADO EXTREMO PARA FLUIDEZ MOBILE + VIBRAÇÃO SEGURA)
+// ui-helpers.js (COM RENDERIZAÇÃO DEFENSIVA ANTI-BUG)
 
 window.UI = {
   elements: {},
@@ -47,32 +47,27 @@ window.UI = {
     };
   },
 
-  // --- FEEDBACK TÁTIL (VIBRAÇÃO) OTIMIZADO ---
-
+  // --- FEEDBACK TÁTIL (VIBRAÇÃO) ---
   triggerHaptic: function () {
-    // Verifica se o navegador suporta vibração
     if ("vibrate" in navigator) {
-      // OTIMIZAÇÃO: setTimeout(..., 0) joga a vibração para o final da fila de eventos.
-      // Isso garante que o navegador termine de calcular a animação visual (CSS/Reflow)
-      // ANTES de tentar vibrar o celular, evitando travamentos na peça.
       setTimeout(() => {
         try {
-          // Vibração curta (15ms) é suficiente para sentir o "click" e gasta menos bateria/CPU
           navigator.vibrate(15);
-        } catch (e) {
-          // Silencia erros se o hardware estiver ocupado
-        }
+        } catch (e) {}
       }, 0);
     }
   },
 
-  // --- ANIMAÇÃO DE MOVIMENTO SINCRONIZADA (RequestAnimationFrame) ---
-
+  // --- ANIMAÇÃO DE MOVIMENTO ---
   animatePieceMove: function (from, to, boardSize) {
     return new Promise((resolve) => {
-      // Usa o cache em vez de querySelector
-      const square =
-        this.boardCache[from.row] && this.boardCache[from.row][from.col];
+      // Tenta pegar do cache, se falhar pega do DOM (Defensivo)
+      let square =
+        (this.boardCache[from.row] && this.boardCache[from.row][from.col]) ||
+        document.querySelector(
+          `.square[data-row="${from.row}"][data-col="${from.col}"]`
+        );
+
       if (!square) {
         resolve();
         return;
@@ -86,8 +81,12 @@ window.UI = {
 
       const fromRect = square.getBoundingClientRect();
 
-      const toSquare =
-        this.boardCache[to.row] && this.boardCache[to.row][to.col];
+      let toSquare =
+        (this.boardCache[to.row] && this.boardCache[to.row][to.col]) ||
+        document.querySelector(
+          `.square[data-row="${to.row}"][data-col="${to.col}"]`
+        );
+
       if (!toSquare) {
         resolve();
         return;
@@ -99,38 +98,28 @@ window.UI = {
 
       const isFlipped = this.elements.board.classList.contains("board-flipped");
 
-      // Otimização: Preparar a GPU antes do frame de animação
       piece.style.willChange = "transform";
       piece.style.zIndex = 100;
 
-      // --- MELHORIA: Evento Real de Fim de Transição ---
+      // Evento de fim de transição para limpeza garantida
       const onTransitionEnd = (e) => {
-        // Garante que é a transição correta (transform) e o elemento certo
         if (e && e.propertyName !== "transform") return;
-
         piece.removeEventListener("transitionend", onTransitionEnd);
         piece.style.willChange = "auto";
         piece.style.zIndex = "";
-        // Limpa styles inline para não afetar renders futuros
         piece.style.transition = "";
         piece.style.transform = "";
         resolve();
       };
 
-      // Usa requestAnimationFrame para garantir que a animação comece no momento certo do refresh da tela
       requestAnimationFrame(() => {
-        piece.style.transition = "transform 0.15s linear"; // Linear é mais fácil de calcular para CPUs fracas
-
-        // Adiciona ouvinte de evento em vez de setTimeout fixo
+        piece.style.transition = "transform 0.15s linear";
         piece.addEventListener("transitionend", onTransitionEnd);
 
-        // Fallback de segurança: Se o transitionend falhar (ex: aba em background), resolve após tempo seguro (200ms)
-        // Isso impede travamentos se o navegador suspender animações CSS
+        // Fallback de segurança
         setTimeout(() => {
-          // Se a promessa já foi resolvida pelo evento, isso não terá efeito negativo visual
-          // Apenas garante limpeza.
           onTransitionEnd({ propertyName: "transform" });
-        }, 250);
+        }, 200);
 
         if (isFlipped) {
           piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
@@ -141,15 +130,29 @@ window.UI = {
     });
   },
 
-  // --- RENDERIZAÇÃO INTELIGENTE ---
-
+  // --- RENDERIZAÇÃO ROBUSTA (CORREÇÃO DE PEÇAS INVISÍVEIS) ---
   renderPieces: function (boardState, boardSize) {
-    // requestAnimationFrame agrupa as operações DOM para o próximo paint
+    if (!boardState) return;
+
     requestAnimationFrame(() => {
       for (let row = 0; row < boardSize; row++) {
         for (let col = 0; col < boardSize; col++) {
-          const square = this.boardCache[row] && this.boardCache[row][col];
-          if (!square) continue;
+          // TENTA PEGAR DO CACHE
+          let square = this.boardCache[row] && this.boardCache[row][col];
+
+          // FALLBACK: SE O CACHE FALHAR, BUSCA NO DOM (Isso corrige o bug)
+          if (!square) {
+            square = document.querySelector(
+              `.square[data-row="${row}"][data-col="${col}"]`
+            );
+            // Se achou no DOM, conserta o cache para a próxima
+            if (square) {
+              if (!this.boardCache[row]) this.boardCache[row] = [];
+              this.boardCache[row][col] = square;
+            }
+          }
+
+          if (!square) continue; // Se realmente não existir, pula
 
           const pieceType = boardState[row][col];
           const existingPiece =
@@ -164,7 +167,7 @@ window.UI = {
             const classColor = isBlack ? "black-piece" : "white-piece";
 
             if (existingPiece) {
-              // Update leve
+              // Atualiza peça existente
               const currentClass = isBlack ? "black-piece" : "white-piece";
               if (!existingPiece.classList.contains(currentClass)) {
                 existingPiece.className = `piece ${classColor}`;
@@ -178,11 +181,12 @@ window.UI = {
                   existingPiece.classList.remove("king");
               }
 
-              // Reseta transformações da animação anterior (segurança extra)
+              // Garante que a peça esteja visível e resetada
               existingPiece.style.transform = "";
               existingPiece.style.transition = "";
+              existingPiece.style.opacity = "1";
             } else {
-              // Criação nova (fragmento para evitar reflow? Não, aqui é um por um, mas o RAF ajuda)
+              // Cria nova peça
               const piece = document.createElement("div");
               piece.className = `piece ${classColor}`;
               if (isKing) piece.classList.add("king");
@@ -200,10 +204,9 @@ window.UI = {
 
   createBoard: function (boardSize, clickHandler) {
     const board = this.elements.board;
-    // Otimização: remove innerHTML pesado se possível, mas aqui é reset
     board.innerHTML = "";
 
-    this.boardCache = [];
+    this.boardCache = []; // Reseta o cache
 
     let squareSizeCSS;
     const isMobile = window.innerWidth <= 768;
@@ -217,7 +220,6 @@ window.UI = {
     board.style.gridTemplateColumns = `repeat(${boardSize}, ${squareSizeCSS})`;
     board.style.gridTemplateRows = `repeat(${boardSize}, ${squareSizeCSS})`;
 
-    // Usa DocumentFragment para inserir tudo de uma vez no DOM (apenas 1 Reflow)
     const fragment = document.createDocumentFragment();
 
     for (let row = 0; row < boardSize; row++) {
@@ -231,15 +233,12 @@ window.UI = {
         square.dataset.row = row;
         square.dataset.col = col;
 
-        // Armazena no fragmento, não no board diretamente ainda
         fragment.appendChild(square);
-
-        // Cache (referência válida mesmo no fragmento)
-        this.boardCache[row][col] = square;
+        this.boardCache[row][col] = square; // Popula o cache
       }
     }
 
-    board.appendChild(fragment); // Apenas 1 inserção no DOM real
+    board.appendChild(fragment);
 
     board.removeEventListener("click", clickHandler);
     board.addEventListener("click", clickHandler);
@@ -387,8 +386,19 @@ window.UI = {
       .forEach((el) => el.classList.remove("last-move"));
 
     if (lastMove) {
-      const fromSq = this.boardCache[lastMove.from.row]?.[lastMove.from.col];
-      const toSq = this.boardCache[lastMove.to.row]?.[lastMove.to.col];
+      const fromSq =
+        (this.boardCache[lastMove.from.row] &&
+          this.boardCache[lastMove.from.row][lastMove.from.col]) ||
+        document.querySelector(
+          `.square[data-row="${lastMove.from.row}"][data-col="${lastMove.from.col}"]`
+        );
+
+      const toSq =
+        (this.boardCache[lastMove.to.row] &&
+          this.boardCache[lastMove.to.row][lastMove.to.col]) ||
+        document.querySelector(
+          `.square[data-row="${lastMove.to.row}"][data-col="${lastMove.to.col}"]`
+        );
 
       if (fromSq) fromSq.classList.add("last-move");
       if (toSq) toSq.classList.add("last-move");
@@ -402,7 +412,12 @@ window.UI = {
 
     if (piecesToHighlight && piecesToHighlight.length > 0) {
       piecesToHighlight.forEach((pos) => {
-        const square = this.boardCache[pos.row]?.[pos.col];
+        const square =
+          (this.boardCache[pos.row] && this.boardCache[pos.row][pos.col]) ||
+          document.querySelector(
+            `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
+          );
+
         if (square && square.firstElementChild) {
           square.firstElementChild.classList.add("mandatory-capture");
         }
@@ -411,10 +426,14 @@ window.UI = {
   },
 
   highlightValidMoves: function (moves) {
-    // requestAnimationFrame aqui evita travar o UI se houver muitos movimentos
     requestAnimationFrame(() => {
       moves.forEach((move) => {
-        const square = this.boardCache[move.row]?.[move.col];
+        const square =
+          (this.boardCache[move.row] && this.boardCache[move.row][move.col]) ||
+          document.querySelector(
+            `.square[data-row="${move.row}"][data-col="${move.col}"]`
+          );
+
         if (square) {
           square.classList.add("valid-move-highlight");
         }
@@ -440,7 +459,6 @@ window.UI = {
   },
 
   playAudio: function (type) {
-    // Otimização de áudio: Não espera promessa e trata erro silenciosamente
     let sound;
     if (type === "capture") sound = this.elements.captureSound;
     else if (type === "join") sound = this.elements.joinSound;
@@ -448,10 +466,7 @@ window.UI = {
 
     if (sound) {
       sound.currentTime = 0;
-      // .catch() vazio para evitar erros no console se o usuário não interagiu ainda
       sound.play().catch(() => {});
-
-      // DISPARA VIBRAÇÃO SEGURA (Sincronizada com o som)
       this.triggerHaptic();
     }
   },

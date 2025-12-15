@@ -6,24 +6,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Damas Arena</title>
 
+  <!-- Fontes -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- ÍCONES (FontAwesome) -->
+  <!-- Ícones -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
+  <!-- Estilos -->
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/game.css" />
   <link rel="stylesheet" href="css/tournament.css" />
 
+  <!-- SDKs -->
   <script src="https://sdk.mercadopago.com/js/v2"></script>
+  <script src="/socket.io/socket.io.js"></script>
 </head>
 
 <body>
   <div id="main-container">
 
-    <!-- TELA DE LOGIN / CADASTRO -->
+    <!-- =========================================
+         1. TELA DE AUTENTICAÇÃO
+         ========================================= -->
     <div id="auth-container">
       <div class="logo-area">
         <h1>DAMAS <span class="highlight">ARENA</span></h1>
@@ -34,6 +40,7 @@
         <i class="fa-solid fa-circle-info"></i> Como Funciona / Regras
       </button>
 
+      <!-- Formulário de Login -->
       <form id="login-form">
         <div class="input-group">
           <i class="fa-solid fa-envelope"></i>
@@ -49,6 +56,7 @@
         </p>
       </form>
 
+      <!-- Formulário de Cadastro -->
       <form id="register-form" style="display: none">
         <div class="input-group">
           <i class="fa-solid fa-envelope"></i>
@@ -72,10 +80,12 @@
       </div>
     </div>
 
-    <!-- TELA DO LOBBY (Dashboard Moderno) -->
+    <!-- =========================================
+         2. TELA DO LOBBY
+         ========================================= -->
     <div id="lobby-container" class="hidden">
 
-      <!-- CABEÇALHO DO PERFIL -->
+      <!-- Cabeçalho do Perfil -->
       <div class="profile-header-card">
         <div class="profile-content">
           <div class="avatar-wrapper">
@@ -88,7 +98,7 @@
         </div>
       </div>
 
-      <!-- MENU DE AÇÕES RÁPIDAS (GRID) -->
+      <!-- Menu de Ações Rápidas (RECUPERADO WHATSAPP) -->
       <div class="action-grid">
         <div class="action-card red-gradient" id="btn-toggle-create-room">
           <div class="icon-box"><i class="fa-solid fa-circle-plus"></i></div>
@@ -112,13 +122,12 @@
         </a>
       </div>
 
-      <!-- PAINEL DE CRIAÇÃO DE SALA -->
+      <!-- Painel de Criação de Sala -->
       <div id="create-room-section" class="lobby-section hidden-animated hidden">
         <h3><i class="fa-solid fa-chess-board"></i> Configurar Partida</h3>
         <div class="config-grid">
           <div class="input-wrapper">
             <label>Aposta (R$)</label>
-            <!-- Valor vazio para o usuário digitar -->
             <input type="number" id="bet-amount-input" placeholder="0.00" min="1" value="" />
           </div>
           <div class="input-wrapper">
@@ -142,26 +151,30 @@
           </div>
         </div>
         <button id="create-room-btn" class="btn-confirm">INICIAR SALA</button>
+        <p id="lobby-error-message"></p>
       </div>
 
-      <!-- ÁREA DE ESPERA -->
+      <!-- Área de Espera -->
       <div id="waiting-area" class="hidden">
         <div class="pulse-ring"></div>
         <p>Aguardando oponente...</p>
         <p class="room-code-label">CÓDIGO: <strong id="room-code-display">---</strong></p>
+        <div class="loader"></div>
         <button id="cancel-room-btn" class="btn-cancel">Cancelar</button>
       </div>
 
-      <!-- CARTÃO DE TORNEIO -->
-      <div class="tournament-card-modern">
-        <div class="trn-header">
+      <!-- CARD DE TORNEIO (ATUALIZADO COM CLASSES PADRÃO PARA FUNCIONAR COM O NOVO JS) -->
+      <div class="tournament-card">
+        <div class="tournament-header">
           <span><i class="fa-solid fa-trophy"></i> Torneio Diário</span>
-          <span id="tournament-info-btn" class="info-bubble">?</span>
+          <span id="tournament-info-btn" class="info-icon-btn"><i class="fa-solid fa-circle-info"></i></span>
         </div>
-        <div class="trn-body">
-          <h1 class="trn-title">TORNEIO 21:00</h1>
+        <!-- IMPORTANTE: classe 'tournament-body' é usada pelo JS para injetar o pódio/cancelamento -->
+        <div class="tournament-body">
+          <h1 class="trn-title" style="color: #f1c40f; font-size: 1.5rem; font-weight: 800; margin-bottom: 10px;">
+            TORNEIO 21:00</h1>
 
-          <p style="color: #cbd5e1; font-size: 0.9rem; margin-bottom: 5px;">👥 Mínimo: <strong>8 Jogadores</strong></p>
+          <p style="color: #cbd5e1; font-size: 0.9rem; margin-bottom: 5px;">👥 Mínimo: <strong>4 Jogadores</strong></p>
 
           <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; margin: 10px 0;">
             <p style="color: #f1c40f; font-size: 0.85rem; font-weight: bold; margin-bottom: 5px;">🎁 Premiação (do
@@ -175,39 +188,41 @@
 
           <div class="trn-stats">
             <p>Inscrição: <strong>R$ 2,00</strong></p>
-            <p id="header-participants-count" style="display:none"></p>
             <p id="trn-participants-count">Inscritos: 0</p>
-            <p id="trn-prize-pool">Prêmio: R$ 0,00</p>
+            <p id="trn-prize-pool" style="color: #2ecc71; font-weight: bold;">Prêmio: R$ 0,00</p>
           </div>
 
-          <p id="trn-message"></p>
-
           <div class="trn-actions">
-            <button id="join-tournament-btn" class="btn-gold">Entrar no Torneio</button>
-            <button id="leave-tournament-btn" class="btn-red hidden">Sair</button>
+            <button id="join-tournament-btn" class="gold-btn">Entrar no Torneio</button>
+            <button id="leave-tournament-btn" class="red-btn hidden">Sair</button>
           </div>
         </div>
       </div>
 
-      <!-- CARTÃO AFILIADOS -->
-      <div class="affiliate-card-modern">
-        <div class="aff-header" onclick="toggleSection(this)">
+      <!-- CARD DE AFILIADOS (RECUPERADO) -->
+      <div class="affiliate-card-modern" style="margin-bottom: 20px;">
+        <div class="aff-header" onclick="toggleSection(this)"
+          style="display: flex; justify-content: space-between; padding: 12px; cursor: pointer; background: rgba(0,0,0,0.2);">
           <span><i class="fa-solid fa-sack-dollar"></i> Indique e Ganhe</span>
           <i class="fa-solid fa-chevron-down"></i>
         </div>
-        <div class="collapsible-body">
+        <div class="collapsible-body" style="display: none; padding: 15px;">
           <p style="margin-bottom: 15px; line-height: 1.4; color: #f8fafc;">
             Ganhe <strong>R$ 1,00</strong> de bônus sempre que um amigo indicado fizer o primeiro depósito de <strong>R$
               5,00</strong> ou mais!
           </p>
-          <div class="aff-buttons">
-            <button id="copy-referral-btn"><i class="fa-solid fa-copy"></i> Copiar Link</button>
-            <button id="view-referrals-btn"><i class="fa-solid fa-users"></i> Indicações</button>
+          <div class="aff-buttons" style="display: flex; gap: 10px;">
+            <button id="copy-referral-btn"
+              style="flex: 1; padding: 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border:none; color:white;"><i
+                class="fa-solid fa-copy"></i> Copiar Link</button>
+            <button id="view-referrals-btn"
+              style="flex: 1; padding: 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border:none; color:white;"><i
+                class="fa-solid fa-users"></i> Indicações</button>
           </div>
         </div>
       </div>
 
-      <!-- LISTAS DE SALAS -->
+      <!-- Listas de Salas -->
       <div class="rooms-container">
         <button id="refresh-lobby-btn" class="btn-refresh"><i class="fa-solid fa-rotate-right"></i> Atualizar
           Salas</button>
@@ -234,7 +249,9 @@
 
     </div> <!-- Fim Lobby -->
 
-    <!-- CONTAINER DO JOGO -->
+    <!-- =========================================
+         3. TELA DE JOGO
+         ========================================= -->
     <div id="game-container" class="hidden">
       <div class="game-top-bar">
         <div id="spectator-indicator" class="hidden badge-warning">ESPECTADOR</div>
@@ -277,9 +294,11 @@
       </div>
     </div>
 
-  </div> <!-- Main Container -->
+  </div> <!-- Fim Main Container -->
 
-  <!-- MODAIS (Popups) -->
+  <!-- =========================================
+       4. MODAIS E OVERLAYS
+       ========================================= -->
 
   <!-- Modal PIX -->
   <div id="pix-overlay" class="hidden modal-overlay">
@@ -331,7 +350,7 @@
     </div>
   </div>
 
-  <!-- Modal Tutorial GERAL -->
+  <!-- Modal Tutorial GERAL (RECUPERADO) -->
   <div id="general-tutorial-overlay" class="hidden modal-overlay">
     <div class="modal-card" style="text-align:left; max-width: 600px;">
       <h3 style="text-align:center; color:#f1c40f; margin-bottom: 20px;">📖 Como Funciona</h3>
@@ -462,7 +481,7 @@
     </div>
   </div>
 
-  <!-- MODAL INFO TORNEIO (DETALHADO) -->
+  <!-- MODAL INFO TORNEIO -->
   <div id="tournament-info-overlay" class="hidden modal-overlay">
     <div class="modal-card" style="max-width: 450px; text-align: left;">
       <h3 style="color: #f1c40f; margin-bottom: 15px; text-align: center;">🏆 Como Funciona o Torneio</h3>
@@ -512,6 +531,20 @@
     </div>
   </div>
 
+  <!-- ### NOVA NOTIFICAÇÃO DE CONTAGEM REGRESSIVA ### -->
+  <div id="tournament-countdown-notification" class="hidden">
+    <div class="countdown-content">
+      <div class="countdown-icon">
+        <i class="fa-solid fa-clock"></i>
+      </div>
+      <div class="countdown-text">
+        <span class="countdown-label">TORNEIO INICIA EM:</span>
+        <span id="countdown-timer-display">00:00:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ÁUDIOS -->
   <audio id="move-sound" src="/sounds/move.mp3"></audio>
   <audio id="capture-sound" src="/sounds/capture.mp3"></audio>
   <audio id="join-sound" src="/sounds/join.mp3"></audio>
@@ -522,7 +555,7 @@
   <script src="js/ui-helpers.js"></script>
   <script src="js/lobby.js"></script>
   <script>
-    // Toggle da área de criar sala (simples, mas agora redundante com lobby.js)
+    // Função para abrir/fechar seções (como o card de afiliados)
     function toggleSection(element) {
       const body = element.nextElementSibling;
       element.classList.toggle('active');

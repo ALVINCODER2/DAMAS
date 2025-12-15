@@ -1,47 +1,98 @@
-// public/js/lobby.js - Gerencia Autenticação, Lobby, Torneios e Modais
+// public/js/lobby.js - Gerencia Autenticação, Lobby, Torneios e Modais (COM TIMER REGRESSIVO)
 
 window.initLobby = function (socket, UI) {
   let paymentCheckInterval = null;
   let tempRoomCode = null;
 
-  // --- FUNÇÃO PARA OBRIGAR O NOME (NOVO) ---
+  // Variável para controlar o timer da contagem regressiva
+  let tournamentCountdownInterval = null;
+
   function enforceUsernameRequirement() {
-    if (window.currentUser && (!window.currentUser.username || window.currentUser.username.trim() === "")) {
+    if (
+      window.currentUser &&
+      (!window.currentUser.username ||
+        window.currentUser.username.trim() === "")
+    ) {
       const profileOverlay = document.getElementById("profile-overlay");
       const closeBtn = document.getElementById("close-profile-btn");
       const msg = document.getElementById("profile-message");
       const usernameInput = document.getElementById("profile-username-input");
-      const avatarInput = document.getElementById("profile-avatar-input");
       const preview = document.getElementById("profile-preview-img");
 
-      // Abre o modal
-      if (profileOverlay) {
-        profileOverlay.classList.remove("hidden");
-      }
-      
-      // Esconde o botão de fechar para obrigar o cadastro
-      if (closeBtn) {
-        closeBtn.style.display = "none";
-      }
-      
-      // Mensagem de aviso
+      if (profileOverlay) profileOverlay.classList.remove("hidden");
+      if (closeBtn) closeBtn.style.display = "none";
       if (msg) {
-        msg.innerHTML = "<i class='fa-solid fa-circle-exclamation'></i> Defina um Apelido para continuar.";
-        msg.style.color = "#f1c40f"; // Amarelo alerta
+        msg.innerHTML =
+          "<i class='fa-solid fa-circle-exclamation'></i> Defina um Apelido para continuar.";
+        msg.style.color = "#f1c40f";
         msg.style.fontWeight = "bold";
       }
-
-      // Preenche campos se estiverem vazios (apenas visual)
       if (usernameInput) usernameInput.focus();
-      
-      // Atualiza preview se necessário
       if (preview && (!preview.src || preview.src === "")) {
-         preview.src = `https://ui-avatars.com/api/?name=User&background=random`;
+        preview.src = `https://ui-avatars.com/api/?name=User&background=random`;
       }
     }
   }
 
-  // --- LÓGICA DE TOGGLE (ABRIR/FECHAR CRIAÇÃO DE SALA) ---
+  // --- FUNÇÃO DE CONTAGEM REGRESSIVA (NOVA) ---
+  function startTournamentTimer() {
+    const notif = document.getElementById("tournament-countdown-notification");
+    const timerDisplay = document.getElementById("countdown-timer-display");
+
+    if (tournamentCountdownInterval) clearInterval(tournamentCountdownInterval);
+
+    const updateTimer = () => {
+      const now = new Date();
+      const target = new Date();
+      const targetHour = 21;
+      const targetMinute = 0;
+
+      target.setHours(targetHour, targetMinute, 0, 0);
+
+      // Se já passou das 20h hoje, aponta para amanhã (ou assume que começou)
+      // Mas se for 20:05, o torneio já deve estar rolando, então escondemos
+      // Vamos dar uma margem de 10 minutos após o início
+      const diff = target - now;
+
+      if (diff < -600000) {
+        // Passou 10 min
+        notif.classList.add("hidden");
+        clearInterval(tournamentCountdownInterval);
+        return;
+      }
+
+      if (diff < 0) {
+        // Estamos entre 20:00 e 20:10 (Iniciando)
+        timerDisplay.textContent = "INICIANDO...";
+        timerDisplay.style.color = "#e74c3c"; // Vermelho
+        notif.classList.remove("hidden");
+        return;
+      }
+
+      // Formata HH:MM:SS
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      timerDisplay.textContent = `${hours.toString().padStart(2, "0")}:${minutes
+        .toString()
+        .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
+      timerDisplay.style.color = "white";
+      notif.classList.remove("hidden");
+    };
+
+    updateTimer(); // Chama uma vez imediatamente
+    tournamentCountdownInterval = setInterval(updateTimer, 1000);
+  }
+
+  function stopTournamentTimer() {
+    if (tournamentCountdownInterval) clearInterval(tournamentCountdownInterval);
+    const notif = document.getElementById("tournament-countdown-notification");
+    if (notif) notif.classList.add("hidden");
+  }
+
+  // ... (Código de Toggle e Autenticação mantido igual) ...
   const createRoomToggle = document.getElementById("btn-toggle-create-room");
   if (createRoomToggle) {
     createRoomToggle.addEventListener("click", () => {
@@ -51,13 +102,12 @@ window.initLobby = function (socket, UI) {
           section.classList.contains("hidden-animated") ||
           section.classList.contains("hidden")
         ) {
-          section.classList.remove("hidden"); // Remove hidden padrão
+          section.classList.remove("hidden");
           section.classList.remove("hidden-animated");
           section.classList.add("visible-animated");
         } else {
           section.classList.remove("visible-animated");
           section.classList.add("hidden-animated");
-          // Pequeno timeout para display:none após animação (opcional, mas ajuda layout)
           setTimeout(() => {
             if (section.classList.contains("hidden-animated"))
               section.classList.add("hidden");
@@ -74,22 +124,14 @@ window.initLobby = function (socket, UI) {
 
   if (refCode && referralInput) {
     try {
-      // Tenta decodificar de Base64 para não expor o email na URL
-      // Se falhar (link antigo ou inválido), usa o valor original
       referralInput.value = atob(refCode);
     } catch (e) {
       referralInput.value = refCode;
     }
-
-    // Oculta o campo de input e o ícone associado (se estiver dentro de um .input-group)
     const inputGroup = referralInput.closest(".input-group");
-    if (inputGroup) {
-      inputGroup.style.display = "none";
-    } else {
-      referralInput.style.display = "none";
-    }
+    if (inputGroup) inputGroup.style.display = "none";
+    else referralInput.style.display = "none";
 
-    // Troca para a tela de cadastro automaticamente
     const loginForm = document.getElementById("login-form");
     const registerForm = document.getElementById("register-form");
     if (loginForm) loginForm.style.display = "none";
@@ -172,8 +214,6 @@ window.initLobby = function (socket, UI) {
           updateLobbyWelcome();
           updateTournamentStatus();
           socket.connect();
-          
-          // VERIFICA SE TEM NOME
           enforceUsernameRequirement();
         } else {
           const msg = document.getElementById("auth-message");
@@ -192,11 +232,12 @@ window.initLobby = function (socket, UI) {
     logoutBtn.addEventListener("click", () => {
       localStorage.removeItem("checkersUserEmail");
       localStorage.removeItem("checkersCurrentRoom");
+      stopTournamentTimer(); // Para o timer ao sair
       window.location.reload();
     });
   }
 
-  // --- LÓGICA DO LOBBY (CRIAÇÃO E ENTRADA) ---
+  // --- LÓGICA DO LOBBY ---
   if (UI.elements.timeControlSelect) {
     UI.elements.timeControlSelect.addEventListener("change", () => {
       UI.updateTimerOptions(UI.elements.timeControlSelect.value);
@@ -207,17 +248,15 @@ window.initLobby = function (socket, UI) {
   const createRoomBtn = document.getElementById("create-room-btn");
   if (createRoomBtn) {
     createRoomBtn.addEventListener("click", () => {
-      // Bloqueia se não tiver nome
       if (!window.currentUser.username) {
         enforceUsernameRequirement();
         return;
       }
-
-      const betInput = document.getElementById("bet-amount-input"); // Usando ID direto para garantir
+      const betInput = document.getElementById("bet-amount-input");
       const bet = parseInt(betInput.value, 10);
       const gameMode = document.getElementById("game-mode-select").value;
       const timeControl = document.getElementById("time-control-select").value;
-      const timerSelect = document.getElementById("timer-select"); // Pegar o valor do select dinâmico
+      const timerSelect = document.getElementById("timer-select");
       const timerDuration = timerSelect ? timerSelect.value : 40;
 
       if (bet > 0 && window.currentUser) {
@@ -246,10 +285,8 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  // Delegação de eventos para botões dinâmicos (Entrar/Assistir)
   document.getElementById("lobby-container").addEventListener("click", (e) => {
     if (e.target.classList.contains("join-room-btn")) {
-      // Bloqueia se não tiver nome
       if (!window.currentUser || !window.currentUser.username) {
         enforceUsernameRequirement();
         return;
@@ -283,7 +320,7 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  // --- PERFIL ---
+  // ... (Código de Perfil e Indicações mantido igual) ...
   const openProfileBtn = document.getElementById("open-profile-btn");
   const closeProfileBtn = document.getElementById("close-profile-btn");
   const saveProfileBtn = document.getElementById("save-profile-btn");
@@ -297,17 +334,13 @@ window.initLobby = function (socket, UI) {
     openProfileBtn.addEventListener("click", () => {
       if (!window.currentUser) return;
       profileOverlay.classList.remove("hidden");
-      
-      // Garante que o botão de fechar apareça se o usuário JÁ tem nome
       if (window.currentUser.username) {
         if (closeProfileBtn) closeProfileBtn.style.display = "block";
       } else {
         if (closeProfileBtn) closeProfileBtn.style.display = "none";
       }
-
       usernameInput.value = window.currentUser.username || "";
       avatarInput.value = window.currentUser.avatar || "";
-
       const defaultAvatar = `https://ui-avatars.com/api/?name=${
         window.currentUser.username || "User"
       }&background=random`;
@@ -315,28 +348,23 @@ window.initLobby = function (socket, UI) {
       profileMsg.textContent = "";
     });
   }
-
   if (closeProfileBtn) {
     closeProfileBtn.addEventListener("click", () =>
       profileOverlay.classList.add("hidden")
     );
   }
-
   if (saveProfileBtn) {
     saveProfileBtn.addEventListener("click", async () => {
       if (!window.currentUser) return;
       const newUsername = usernameInput.value.trim();
       const newAvatar = avatarInput.value.trim();
-
       if (!newUsername) {
         profileMsg.textContent = "O nome não pode ficar vazio.";
         profileMsg.style.color = "#e74c3c";
         return;
       }
-
       saveProfileBtn.disabled = true;
       saveProfileBtn.textContent = "Salvando...";
-
       try {
         const res = await fetch("/api/user/profile", {
           method: "PUT",
@@ -348,16 +376,12 @@ window.initLobby = function (socket, UI) {
           }),
         });
         const data = await res.json();
-
         if (res.ok) {
           window.currentUser = data.user;
           updateLobbyWelcome();
           profileMsg.textContent = "Perfil atualizado!";
           profileMsg.style.color = "#2ecc71";
-          
-          // Re-habilita o botão de fechar pois agora temos um nome
           if (closeProfileBtn) closeProfileBtn.style.display = "block";
-
           setTimeout(() => profileOverlay.classList.add("hidden"), 1500);
         } else {
           profileMsg.textContent = data.message;
@@ -373,206 +397,8 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  // --- FUNÇÕES DE INDICAÇÃO E HISTÓRICO (RESTAURADAS) ---
+  // --- FUNÇÕES DE HELPER E STATUS DE TORNEIO ---
 
-  // 1. Copiar Link
-  const copyReferralBtn = document.getElementById("copy-referral-btn");
-  if (copyReferralBtn) {
-    copyReferralBtn.addEventListener("click", () => {
-      if (!window.currentUser) return;
-      // Codifica em Base64 para ocultar o email na URL
-      const encodedRef = btoa(window.currentUser.email);
-      const link = `${window.location.origin}/?ref=${encodeURIComponent(
-        encodedRef
-      )}`;
-
-      // Tenta usar a API moderna primeiro
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard
-          .writeText(link)
-          .then(() => {
-            const originalText = copyReferralBtn.innerHTML;
-            copyReferralBtn.innerHTML =
-              '<i class="fa-solid fa-check"></i> Copiado!';
-            setTimeout(() => (copyReferralBtn.innerHTML = originalText), 2000);
-          })
-          .catch(() => {
-            // Se falhar, usa o método antigo
-            fallbackCopyTextToClipboard(link);
-          });
-      } else {
-        fallbackCopyTextToClipboard(link);
-      }
-    });
-  }
-
-  function fallbackCopyTextToClipboard(text) {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    textArea.style.position = "fixed"; // Avoid scrolling to bottom
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand("copy");
-      alert("Link copiado para a área de transferência!");
-    } catch (err) {
-      alert("Não foi possível copiar o link.");
-    }
-    document.body.removeChild(textArea);
-  }
-
-  // 2. Ver Indicações
-  const viewRefBtn = document.getElementById("view-referrals-btn");
-  if (viewRefBtn) {
-    viewRefBtn.addEventListener("click", async () => {
-      if (!window.currentUser) return;
-      const list = document.getElementById("referrals-list");
-      document.getElementById("referrals-overlay").classList.remove("hidden");
-      list.innerHTML = '<p style="color:#ccc;">Carregando...</p>';
-
-      try {
-        const response = await fetch("/api/user/referrals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: window.currentUser.email }),
-        });
-        const referrals = await response.json();
-        list.innerHTML = "";
-
-        if (referrals.length === 0) {
-          list.innerHTML = "<p>Você ainda não tem indicações.</p>";
-        } else {
-          // Cria uma lista bonita
-          const ul = document.createElement("ul");
-          ul.style.listStyle = "none";
-          ul.style.padding = "0";
-
-          referrals.forEach((ref) => {
-            const li = document.createElement("li");
-            li.style.background = "rgba(255,255,255,0.05)";
-            li.style.marginBottom = "8px";
-            li.style.padding = "10px";
-            li.style.borderRadius = "8px";
-            li.style.display = "flex";
-            li.style.justifyContent = "space-between";
-            li.style.alignItems = "center";
-
-            let statusHtml = "";
-            if (ref.hasDeposited) {
-              const val = ref.firstDepositValue || 0;
-              statusHtml =
-                val >= 5
-                  ? `<span style="color: #2ecc71; font-weight:bold; font-size:0.8rem;">+R$ 1,00 (Dep. R$${val})</span>`
-                  : `<span style="color: #f39c12; font-size:0.8rem;">Dep. R$${val} (Sem bônus)</span>`;
-            } else {
-              statusHtml =
-                '<span style="color: #95a5a6; font-size:0.8rem;">Pendente</span>';
-            }
-
-            li.innerHTML = `
-                          <span style="font-weight:600; font-size:0.9rem;">${
-                            ref.email.split("@")[0]
-                          }...</span>
-                          ${statusHtml}
-                      `;
-            ul.appendChild(li);
-          });
-          list.appendChild(ul);
-        }
-      } catch (e) {
-        list.innerHTML = "<p style='color: #e74c3c;'>Erro ao carregar.</p>";
-      }
-    });
-  }
-
-  const closeRefBtn = document.getElementById("close-referrals-overlay-btn");
-  if (closeRefBtn)
-    closeRefBtn.addEventListener("click", () =>
-      document.getElementById("referrals-overlay").classList.add("hidden")
-    );
-
-  // 3. Ver Histórico
-  const viewHistoryBtn = document.getElementById("view-history-btn");
-  if (viewHistoryBtn) {
-    viewHistoryBtn.addEventListener("click", async () => {
-      if (!window.currentUser) return;
-      const list = document.getElementById("history-list");
-      document.getElementById("history-overlay").classList.remove("hidden");
-      list.innerHTML = '<p style="color:#ccc;">Carregando...</p>';
-
-      try {
-        const res = await fetch("/api/user/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: window.currentUser.email }),
-        });
-        const data = await res.json();
-        list.innerHTML = "";
-
-        if (data.length === 0) {
-          list.innerHTML = "<p>Sem partidas recentes.</p>";
-          return;
-        }
-
-        const ul = document.createElement("ul");
-        ul.style.listStyle = "none";
-        ul.style.padding = "0";
-
-        data.forEach((m) => {
-          const li = document.createElement("li");
-          li.style.background = "rgba(255,255,255,0.05)";
-          li.style.marginBottom = "8px";
-          li.style.padding = "10px";
-          li.style.borderRadius = "8px";
-          li.style.fontSize = "0.9rem";
-
-          let resultText = "Empate";
-          let color = "#95a5a6";
-
-          if (m.winner) {
-            if (m.winner === window.currentUser.email) {
-              resultText = "VITÓRIA";
-              color = "#2ecc71";
-            } else {
-              resultText = "DERROTA";
-              color = "#e74c3c";
-            }
-          }
-
-          const opponent =
-            m.player1 === window.currentUser.email ? m.player2 : m.player1;
-          const date = new Date(m.createdAt).toLocaleDateString();
-
-          li.innerHTML = `
-                      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                          <strong style="color:${color}">${resultText}</strong>
-                          <span style="color:#aaa; font-size:0.8rem;">${date}</span>
-                      </div>
-                      <div style="display:flex; justify-content:space-between;">
-                          <span>vs ${opponent.split("@")[0]}</span>
-                          <span>Aposta: <strong>R$ ${m.bet.toFixed(
-                            2
-                          )}</strong></span>
-                      </div>
-                  `;
-          ul.appendChild(li);
-        });
-        list.appendChild(ul);
-      } catch (e) {
-        list.innerHTML =
-          "<p style='color: #e74c3c;'>Erro ao carregar histórico.</p>";
-      }
-    });
-  }
-
-  const closeHistBtn = document.getElementById("close-history-overlay-btn");
-  if (closeHistBtn)
-    closeHistBtn.addEventListener("click", () =>
-      document.getElementById("history-overlay").classList.add("hidden")
-    );
-
-  // --- HELPERS GERAIS ---
   function updateLobbyWelcome() {
     const welcomeMsg = document.getElementById("lobby-welcome-message");
     const avatarImg = document.getElementById("lobby-avatar");
@@ -598,6 +424,39 @@ window.initLobby = function (socket, UI) {
   }
 
   async function updateTournamentStatus() {
+    const today = new Date().toLocaleDateString();
+
+    const isCancelled = localStorage.getItem(`tournament_cancelled_${today}`);
+    if (isCancelled === "true") {
+      const body = document.querySelector(".tournament-body");
+      if (body) {
+        body.innerHTML = `<div class="cancelled-status"><i class="fa-solid fa-ban"></i><p>CANCELADO HOJE</p><small>Insuficiência de jogadores</small></div>`;
+      }
+      stopTournamentTimer();
+      return;
+    }
+
+    const savedResult = localStorage.getItem(`tournament_result_${today}`);
+    if (savedResult) {
+      const res = JSON.parse(savedResult);
+      const body = document.querySelector(".tournament-body");
+      if (body) {
+        const wName = res.winner ? res.winner.split("@")[0] : "???";
+        const rName = res.runnerUp ? res.runnerUp.split("@")[0] : "???";
+        body.innerHTML = `
+                <div class="podium-container">
+                    <div class="podium-winner"><i class="fa-solid fa-trophy"></i><h3>CAMPEÃO</h3><p>${wName}</p><span class="prize">+R$ ${res.championPrize.toFixed(
+          2
+        )}</span></div>
+                    <div class="podium-runnerup"><i class="fa-solid fa-medal"></i><h4>Vice-Campeão</h4><p>${rName}</p><span class="prize">+R$ ${res.runnerUpPrize.toFixed(
+          2
+        )}</span></div>
+                </div>`;
+      }
+      stopTournamentTimer();
+      return;
+    }
+
     try {
       let url = "/api/tournament/status";
       if (window.currentUser) url += `?email=${window.currentUser.email}`;
@@ -618,17 +477,24 @@ window.initLobby = function (socket, UI) {
           if (data.isRegistered) {
             joinBtn.classList.add("hidden");
             leaveBtn.classList.remove("hidden");
+
+            // ### ATIVA O TIMER SE ESTIVER INSCRITO ###
+            startTournamentTimer();
           } else {
             joinBtn.classList.remove("hidden");
             leaveBtn.classList.add("hidden");
             joinBtn.textContent = `Entrar (R$ ${data.entryFee.toFixed(2)})`;
             joinBtn.disabled = false;
+
+            // ### PARA O TIMER SE NÃO ESTIVER INSCRITO ###
+            stopTournamentTimer();
           }
         } else {
           joinBtn.textContent = "Inscrições Fechadas";
           joinBtn.classList.remove("hidden");
           leaveBtn.classList.add("hidden");
           joinBtn.disabled = true;
+          stopTournamentTimer();
         }
       }
     } catch (e) {
@@ -637,12 +503,10 @@ window.initLobby = function (socket, UI) {
   }
   window.updateTournamentStatus = updateTournamentStatus;
 
-  // Lógica de Entrar/Sair Torneio
   const joinTournamentBtn = document.getElementById("join-tournament-btn");
   if (joinTournamentBtn) {
     joinTournamentBtn.addEventListener("click", async () => {
       if (!window.currentUser) return alert("Faça login.");
-      // Bloqueio de nome
       if (!window.currentUser.username) {
         enforceUsernameRequirement();
         return;
@@ -694,7 +558,6 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  // --- STARTUP CHECK ---
   async function checkSession() {
     const savedEmail = localStorage.getItem("checkersUserEmail");
     if (savedEmail) {
@@ -712,8 +575,6 @@ window.initLobby = function (socket, UI) {
           updateLobbyWelcome();
           updateTournamentStatus();
           socket.connect();
-          
-          // VERIFICA SE TEM NOME AO RECARREGAR
           enforceUsernameRequirement();
         } else {
           localStorage.removeItem("checkersUserEmail");
@@ -725,46 +586,44 @@ window.initLobby = function (socket, UI) {
   }
   checkSession();
 
-  // --- LISTENERS LOBBY SOCKET ---
+  // --- SOCKET LISTENERS (Mesmo código anterior) ---
   socket.on("roomCreated", (data) => {
     document.getElementById("room-code-display").textContent = data.roomCode;
     document.getElementById("waiting-area").classList.remove("hidden");
-
-    // Esconde a área de criar e restaura o botão
     const section = document.getElementById("create-room-section");
     section.classList.remove("visible-animated");
     section.classList.add("hidden-animated");
     setTimeout(() => section.classList.add("hidden"), 300);
-
     const btn = document.getElementById("create-room-btn");
     btn.disabled = false;
     btn.textContent = "INICIAR SALA";
   });
-
   socket.on("roomCancelled", () => {
     document.getElementById("waiting-area").classList.add("hidden");
     document.getElementById("create-room-btn").disabled = false;
   });
-
   socket.on("updateLobby", (data) => {
     UI.renderOpenRooms(data.waiting);
     UI.renderActiveRooms(data.active);
   });
-
   socket.on("tournamentUpdate", (data) => {
+    const today = new Date().toLocaleDateString();
+    if (
+      localStorage.getItem(`tournament_cancelled_${today}`) ||
+      localStorage.getItem(`tournament_result_${today}`)
+    )
+      return;
     const countEl = document.getElementById("trn-participants-count");
     if (countEl) countEl.textContent = `Inscritos: ${data.participantsCount}`;
     const prizeEl = document.getElementById("trn-prize-pool");
     if (prizeEl)
       prizeEl.textContent = `Prêmio: R$ ${data.prizePool.toFixed(2)}`;
   });
-
   socket.on("joinError", (data) => {
     alert(data.message);
     document.getElementById("waiting-area").classList.add("hidden");
     document.getElementById("create-room-btn").disabled = false;
   });
-
   socket.on("confirmBet", (data) => {
     document.getElementById(
       "confirm-bet-amount"
@@ -779,7 +638,6 @@ window.initLobby = function (socket, UI) {
     document.getElementById("confirm-game-mode").textContent = modeText;
     document.getElementById("confirm-bet-overlay").classList.remove("hidden");
   });
-
   document.getElementById("accept-bet-btn").addEventListener("click", () => {
     if (tempRoomCode && window.currentUser) {
       window.isSpectator = false;
@@ -794,7 +652,6 @@ window.initLobby = function (socket, UI) {
     document.getElementById("confirm-bet-overlay").classList.add("hidden");
     tempRoomCode = null;
   });
-
   socket.on("updateSaldo", (d) => {
     if (window.currentUser) {
       window.currentUser.saldo = d.newSaldo;
@@ -802,13 +659,12 @@ window.initLobby = function (socket, UI) {
     }
   });
 
-  // Modal PIX Logics
+  // Outros Listeners (PIX, Saque, Tutoriais)
   const addBalanceBtn = document.getElementById("add-balance-btn");
   if (addBalanceBtn)
     addBalanceBtn.addEventListener("click", () =>
       document.getElementById("pix-overlay").classList.remove("hidden")
     );
-
   document
     .getElementById("close-pix-overlay-btn")
     .addEventListener("click", () => {
@@ -822,7 +678,6 @@ window.initLobby = function (socket, UI) {
         paymentCheckInterval = null;
       }
     });
-
   const payBtn = document.getElementById("pay-mercadopago-btn");
   if (payBtn) {
     payBtn.addEventListener("click", async () => {
@@ -831,10 +686,8 @@ window.initLobby = function (socket, UI) {
         document.getElementById("deposit-amount").value
       );
       if (!amount || amount < 1) return alert("Mínimo R$ 1,00");
-
       payBtn.disabled = true;
       document.getElementById("mp-loading").classList.remove("hidden");
-
       try {
         const res = await fetch("/api/payment/create_preference", {
           method: "POST",
@@ -842,7 +695,6 @@ window.initLobby = function (socket, UI) {
           body: JSON.stringify({ amount, email: window.currentUser.email }),
         });
         const data = await res.json();
-
         document.getElementById("mp-loading").classList.add("hidden");
         if (data.qr_code) {
           document
@@ -852,8 +704,6 @@ window.initLobby = function (socket, UI) {
             "qr-code-img"
           ).src = `data:image/png;base64,${data.qr_code_base64}`;
           document.getElementById("pix-copy-paste").value = data.qr_code;
-
-          // Polling saldo
           const initialSaldo = window.currentUser.saldo;
           paymentCheckInterval = setInterval(async () => {
             try {
@@ -880,15 +730,12 @@ window.initLobby = function (socket, UI) {
       }
     });
   }
-
   document.getElementById("copy-pix-code-btn").addEventListener("click", () => {
     const copyText = document.getElementById("pix-copy-paste");
     copyText.select();
     document.execCommand("copy");
     alert("Código copiado!");
   });
-
-  // Modal SAQUE
   const withdrawBtn = document.getElementById("withdraw-btn");
   if (withdrawBtn)
     withdrawBtn.addEventListener("click", () =>
@@ -899,7 +746,6 @@ window.initLobby = function (socket, UI) {
     .addEventListener("click", () =>
       document.getElementById("withdraw-overlay").classList.add("hidden")
     );
-
   document
     .getElementById("withdraw-form")
     .addEventListener("submit", async (e) => {
@@ -909,7 +755,6 @@ window.initLobby = function (socket, UI) {
         document.getElementById("withdraw-amount").value
       );
       if (!pixKey || amount < 30) return alert("Valor inválido.");
-
       try {
         const res = await fetch("/api/withdraw", {
           method: "POST",
@@ -931,8 +776,6 @@ window.initLobby = function (socket, UI) {
         alert("Erro de conexão");
       }
     });
-
-  // Modais de Info e Afiliados
   const tutorialBtn = document.getElementById("tutorial-btn");
   if (tutorialBtn)
     tutorialBtn.addEventListener("click", () =>
@@ -947,7 +790,6 @@ window.initLobby = function (socket, UI) {
         .getElementById("general-tutorial-overlay")
         .classList.add("hidden")
     );
-
   const trnInfoBtn = document.getElementById("tournament-info-btn");
   if (trnInfoBtn)
     trnInfoBtn.addEventListener("click", (e) => {
@@ -960,5 +802,160 @@ window.initLobby = function (socket, UI) {
     .getElementById("close-tournament-info-btn")
     .addEventListener("click", () =>
       document.getElementById("tournament-info-overlay").classList.add("hidden")
+    );
+  const copyReferralBtn = document.getElementById("copy-referral-btn");
+  if (copyReferralBtn)
+    copyReferralBtn.addEventListener("click", () => {
+      if (!window.currentUser) return;
+      const encodedRef = btoa(window.currentUser.email);
+      const link = `${window.location.origin}/?ref=${encodeURIComponent(
+        encodedRef
+      )}`;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard
+          .writeText(link)
+          .then(() => {
+            const originalText = copyReferralBtn.innerHTML;
+            copyReferralBtn.innerHTML =
+              '<i class="fa-solid fa-check"></i> Copiado!';
+            setTimeout(() => (copyReferralBtn.innerHTML = originalText), 2000);
+          })
+          .catch(() => fallbackCopyTextToClipboard(link));
+      } else {
+        fallbackCopyTextToClipboard(link);
+      }
+    });
+  function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand("copy");
+      alert("Link copiado para a área de transferência!");
+    } catch (err) {
+      alert("Não foi possível copiar o link.");
+    }
+    document.body.removeChild(textArea);
+  }
+  const viewRefBtn = document.getElementById("view-referrals-btn");
+  if (viewRefBtn)
+    viewRefBtn.addEventListener("click", async () => {
+      if (!window.currentUser) return;
+      const list = document.getElementById("referrals-list");
+      document.getElementById("referrals-overlay").classList.remove("hidden");
+      list.innerHTML = '<p style="color:#ccc;">Carregando...</p>';
+      try {
+        const response = await fetch("/api/user/referrals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: window.currentUser.email }),
+        });
+        const referrals = await response.json();
+        list.innerHTML = "";
+        if (referrals.length === 0) {
+          list.innerHTML = "<p>Você ainda não tem indicações.</p>";
+        } else {
+          const ul = document.createElement("ul");
+          ul.style.listStyle = "none";
+          ul.style.padding = "0";
+          referrals.forEach((ref) => {
+            const li = document.createElement("li");
+            li.style.background = "rgba(255,255,255,0.05)";
+            li.style.marginBottom = "8px";
+            li.style.padding = "10px";
+            li.style.borderRadius = "8px";
+            li.style.display = "flex";
+            li.style.justifyContent = "space-between";
+            li.style.alignItems = "center";
+            let statusHtml = "";
+            if (ref.hasDeposited) {
+              const val = ref.firstDepositValue || 0;
+              statusHtml =
+                val >= 5
+                  ? `<span style="color: #2ecc71; font-weight:bold; font-size:0.8rem;">+R$ 1,00 (Dep. R$${val})</span>`
+                  : `<span style="color: #f39c12; font-size:0.8rem;">Dep. R$${val} (Sem bônus)</span>`;
+            } else {
+              statusHtml =
+                '<span style="color: #95a5a6; font-size:0.8rem;">Pendente</span>';
+            }
+            li.innerHTML = `<span style="font-weight:600; font-size:0.9rem;">${
+              ref.email.split("@")[0]
+            }...</span>${statusHtml}`;
+            ul.appendChild(li);
+          });
+          list.appendChild(ul);
+        }
+      } catch (e) {
+        list.innerHTML = "<p style='color: #e74c3c;'>Erro ao carregar.</p>";
+      }
+    });
+  const closeRefBtn = document.getElementById("close-referrals-overlay-btn");
+  if (closeRefBtn)
+    closeRefBtn.addEventListener("click", () =>
+      document.getElementById("referrals-overlay").classList.add("hidden")
+    );
+  const viewHistoryBtn = document.getElementById("view-history-btn");
+  if (viewHistoryBtn)
+    viewHistoryBtn.addEventListener("click", async () => {
+      if (!window.currentUser) return;
+      const list = document.getElementById("history-list");
+      document.getElementById("history-overlay").classList.remove("hidden");
+      list.innerHTML = '<p style="color:#ccc;">Carregando...</p>';
+      try {
+        const res = await fetch("/api/user/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: window.currentUser.email }),
+        });
+        const data = await res.json();
+        list.innerHTML = "";
+        if (data.length === 0) {
+          list.innerHTML = "<p>Sem partidas recentes.</p>";
+          return;
+        }
+        const ul = document.createElement("ul");
+        ul.style.listStyle = "none";
+        ul.style.padding = "0";
+        data.forEach((m) => {
+          const li = document.createElement("li");
+          li.style.background = "rgba(255,255,255,0.05)";
+          li.style.marginBottom = "8px";
+          li.style.padding = "10px";
+          li.style.borderRadius = "8px";
+          li.style.fontSize = "0.9rem";
+          let resultText = "Empate";
+          let color = "#95a5a6";
+          if (m.winner) {
+            if (m.winner === window.currentUser.email) {
+              resultText = "VITÓRIA";
+              color = "#2ecc71";
+            } else {
+              resultText = "DERROTA";
+              color = "#e74c3c";
+            }
+          }
+          const opponent =
+            m.player1 === window.currentUser.email ? m.player2 : m.player1;
+          const date = new Date(m.createdAt).toLocaleDateString();
+          li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+            opponent.split("@")[0]
+          }</span><span>Aposta: <strong>R$ ${m.bet.toFixed(
+            2
+          )}</strong></span></div>`;
+          ul.appendChild(li);
+        });
+        list.appendChild(ul);
+      } catch (e) {
+        list.innerHTML =
+          "<p style='color: #e74c3c;'>Erro ao carregar histórico.</p>";
+      }
+    });
+  const closeHistBtn = document.getElementById("close-history-overlay-btn");
+  if (closeHistBtn)
+    closeHistBtn.addEventListener("click", () =>
+      document.getElementById("history-overlay").classList.add("hidden")
     );
 };

@@ -1,4 +1,4 @@
-// public/script.js - Gerencia Lógica do Jogo com CORREÇÃO DE RENDERIZAÇÃO INICIAL
+// public/script.js - Gerencia Lógica do Jogo (Versão Final: Sem Alertas + Persistência de Torneio)
 document.addEventListener("DOMContentLoaded", () => {
   UI.init();
 
@@ -253,7 +253,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // CHAIN MOVE: Predição Local
     if (capturedPos && !promoted && window.gameLogic) {
       const tempGame = {
         boardState: boardState,
@@ -463,10 +462,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // --- SMART SYNC (COM LÓGICA SEGURA) ---
-    // Verifica se houve mudança real.
-    // Nota: Como 'gameStart' agora força a atualização do 'boardState' e renderiza,
-    // esta lógica aqui serve apenas para as jogadas subsequentes e Watchdog.
     const localStateJson = JSON.stringify(boardState);
     const serverStateJson = JSON.stringify(gameState.boardState);
 
@@ -549,10 +544,9 @@ document.addEventListener("DOMContentLoaded", () => {
     currentBoardSize = data.gameState.boardSize;
     UI.showGameScreen(true);
 
-    // --- CORREÇÃO DE INICIALIZAÇÃO ---
-    boardState = data.gameState.boardState; // Define estado local
+    boardState = data.gameState.boardState;
     UI.createBoard(currentBoardSize, handleBoardClick);
-    UI.renderPieces(boardState, currentBoardSize); // Força render
+    UI.renderPieces(boardState, currentBoardSize);
 
     processGameUpdate(data.gameState, true);
     UI.highlightMandatoryPieces(data.gameState.mandatoryPieces);
@@ -585,12 +579,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       UI.showGameScreen(window.isSpectator);
 
-      // --- CORREÇÃO CRÍTICA: Inicialização Garantida ---
       currentBoardSize = gameState.boardSize;
-      boardState = gameState.boardState; // 1. Define estado local explicitamente
+      boardState = gameState.boardState;
 
-      UI.createBoard(currentBoardSize, handleBoardClick); // 2. Cria HTML
-      UI.renderPieces(boardState, currentBoardSize); // 3. Força render (bypassing smart sync)
+      UI.createBoard(currentBoardSize, handleBoardClick);
+      UI.renderPieces(boardState, currentBoardSize);
 
       currentRoom = gameState.roomCode;
 
@@ -611,7 +604,6 @@ document.addEventListener("DOMContentLoaded", () => {
         UI.elements.board.classList.remove("board-flipped");
       }
 
-      // 4. Processa outros dados (sons, timers, etc), o render será pulado pois os estados são iguais
       processGameUpdate(gameState, true);
       UI.highlightMandatoryPieces(gameState.mandatoryPieces);
       UI.updatePlayerNames(gameState.users);
@@ -653,11 +645,10 @@ document.addEventListener("DOMContentLoaded", () => {
     updateQueue = [];
     isProcessingQueue = false;
 
-    // --- CORREÇÃO DE INICIALIZAÇÃO ---
     currentBoardSize = data.gameState.boardSize;
     boardState = data.gameState.boardState;
     UI.createBoard(currentBoardSize, handleBoardClick);
-    UI.renderPieces(boardState, currentBoardSize); // Força render
+    UI.renderPieces(boardState, currentBoardSize);
 
     processGameUpdate(data.gameState, true);
 
@@ -667,11 +658,6 @@ document.addEventListener("DOMContentLoaded", () => {
     UI.elements.board.classList.remove("board-flipped");
     if (myColor === "p") UI.elements.board.classList.add("board-flipped");
   });
-
-  // ... (RESTANTE DO CÓDIGO PERMANECE IGUAL) ...
-  // Mantive o restante do código (gameOver, gameDraw, etc) omitido para brevidade
-  // pois não foi alterado e o arquivo deve ser substituído por completo com as alterações acima.
-  // Vou incluir o restante para garantir que você tenha o arquivo completo.
 
   socket.on("gameOver", (data) => {
     if (isGameOver) return;
@@ -706,10 +692,35 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("winner-screen").classList.remove("hidden");
           document.querySelector("#winner-screen .revanche-btn").style.display =
             "none";
+
+          let msg = document.getElementById("trn-winner-wait-msg");
+          if (!msg) {
+            msg = document.createElement("p");
+            msg.id = "trn-winner-wait-msg";
+            msg.style.cssText =
+              "color: #f1c40f; margin-top: 10px; font-weight: bold;";
+            const content = document.querySelector(
+              "#winner-screen .modal-content"
+            );
+            if (content) content.appendChild(msg);
+          }
+          msg.textContent =
+            "Vitória! Aguarde o fim da rodada para o próximo oponente.";
+          msg.classList.remove("hidden");
         } else {
           document.getElementById("loser-screen").classList.remove("hidden");
           document.querySelector("#loser-screen .revanche-btn").style.display =
             "none";
+
+          setTimeout(() => {
+            if (
+              !document
+                .getElementById("loser-screen")
+                .classList.contains("hidden")
+            ) {
+              returnToLobbyLogic();
+            }
+          }, 5000);
         }
       } else {
         if (data.winner === myColor)
@@ -841,19 +852,31 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("tournamentRoundUpdate", (data) =>
     showTournamentBracket(data.bracket, data.round)
   );
+
+  // --- ALTERAÇÃO: Fim do Torneio com Pódio Persistente ---
   socket.on("tournamentEnded", (data) => {
-    alert(
-      `Torneio Finalizado!\nCampeão: ${
-        data.winner
-      } (+R$ ${data.championPrize.toFixed(2)})\nVice: ${
-        data.runnerUp
-      } (+R$ ${data.runnerUpPrize.toFixed(2)})`
+    const today = new Date().toLocaleDateString();
+    // Salva o resultado no navegador para exibir o pódio
+    localStorage.setItem(
+      `tournament_result_${today}`,
+      JSON.stringify({
+        winner: data.winner,
+        championPrize: data.championPrize,
+        runnerUp: data.runnerUp,
+        runnerUpPrize: data.runnerUpPrize,
+      })
     );
+
     if (window.updateTournamentStatus) window.updateTournamentStatus();
     if (window.currentUser) window.location.reload();
   });
+
+  // --- ALTERAÇÃO: Cancelamento com Status Persistente ---
   socket.on("tournamentCancelled", (data) => {
-    alert(data.message);
+    const today = new Date().toLocaleDateString();
+    // Marca como cancelado para o dia todo
+    localStorage.setItem(`tournament_cancelled_${today}`, "true");
+
     if (window.updateTournamentStatus) window.updateTournamentStatus();
     if (window.currentUser) window.location.reload();
   });
@@ -876,6 +899,8 @@ document.addEventListener("DOMContentLoaded", () => {
       document
         .getElementById("tournament-indicator")
         .classList.remove("hidden");
+      document.getElementById("winner-screen").classList.add("hidden");
+      document.getElementById("loser-screen").classList.add("hidden");
     }
   });
 

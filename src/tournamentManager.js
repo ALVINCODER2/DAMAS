@@ -3,9 +3,9 @@ const User = require("../models/User");
 const { gameRooms } = require("./socketHandlers");
 
 // Configurações
-const MIN_PLAYERS = 8;
+const MIN_PLAYERS = 4;
 const ENTRY_FEE = 2.0;
-const TOURNAMENT_HOUR = 21; // ALTERADO PARA 21:00
+const TOURNAMENT_HOUR = 21;
 const TOURNAMENT_MINUTE = 0;
 
 let io; // Referência ao Socket.IO
@@ -16,22 +16,27 @@ function initializeTournamentManager(ioInstance) {
 
   // Verifica o horário a cada 30 segundos
   checkInterval = setInterval(checkSchedule, 30 * 1000);
-  console.log("[Torneio] Gerenciador iniciado. Agendado para 21:00 BRT.");
+  console.log(
+    `[Torneio] Gerenciador iniciado. Agendado para ${TOURNAMENT_HOUR}:${TOURNAMENT_MINUTE.toString().padStart(
+      2,
+      "0"
+    )} BRT.`
+  );
+
+  // Recupera e cancela torneios que ficaram travados (ex: crash do servidor ou bug anterior)
+  recoverStuckTournaments();
 }
 
 async function getTodaysTournament() {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
-
+  // Busca o último torneio que esteja Aberto ou Ativo (independente da data)
+  // Isso permite que, assim que um acabe, o sistema crie/use o próximo.
   let tournament = await Tournament.findOne({
-    createdAt: { $gte: startOfDay, $lte: endOfDay },
-    status: { $ne: "cancelled" },
-  });
+    status: { $in: ["open", "active"] },
+  }).sort({ createdAt: -1 });
 
   if (!tournament) {
-    // Cria um novo se não existir para hoje
+    // Se não houver nenhum aberto (ex: o anterior foi 'completed' ou 'cancelled'),
+    // cria um novo imediatamente para o próximo ciclo.
     tournament = new Tournament({
       entryFee: ENTRY_FEE,
       status: "open",
@@ -133,6 +138,42 @@ async function unregisterPlayer(email) {
   return { success: true, message: "Inscrição cancelada e valor reembolsado." };
 }
 
+// Função auxiliar para cancelar e reembolsar (usada em falhas e recuperação)
+async function cancelTournamentAndRefund(tournament, reason) {
+  if (tournament.status === "cancelled") return;
+
+  console.log(
+    `[Torneio] Cancelando torneio ${tournament._id}. Motivo: ${reason}`
+  );
+  tournament.status = "cancelled";
+  await tournament.save();
+
+  // Reembolsa participantes
+  for (const email of tournament.participants) {
+    const updatedUser = await User.findOneAndUpdate(
+      { email },
+      { $inc: { saldo: tournament.entryFee } },
+      { new: true }
+    );
+    if (updatedUser && io) {
+      io.emit("balanceUpdate", {
+        email: updatedUser.email,
+        newSaldo: updatedUser.saldo,
+      });
+    }
+  }
+
+  // Limpa salas de jogo da memória se existirem
+  if (tournament.matches) {
+    const { gameRooms } = require("./socketHandlers");
+    tournament.matches.forEach((m) => {
+      if (m.roomCode && gameRooms[m.roomCode]) delete gameRooms[m.roomCode];
+    });
+  }
+
+  if (io) io.emit("tournamentCancelled", { message: reason });
+}
+
 async function startTournament(tournament) {
   console.log("[Torneio] Verificando presença...");
 
@@ -145,6 +186,11 @@ async function startTournament(tournament) {
       onlineEmails.add(socket.userData.email);
     }
   });
+
+  console.log(
+    "[Torneio] Jogadores Online Detectados:",
+    Array.from(onlineEmails)
+  );
 
   // 2. Separar presentes e ausentes
   // Clone para garantir que temos a lista original intacta para reembolso
@@ -287,6 +333,25 @@ async function processRoundMatches(tournament) {
         player2: match.player2,
         roomCode: roomCode,
       });
+
+      // Timeout de segurança: Se a partida não iniciar em 60s (jogadores não entrarem), cancela tudo
+      setTimeout(async () => {
+        const { gameRooms } = require("./socketHandlers");
+        const room = gameRooms[roomCode];
+        // Se a sala ainda existe, o jogo não acabou e não tem 2 jogadores
+        if (room && !room.isGameConcluded && room.players.length < 2) {
+          console.log(
+            `[Torneio] Sala ${roomCode} expirou (jogadores não entraram).`
+          );
+          const currentT = await Tournament.findById(tournament._id);
+          if (currentT && currentT.status === "active") {
+            await cancelTournamentAndRefund(
+              currentT,
+              "Falha técnica: Partida não iniciada (Timeout)."
+            );
+          }
+        }
+      }, 60 * 1000);
     }
   }
   await tournament.save();
@@ -417,6 +482,25 @@ async function distributePrizes(tournament, championEmail) {
   console.log(
     `[Torneio] Finalizado. Campeão: ${championEmail} (+${championPrize}), Vice: ${runnerUpEmail} (+${runnerUpPrize})`
   );
+}
+
+async function recoverStuckTournaments() {
+  try {
+    const stuck = await Tournament.find({ status: "active" });
+    if (stuck.length > 0) {
+      console.log(
+        `[Torneio] Encontrados ${stuck.length} torneios travados. Cancelando...`
+      );
+      for (const t of stuck) {
+        await cancelTournamentAndRefund(
+          t,
+          "Torneio interrompido por reinício do servidor."
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao recuperar torneios:", err);
+  }
 }
 
 module.exports = {

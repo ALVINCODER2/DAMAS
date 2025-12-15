@@ -453,7 +453,8 @@ function initializeSocket(ioInstance) {
   io = ioInstance;
 
   io.on("connection", (socket) => {
-    socket.on("enterLobby", () => {
+    socket.on("enterLobby", (user) => {
+      if (user) socket.userData = user;
       socket.emit("updateLobby", getLobbyInfo());
     });
 
@@ -726,6 +727,25 @@ function initializeSocket(ioInstance) {
         clearTimeout(room.disconnectTimeout);
         room.disconnectTimeout = null;
       }
+
+      // Lógica para Torneio: Adicionar jogador à sala se ele for esperado
+      if (
+        room.isTournament &&
+        room.expectedPlayers &&
+        room.expectedPlayers.includes(user.email)
+      ) {
+        const alreadyIn = room.players.some((p) => p.user.email === user.email);
+        if (!alreadyIn) {
+          room.players.push({ socketId: socket.id, user: user });
+          socket.join(roomCode);
+          // Se ambos os jogadores entraram, inicia o jogo
+          if (room.players.length === 2) {
+            startGameLogic(room);
+          }
+          return;
+        }
+      }
+
       const player = room.players.find((p) => p.user.email === user.email);
       if (player) {
         player.socketId = socket.id;

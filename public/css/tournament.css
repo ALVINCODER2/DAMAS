@@ -1,5 +1,6 @@
 /* tournament.css - Estilos para Torneios e Modais Relacionados */
 
+/* 1. CARTÃO PRINCIPAL DO LOBBY */
 .tournament-card {
   background: linear-gradient(135deg, #141e30, #243b55);
   border: 2px solid #f1c40f;
@@ -9,6 +10,7 @@
   margin-bottom: 20px;
   box-shadow: 0 5px 15px rgba(241, 196, 15, 0.2);
   overflow: hidden;
+  position: relative;
 }
 
 .tournament-header {
@@ -20,6 +22,27 @@
   font-size: 1.2rem;
   text-transform: uppercase;
   letter-spacing: 1px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+/* Botão de info no header */
+.info-icon-btn {
+  background: none;
+  border: none;
+  color: #2c3e50;
+  font-size: 1.2rem;
+  cursor: pointer;
+  position: absolute;
+  right: 10px;
+  transition: transform 0.2s;
+}
+
+.info-icon-btn:hover {
+  transform: scale(1.1);
 }
 
 .tournament-body {
@@ -32,18 +55,149 @@
   color: #ecf0f1;
 }
 
-#trn-message {
-  font-size: 1rem !important;
-  font-weight: bold;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-  min-height: 1.5em !important;
+/* 2. ESTILO PARA STATUS DE CANCELAMENTO */
+.cancelled-status {
+  padding: 20px;
+  border: 2px dashed #e74c3c;
+  border-radius: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  animation: fadeIn 0.5s ease-in;
 }
 
-/* Botões Especiais de Torneio */
+.cancelled-status i {
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.cancelled-status p {
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin: 0;
+  color: #e74c3c;
+}
+
+.cancelled-status small {
+  color: #c0392b;
+  font-weight: bold;
+}
+
+/* 3. ESTILO PARA O PÓDIO (RESULTADO FINAL) */
+.podium-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  animation: slideDown 0.5s ease-out;
+}
+
+.podium-winner {
+  background: linear-gradient(135deg, #f1c40f, #d4ac0d);
+  color: #2c3e50;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(241, 196, 15, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Efeito de brilho no vencedor */
+.podium-winner::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 60%
+  );
+  animation: shine 3s infinite linear;
+}
+
+@keyframes shine {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.podium-winner i {
+  font-size: 2rem;
+  margin-bottom: 5px;
+}
+
+.podium-winner h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.podium-winner p {
+  color: #2c3e50 !important;
+  font-weight: bold;
+  font-size: 1.1rem;
+  margin: 5px 0;
+}
+
+.podium-winner .prize {
+  display: block;
+  background: rgba(0, 0, 0, 0.2);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  margin-top: 5px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.podium-runnerup {
+  background: linear-gradient(135deg, #bdc3c7, #95a5a6);
+  color: #2c3e50;
+  padding: 10px;
+  border-radius: 8px;
+  margin: 0 10px;
+}
+
+.podium-runnerup i {
+  font-size: 1.5rem;
+  margin-bottom: 5px;
+}
+
+.podium-runnerup h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.podium-runnerup p {
+  color: #2c3e50 !important;
+  margin: 2px 0;
+  font-weight: bold;
+}
+
+.podium-runnerup .prize {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+/* 4. BOTÕES ESPECIAIS DE TORNEIO */
 .gold-btn {
   background-color: #f1c40f !important;
   color: #2c3e50 !important;
   font-weight: bold !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 12px 20px !important;
+  cursor: pointer !important;
   box-shadow: 0 4px 0 #c29d0b !important;
   transition: transform 0.1s !important;
   width: 100% !important;
@@ -89,7 +243,7 @@
   cursor: not-allowed;
 }
 
-/* Cartões das Partidas do Chaveamento */
+/* 5. CARTÕES DAS PARTIDAS (CHAVEAMENTO) */
 .tournament-match-card {
   background: rgba(255, 255, 255, 0.1);
   padding: 10px;
@@ -98,13 +252,16 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 8px;
 }
 
 .t-player {
   font-size: 0.9em;
   width: 40%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
 }
 
 .t-vs {
@@ -116,9 +273,10 @@
 .t-winner {
   color: #2ecc71;
   font-weight: bold;
+  text-shadow: 0 0 5px rgba(46, 204, 113, 0.5);
 }
 
-/* --- MODAIS DE TORNEIO (Centralizados) --- */
+/* 6. MODAIS DE TORNEIO (CENTRALIZADOS) */
 #tournament-info-overlay,
 #tournament-bracket-overlay {
   position: fixed;
@@ -134,4 +292,134 @@
   z-index: 1005;
   overflow-y: auto;
   padding: 20px 0;
+}
+
+/* 7. NOTIFICAÇÃO FLUTUANTE DE CONTAGEM REGRESSIVA */
+#tournament-countdown-notification {
+  position: fixed;
+  bottom: 80px; /* Fica acima do footer/menu inferior */
+  right: 20px;
+  background: rgba(20, 30, 48, 0.95);
+  border: 2px solid #f1c40f;
+  border-radius: 50px;
+  padding: 10px 25px 10px 10px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 0 20px rgba(241, 196, 15, 0.4);
+  z-index: 2000;
+  animation: slideUp 0.5s ease-out;
+  backdrop-filter: blur(5px);
+  transition: opacity 0.5s;
+}
+
+#tournament-countdown-notification.hidden {
+  display: none;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.countdown-content {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.countdown-icon {
+  background: #f1c40f;
+  color: #2c3e50;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.2rem;
+  box-shadow: 0 0 10px #f1c40f;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.countdown-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.countdown-label {
+  font-size: 0.7rem;
+  color: #f1c40f;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+#countdown-timer-display {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: "Courier New", monospace; /* Fonte monoespaçada para evitar pulos */
+  color: white;
+  line-height: 1;
+}
+
+/* Animações auxiliares */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Responsividade para Mobile */
+@media (max-width: 768px) {
+  #tournament-countdown-notification {
+    bottom: 70px; /* Ajuste para menus inferiores em mobile */
+    right: 50%;
+    transform: translateX(50%); /* Centraliza horizontalmente */
+    width: 90%;
+    justify-content: center;
+    border-radius: 12px; /* Menos arredondado em mobile para caber mais texto */
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translate(50%, 100px);
+      opacity: 0;
+    }
+    to {
+      transform: translate(50%, 0);
+      opacity: 1;
+    }
+  }
 }
