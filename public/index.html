@@ -173,7 +173,7 @@
           <h1 class="trn-title" style="color: #f1c40f; font-size: 1.5rem; font-weight: 800; margin-bottom: 5px;">
             TORNEIO 21:00</h1>
 
-          <!-- ### NOVO TIMER INTEGRADO ### -->
+          <!-- TIMER INTEGRADO -->
           <div id="tournament-inline-timer" class="inline-countdown hidden">
             <span class="inline-label">INICIA EM:</span>
             <span id="countdown-timer-display">00:00:00</span>
@@ -203,7 +203,7 @@
         </div>
       </div>
 
-      <!-- CARD DE AFILIADOS (RECUPERADO) -->
+      <!-- CARD DE AFILIADOS -->
       <div class="affiliate-card-modern" style="margin-bottom: 20px;">
         <div class="aff-header" onclick="toggleSection(this)"
           style="display: flex; justify-content: space-between; padding: 12px; cursor: pointer; background: rgba(0,0,0,0.2);">
@@ -354,7 +354,7 @@
     </div>
   </div>
 
-  <!-- Modal Tutorial GERAL (RECUPERADO) -->
+  <!-- Modal Tutorial GERAL -->
   <div id="general-tutorial-overlay" class="hidden modal-overlay">
     <div class="modal-card" style="text-align:left; max-width: 600px;">
       <h3 style="text-align:center; color:#f1c40f; margin-bottom: 20px;">📖 Como Funciona</h3>
@@ -436,6 +436,7 @@
     <div class="modal-card">
       <div id="winner-screen" class="hidden">
         <h1 style="color:#2ecc71">Vitória!</h1>
+        <p class="revanche-status"></p>
         <div class="confirm-buttons">
           <button class="replay-btn btn-secondary">Assistir Partida</button>
           <button class="revanche-btn btn-confirm">Revanche</button>
@@ -444,6 +445,7 @@
       </div>
       <div id="loser-screen" class="hidden">
         <h1 style="color:#e74c3c">Derrota</h1>
+        <p class="revanche-status"></p>
         <div class="confirm-buttons">
           <button class="replay-btn btn-secondary">Assistir Partida</button>
           <button class="revanche-btn btn-confirm">Revanche</button>
@@ -453,6 +455,7 @@
       <div id="draw-screen" class="hidden">
         <h1>Empate</h1>
         <p id="draw-reason"></p>
+        <p class="revanche-status"></p>
         <div class="confirm-buttons">
           <button class="replay-btn btn-secondary">Assistir Partida</button>
           <button class="revanche-btn btn-confirm">Revanche</button>
@@ -560,8 +563,6 @@
     </div>
   </div>
 
-  <!-- REMOVIDO AQUI O TIMER FLUTUANTE ANTIGO -->
-
   <!-- ÁUDIOS -->
   <audio id="move-sound" src="/sounds/move.mp3"></audio>
   <audio id="capture-sound" src="/sounds/capture.mp3"></audio>
@@ -571,7 +572,12 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/gameLogic.js"></script>
   <script src="js/ui-helpers.js"></script>
+  <!-- Incluindo os arquivos separados -->
   <script src="js/lobby.js"></script>
+  <script src="js/auth.js"></script>
+  <!-- Novo Core do Jogo -->
+  <script src="js/gameCore.js"></script>
+
   <script>
     // Função para abrir/fechar seções (como o card de afiliados)
     function toggleSection(element) {

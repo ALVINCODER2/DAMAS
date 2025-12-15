@@ -11,6 +11,7 @@ const TOURNAMENT_MINUTE = 0;
 
 let io; // Referência ao Socket.IO
 let checkInterval;
+let isProcessingStart = false; // Previne execução dupla do startTournament
 
 function initializeTournamentManager(ioInstance) {
   io = ioInstance;
@@ -62,9 +63,19 @@ async function checkSchedule() {
   const minute = parseInt(parts.find((p) => p.type === "minute").value);
 
   if (hour === TOURNAMENT_HOUR && minute === TOURNAMENT_MINUTE) {
+    if (isProcessingStart) return; // Já está iniciando
+
+    isProcessingStart = true;
+    // Reseta a flag após 65 segundos (garante que o minuto passou)
+    setTimeout(() => {
+      isProcessingStart = false;
+    }, 65000);
+
     const tournament = await getTodaysTournament();
     if (tournament.status === "open") {
-      startTournament(tournament);
+      startTournament(tournament).catch((err) =>
+        console.error("Erro ao iniciar torneio:", err)
+      );
     }
   }
 }
@@ -226,7 +237,7 @@ async function startTournament(tournament) {
   }
 
   // 4. Verificar quórum mínimo DE PRESENTES (para ter jogo)
-  // CORREÇÃO: Usar MIN_PLAYERS (8) em vez de apenas 2.
+  // CORREÇÃO: Usar MIN_PLAYERS (4) em vez de apenas 2.
   if (tournament.participants.length < MIN_PLAYERS) {
     console.log(
       `[Torneio] Cancelado: Apenas ${tournament.participants.length} jogadores online. Mínimo: ${MIN_PLAYERS}.`
@@ -316,7 +327,7 @@ async function processRoundMatches(tournament) {
         bet: 0, // Sem aposta direta, prêmio é no final
         gameMode: "classic",
         timeControl: "move",
-        timerDuration: 7, // Tempo por jogada no torneio é 7 segundos
+        timerDuration: 60, // Tempo por jogada no torneio (ajustado de 7 para 60s)
         players: [], // Serão preenchidos quando eles conectarem via evento
         isTournament: true,
         matchId: match.matchId,
@@ -341,18 +352,26 @@ async function processRoundMatches(tournament) {
         const room = gameRooms[roomCode];
         // Se a sala ainda existe, o jogo não acabou e não tem 2 jogadores
         if (room && !room.isGameConcluded && room.players.length < 2) {
-          console.log(
-            `[Torneio] Sala ${roomCode} expirou (jogadores não entraram).`
-          );
-          const currentT = await Tournament.findById(tournament._id);
-          if (currentT && currentT.status === "active") {
-            // Em vez de cancelar tudo, poderíamos dar W.O., mas por simplicidade mantemos o cancelamento seguro
-            // (Melhoria futura: W.O. automático)
-            await cancelTournamentAndRefund(
-              currentT,
-              "Falha técnica: Partida não iniciada (Timeout)."
-            );
-          }
+          console.log(`[Torneio] Sala ${roomCode} expirou. Aplicando W.O.`);
+
+          // Lógica de W.O.
+          const p1 = match.player1;
+          const p2 = match.player2;
+          const joined = room.players.map((p) => p.user.email);
+
+          let winner = null;
+          // Se P1 entrou e P2 não
+          if (joined.includes(p1) && !joined.includes(p2)) winner = p1;
+          // Se P2 entrou e P1 não
+          else if (joined.includes(p2) && !joined.includes(p1)) winner = p2;
+          // Se ninguém entrou, sorteio para não travar o torneio
+          else winner = Math.random() < 0.5 ? p1 : p2;
+
+          // Registra o fim da partida por W.O.
+          await handleTournamentGameEnd(winner, null, room);
+
+          // Limpa a sala
+          if (gameRooms[roomCode]) delete gameRooms[roomCode];
         }
       }, 60 * 1000);
     }
@@ -371,58 +390,72 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
   );
   if (matchIndex === -1) return;
 
+  // ### PROTEÇÃO CONTRA W.O. (Jogo não iniciado) ###
+  if (!room.game) {
+    tournament.matches[matchIndex].winner = winnerEmail;
+    tournament.matches[matchIndex].status = "finished";
+    await tournament.save();
+    console.log(
+      `[Torneio] Partida ${room.matchId} finalizada por W.O. Vencedor: ${winnerEmail}`
+    );
+    checkRoundCompletion(tournament);
+    return;
+  }
+
   // #######################################################
-  // ### LÓGICA DE EMPATE: REVANCHE TABLITA 5s
+  // ### LÓGICA DE EMPATE: CONTAGEM DE PEÇAS & SORTEIO ###
   // #######################################################
   if (!winnerEmail) {
     console.log(
-      `[Torneio] Empate na partida ${room.matchId}. Iniciando revanche (Tablita 5s).`
+      `[Torneio] Empate na partida ${room.matchId}. Aplicando regras de desempate...`
     );
 
-    const match = tournament.matches[matchIndex];
-    const p1 = match.player1;
-    const p2 = match.player2;
+    // 1. Contagem de Peças
+    let whitePieces = 0;
+    let blackPieces = 0;
+    const board = room.game.boardState;
+    const size = room.game.boardSize;
 
-    // 1. Gerar novo código de sala para a revanche
-    const newRoomCode = `TRN-TB-${Math.random()
-      .toString(36)
-      .substring(2, 6)
-      .toUpperCase()}`;
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const p = board[r][c];
+        if (p !== 0) {
+          if (p.toString().toLowerCase() === "b") whitePieces++;
+          if (p.toString().toLowerCase() === "p") blackPieces++;
+        }
+      }
+    }
 
-    // 2. Atualizar o match no banco de dados (novo roomCode, mantém status 'active')
-    match.roomCode = newRoomCode;
-    match.status = "active";
-    await tournament.save();
+    const whiteEmail = room.game.users.white;
+    const blackEmail = room.game.users.black;
+    let decidedWinner = null;
+    let decisionReason = "";
 
-    // 3. Criar a sala na memória (gameRooms)
-    const { gameRooms } = require("./socketHandlers");
+    if (whitePieces > blackPieces) {
+      decidedWinner = whiteEmail;
+      decisionReason = `Vitória por contagem de peças (${whitePieces} vs ${blackPieces}).`;
+    } else if (blackPieces > whitePieces) {
+      decidedWinner = blackEmail;
+      decisionReason = `Vitória por contagem de peças (${blackPieces} vs ${whitePieces}).`;
+    } else {
+      // 2. Sorteio Automático (Peças Iguais)
+      const isWhiteWinner = Math.random() < 0.5;
+      decidedWinner = isWhiteWinner ? whiteEmail : blackEmail;
+      decisionReason = `Empate em peças (${whitePieces}). Decisão por SORTEIO: ${
+        isWhiteWinner ? "Brancas" : "Pretas"
+      } venceram.`;
+    }
 
-    gameRooms[newRoomCode] = {
-      roomCode: newRoomCode,
-      bet: 0,
-      gameMode: "tablita", // FORÇA O MODO TABLITA
-      timeControl: "move",
-      timerDuration: 5, // FORÇA 5 SEGUNDOS
-      players: [],
-      isTournament: true,
-      matchId: match.matchId,
-      tournamentId: tournament._id,
-      isGameConcluded: false,
-      expectedPlayers: [p1, p2],
-      isRematch: true, // Flag útil para logs
-    };
+    // Aplica o vencedor decidido
+    winnerEmail = decidedWinner;
 
-    // 4. Emitir evento para os jogadores entrarem na nova sala
-    io.emit("tournamentMatchReady", {
-      matchId: match.matchId,
-      player1: p1,
-      player2: p2,
-      roomCode: newRoomCode,
-      isRematch: true,
+    // Notifica na sala quem venceu pelo critério
+    io.to(room.roomCode).emit("tournamentTieBreak", {
+      winner: winnerEmail,
+      reason: decisionReason,
     });
 
-    // Retorna para NÃO processar vitória/derrota ainda
-    return;
+    console.log(`[Torneio] Desempate: ${decisionReason}`);
   }
   // #######################################################
 
@@ -430,7 +463,9 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
   tournament.matches[matchIndex].status = "finished";
 
   await tournament.save();
-  console.log(`[Torneio] Partida ${room.matchId} venceu: ${winnerEmail}`);
+  console.log(
+    `[Torneio] Partida ${room.matchId} finalizada. Vencedor: ${winnerEmail}`
+  );
 
   checkRoundCompletion(tournament);
 }

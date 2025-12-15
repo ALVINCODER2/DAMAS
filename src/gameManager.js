@@ -241,6 +241,10 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
     if (winnerData) {
       room.match.score[winnerData.user.email]++;
     }
+  } else {
+    // Empate: 0.5 para cada
+    room.match.score[room.match.player1.email] += 0.5;
+    room.match.score[room.match.player2.email] += 0.5;
   }
 
   const p1Email = room.match.player1.email;

@@ -1,40 +1,37 @@
-// public/js/lobby.js - Gerencia Autenticação, Lobby, Torneios e Modais (COM TIMER REGRESSIVO)
+// public/js/lobby.js - Gerencia Lobby, Torneios, Salas e Pagamentos
 
 window.initLobby = function (socket, UI) {
   let paymentCheckInterval = null;
   let tempRoomCode = null;
-
-  // Variável para controlar o timer da contagem regressiva
   let tournamentCountdownInterval = null;
+  let countdownClosedByUser = false;
 
-  function enforceUsernameRequirement() {
-    if (
-      window.currentUser &&
-      (!window.currentUser.username ||
-        window.currentUser.username.trim() === "")
-    ) {
-      const profileOverlay = document.getElementById("profile-overlay");
-      const closeBtn = document.getElementById("close-profile-btn");
-      const msg = document.getElementById("profile-message");
-      const usernameInput = document.getElementById("profile-username-input");
-      const preview = document.getElementById("profile-preview-img");
+  // --- HELPER: UPDATE WELCOME MESSAGE (Global) ---
+  window.updateLobbyWelcome = function () {
+    const welcomeMsg = document.getElementById("lobby-welcome-message");
+    const avatarImg = document.getElementById("lobby-avatar");
 
-      if (profileOverlay) profileOverlay.classList.remove("hidden");
-      if (closeBtn) closeBtn.style.display = "none";
-      if (msg) {
-        msg.innerHTML =
-          "<i class='fa-solid fa-circle-exclamation'></i> Defina um Apelido para continuar.";
-        msg.style.color = "#f1c40f";
-        msg.style.fontWeight = "bold";
-      }
-      if (usernameInput) usernameInput.focus();
-      if (preview && (!preview.src || preview.src === "")) {
-        preview.src = `https://ui-avatars.com/api/?name=User&background=random`;
+    if (welcomeMsg && window.currentUser) {
+      const displayName =
+        window.currentUser.username || window.currentUser.email.split("@")[0];
+      welcomeMsg.innerHTML = `Olá, <strong>${displayName}</strong><br><small style="color:#f1c40f">R$ ${window.currentUser.saldo.toFixed(
+        2
+      )}</small>`;
+
+      if (avatarImg) {
+        if (
+          window.currentUser.avatar &&
+          window.currentUser.avatar.trim() !== ""
+        ) {
+          avatarImg.src = window.currentUser.avatar;
+        } else {
+          avatarImg.src = `https://ui-avatars.com/api/?name=${displayName}&background=random`;
+        }
       }
     }
-  }
+  };
 
-  // --- FUNÇÃO DE CONTAGEM REGRESSIVA (ATUALIZADA: TIMER EMBUTIDO) ---
+  // --- FUNÇÃO DE CONTAGEM REGRESSIVA TORNEIO ---
   function startTournamentTimer() {
     const timerContainer = document.getElementById("tournament-inline-timer");
     const timerDisplay = document.getElementById("countdown-timer-display");
@@ -84,7 +81,7 @@ window.initLobby = function (socket, UI) {
       if (timerContainer) timerContainer.classList.remove("hidden");
     };
 
-    updateTimer(); // Chama uma vez imediatamente
+    updateTimer();
     tournamentCountdownInterval = setInterval(updateTimer, 1000);
   }
 
@@ -94,7 +91,10 @@ window.initLobby = function (socket, UI) {
     if (timerContainer) timerContainer.classList.add("hidden");
   }
 
-  // ... (Código de Toggle e Autenticação mantido igual) ...
+  // Expõe stopTournamentTimer globalmente para o logout usar
+  window.stopTournamentTimer = stopTournamentTimer;
+
+  // --- TOGGLE CRIAR SALA ---
   const createRoomToggle = document.getElementById("btn-toggle-create-room");
   if (createRoomToggle) {
     createRoomToggle.addEventListener("click", () => {
@@ -119,127 +119,7 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  // --- AUTENTICAÇÃO ---
-  const urlParams = new URLSearchParams(window.location.search);
-  const refCode = urlParams.get("ref");
-  const referralInput = document.getElementById("referral-code-input");
-
-  if (refCode && referralInput) {
-    try {
-      referralInput.value = atob(refCode);
-    } catch (e) {
-      referralInput.value = refCode;
-    }
-    const inputGroup = referralInput.closest(".input-group");
-    if (inputGroup) inputGroup.style.display = "none";
-    else referralInput.style.display = "none";
-
-    const loginForm = document.getElementById("login-form");
-    const registerForm = document.getElementById("register-form");
-    if (loginForm) loginForm.style.display = "none";
-    if (registerForm) registerForm.style.display = "block";
-  }
-
-  const showRegisterBtn = document.getElementById("show-register");
-  if (showRegisterBtn) {
-    showRegisterBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      document.getElementById("login-form").style.display = "none";
-      document.getElementById("register-form").style.display = "block";
-      document.getElementById("auth-message").textContent = "";
-    });
-  }
-
-  const showLoginBtn = document.getElementById("show-login");
-  if (showLoginBtn) {
-    showLoginBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      document.getElementById("register-form").style.display = "none";
-      document.getElementById("login-form").style.display = "block";
-      document.getElementById("auth-message").textContent = "";
-    });
-  }
-
-  const registerForm = document.getElementById("register-form");
-  if (registerForm) {
-    registerForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("register-email").value;
-      const password = document.getElementById("register-password").value;
-      const referralCode = document.getElementById(
-        "referral-code-input"
-      )?.value;
-
-      try {
-        const response = await fetch("/api/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, referralCode }),
-        });
-        const data = await response.json();
-        const msg = document.getElementById("auth-message");
-        msg.textContent = data.message;
-        if (response.ok) {
-          msg.style.color = "#2ecc71";
-          setTimeout(() => {
-            if (showLoginBtn) showLoginBtn.click();
-          }, 2000);
-        } else {
-          msg.style.color = "#e74c3c";
-        }
-      } catch (error) {
-        document.getElementById("auth-message").textContent =
-          "Erro de conexão.";
-      }
-    });
-  }
-
-  const loginForm = document.getElementById("login-form");
-  if (loginForm) {
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("login-email").value;
-      const password = document.getElementById("login-password").value;
-      try {
-        const response = await fetch("/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          window.currentUser = data.user;
-          localStorage.setItem("checkersUserEmail", window.currentUser.email);
-
-          document.getElementById("auth-container").style.display = "none";
-          document.getElementById("lobby-container").classList.remove("hidden");
-          updateLobbyWelcome();
-          updateTournamentStatus();
-          socket.connect();
-          enforceUsernameRequirement();
-        } else {
-          const msg = document.getElementById("auth-message");
-          msg.textContent = data.message;
-          msg.style.color = "#e74c3c";
-        }
-      } catch (error) {
-        document.getElementById("auth-message").textContent =
-          "Erro de conexão.";
-      }
-    });
-  }
-
-  const logoutBtn = document.getElementById("logout-btn");
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      localStorage.removeItem("checkersUserEmail");
-      localStorage.removeItem("checkersCurrentRoom");
-      stopTournamentTimer(); // Para o timer ao sair
-      window.location.reload();
-    });
-  }
-
-  // --- LÓGICA DO LOBBY ---
+  // --- LÓGICA DE SALAS ---
   if (UI.elements.timeControlSelect) {
     UI.elements.timeControlSelect.addEventListener("change", () => {
       UI.updateTimerOptions(UI.elements.timeControlSelect.value);
@@ -251,7 +131,8 @@ window.initLobby = function (socket, UI) {
   if (createRoomBtn) {
     createRoomBtn.addEventListener("click", () => {
       if (!window.currentUser.username) {
-        enforceUsernameRequirement();
+        if (window.enforceUsernameRequirement)
+          window.enforceUsernameRequirement();
         return;
       }
       const betInput = document.getElementById("bet-amount-input");
@@ -290,7 +171,8 @@ window.initLobby = function (socket, UI) {
   document.getElementById("lobby-container").addEventListener("click", (e) => {
     if (e.target.classList.contains("join-room-btn")) {
       if (!window.currentUser || !window.currentUser.username) {
-        enforceUsernameRequirement();
+        if (window.enforceUsernameRequirement)
+          window.enforceUsernameRequirement();
         return;
       }
       const roomCode = e.target.dataset.roomCode;
@@ -309,7 +191,7 @@ window.initLobby = function (socket, UI) {
     refreshLobbyBtn.addEventListener("click", () => {
       if (window.currentUser) {
         socket.emit("enterLobby", window.currentUser);
-        updateTournamentStatus();
+        if (window.updateTournamentStatus) window.updateTournamentStatus();
         const originalText = refreshLobbyBtn.innerHTML;
         refreshLobbyBtn.innerHTML =
           '<i class="fa-solid fa-spinner fa-spin"></i>';
@@ -322,110 +204,8 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  // ... (Código de Perfil e Indicações mantido igual) ...
-  const openProfileBtn = document.getElementById("open-profile-btn");
-  const closeProfileBtn = document.getElementById("close-profile-btn");
-  const saveProfileBtn = document.getElementById("save-profile-btn");
-  const profileOverlay = document.getElementById("profile-overlay");
-  const avatarInput = document.getElementById("profile-avatar-input");
-  const usernameInput = document.getElementById("profile-username-input");
-  const profilePreview = document.getElementById("profile-preview-img");
-  const profileMsg = document.getElementById("profile-message");
-
-  if (openProfileBtn) {
-    openProfileBtn.addEventListener("click", () => {
-      if (!window.currentUser) return;
-      profileOverlay.classList.remove("hidden");
-      if (window.currentUser.username) {
-        if (closeProfileBtn) closeProfileBtn.style.display = "block";
-      } else {
-        if (closeProfileBtn) closeProfileBtn.style.display = "none";
-      }
-      usernameInput.value = window.currentUser.username || "";
-      avatarInput.value = window.currentUser.avatar || "";
-      const defaultAvatar = `https://ui-avatars.com/api/?name=${
-        window.currentUser.username || "User"
-      }&background=random`;
-      profilePreview.src = window.currentUser.avatar || defaultAvatar;
-      profileMsg.textContent = "";
-    });
-  }
-  if (closeProfileBtn) {
-    closeProfileBtn.addEventListener("click", () =>
-      profileOverlay.classList.add("hidden")
-    );
-  }
-  if (saveProfileBtn) {
-    saveProfileBtn.addEventListener("click", async () => {
-      if (!window.currentUser) return;
-      const newUsername = usernameInput.value.trim();
-      const newAvatar = avatarInput.value.trim();
-      if (!newUsername) {
-        profileMsg.textContent = "O nome não pode ficar vazio.";
-        profileMsg.style.color = "#e74c3c";
-        return;
-      }
-      saveProfileBtn.disabled = true;
-      saveProfileBtn.textContent = "Salvando...";
-      try {
-        const res = await fetch("/api/user/profile", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: window.currentUser.email,
-            username: newUsername,
-            avatar: newAvatar,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          window.currentUser = data.user;
-          updateLobbyWelcome();
-          profileMsg.textContent = "Perfil atualizado!";
-          profileMsg.style.color = "#2ecc71";
-          if (closeProfileBtn) closeProfileBtn.style.display = "block";
-          setTimeout(() => profileOverlay.classList.add("hidden"), 1500);
-        } else {
-          profileMsg.textContent = data.message;
-          profileMsg.style.color = "#e74c3c";
-        }
-      } catch (err) {
-        profileMsg.textContent = "Erro de conexão.";
-        profileMsg.style.color = "#e74c3c";
-      } finally {
-        saveProfileBtn.disabled = false;
-        saveProfileBtn.textContent = "Salvar";
-      }
-    });
-  }
-
-  // --- FUNÇÕES DE HELPER E STATUS DE TORNEIO ---
-
-  function updateLobbyWelcome() {
-    const welcomeMsg = document.getElementById("lobby-welcome-message");
-    const avatarImg = document.getElementById("lobby-avatar");
-
-    if (welcomeMsg && window.currentUser) {
-      const displayName =
-        window.currentUser.username || window.currentUser.email.split("@")[0];
-      welcomeMsg.innerHTML = `Olá, <strong>${displayName}</strong><br><small style="color:#f1c40f">R$ ${window.currentUser.saldo.toFixed(
-        2
-      )}</small>`;
-
-      if (avatarImg) {
-        if (
-          window.currentUser.avatar &&
-          window.currentUser.avatar.trim() !== ""
-        ) {
-          avatarImg.src = window.currentUser.avatar;
-        } else {
-          avatarImg.src = `https://ui-avatars.com/api/?name=${displayName}&background=random`;
-        }
-      }
-    }
-  }
-
-  async function updateTournamentStatus() {
+  // --- STATUS TORNEIO (GLOBAL) ---
+  window.updateTournamentStatus = async function () {
     const today = new Date().toLocaleDateString();
 
     const isCancelled = localStorage.getItem(`tournament_cancelled_${today}`);
@@ -479,7 +259,7 @@ window.initLobby = function (socket, UI) {
           2
         )})</span>`;
 
-      // Remove qualquer texto estático antigo sobre taxas que esteja visível no cartão
+      // Remove textos antigos de taxa se existirem
       const taxTexts = document.querySelectorAll(
         ".tournament-body p, .tournament-body small, .tournament-body span"
       );
@@ -509,16 +289,12 @@ window.initLobby = function (socket, UI) {
           if (data.isRegistered) {
             joinBtn.classList.add("hidden");
             leaveBtn.classList.remove("hidden");
-
-            // ### ATIVA O TIMER SE ESTIVER INSCRITO ###
             startTournamentTimer();
           } else {
             joinBtn.classList.remove("hidden");
             leaveBtn.classList.add("hidden");
             joinBtn.textContent = `Entrar (R$ ${data.entryFee.toFixed(2)})`;
             joinBtn.disabled = false;
-
-            // ### PARA O TIMER SE NÃO ESTIVER INSCRITO ###
             stopTournamentTimer();
           }
         } else {
@@ -532,15 +308,16 @@ window.initLobby = function (socket, UI) {
     } catch (e) {
       console.error(e);
     }
-  }
-  window.updateTournamentStatus = updateTournamentStatus;
+  };
 
+  // --- BOTÕES DE TORNEIO ---
   const joinTournamentBtn = document.getElementById("join-tournament-btn");
   if (joinTournamentBtn) {
     joinTournamentBtn.addEventListener("click", async () => {
       if (!window.currentUser) return alert("Faça login.");
       if (!window.currentUser.username) {
-        enforceUsernameRequirement();
+        if (window.enforceUsernameRequirement)
+          window.enforceUsernameRequirement();
         return;
       }
 
@@ -553,8 +330,8 @@ window.initLobby = function (socket, UI) {
         const data = await res.json();
         if (res.ok) {
           window.currentUser.saldo = data.newSaldo;
-          updateLobbyWelcome();
-          updateTournamentStatus();
+          window.updateLobbyWelcome();
+          window.updateTournamentStatus();
           alert("Inscrito com sucesso!");
         } else {
           alert(data.message);
@@ -579,8 +356,8 @@ window.initLobby = function (socket, UI) {
         const data = await res.json();
         if (res.ok) {
           window.currentUser.saldo = data.newSaldo;
-          updateLobbyWelcome();
-          updateTournamentStatus();
+          window.updateLobbyWelcome();
+          window.updateTournamentStatus();
         } else {
           alert(data.message);
         }
@@ -590,35 +367,7 @@ window.initLobby = function (socket, UI) {
     });
   }
 
-  async function checkSession() {
-    const savedEmail = localStorage.getItem("checkersUserEmail");
-    if (savedEmail) {
-      try {
-        const response = await fetch("/api/user/re-authenticate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: savedEmail }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          window.currentUser = data.user;
-          document.getElementById("auth-container").style.display = "none";
-          document.getElementById("lobby-container").classList.remove("hidden");
-          updateLobbyWelcome();
-          updateTournamentStatus();
-          socket.connect();
-          enforceUsernameRequirement();
-        } else {
-          localStorage.removeItem("checkersUserEmail");
-        }
-      } catch (error) {
-        console.log("Offline or error");
-      }
-    }
-  }
-  checkSession();
-
-  // --- SOCKET LISTENERS (Mesmo código anterior) ---
+  // --- SOCKET LISTENERS ---
   socket.on("roomCreated", (data) => {
     document.getElementById("room-code-display").textContent = data.roomCode;
     document.getElementById("waiting-area").classList.remove("hidden");
@@ -687,11 +436,19 @@ window.initLobby = function (socket, UI) {
   socket.on("updateSaldo", (d) => {
     if (window.currentUser) {
       window.currentUser.saldo = d.newSaldo;
-      updateLobbyWelcome();
+      window.updateLobbyWelcome();
+    }
+  });
+  // Adicionado listener para desempate do torneio
+  socket.on("tournamentTieBreak", (d) => {
+    if (d.winner === window.currentUser?.email) {
+      alert(`🎉 PARABÉNS!\n\n${d.reason}`);
+    } else {
+      alert(`😢 QUE PENA!\n\n${d.reason}`);
     }
   });
 
-  // Outros Listeners (PIX, Saque, Tutoriais)
+  // --- SISTEMA FINANCEIRO (PIX/SAQUE) ---
   const addBalanceBtn = document.getElementById("add-balance-btn");
   if (addBalanceBtn)
     addBalanceBtn.addEventListener("click", () =>
@@ -747,7 +504,7 @@ window.initLobby = function (socket, UI) {
               const checkData = await checkRes.json();
               if (checkData.user.saldo > initialSaldo) {
                 window.currentUser.saldo = checkData.user.saldo;
-                updateLobbyWelcome();
+                window.updateLobbyWelcome();
                 alert("Pagamento Recebido!");
                 clearInterval(paymentCheckInterval);
                 document.getElementById("pix-overlay").classList.add("hidden");
@@ -808,6 +565,8 @@ window.initLobby = function (socket, UI) {
         alert("Erro de conexão");
       }
     });
+
+  // --- OUTROS (TUTORIAL, REFERENCIA, HISTORICO) ---
   const tutorialBtn = document.getElementById("tutorial-btn");
   if (tutorialBtn)
     tutorialBtn.addEventListener("click", () =>
@@ -822,13 +581,13 @@ window.initLobby = function (socket, UI) {
         .getElementById("general-tutorial-overlay")
         .classList.add("hidden")
     );
+
   const trnInfoBtn = document.getElementById("tournament-info-btn");
   if (trnInfoBtn)
     trnInfoBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const overlay = document.getElementById("tournament-info-overlay");
 
-      // Atualiza dinamicamente o conteúdo do modal para remover a informação da taxa antiga
       const content = overlay.querySelector(".modal-content");
       if (content) {
         content.innerHTML = `
@@ -848,14 +607,12 @@ window.initLobby = function (socket, UI) {
                     <h4 style="color: #f1c40f; margin-bottom: 5px; font-size: 0.9rem;">🤝 Critérios de Desempate</h4>
                     <p style="font-size: 0.85rem;">Se a partida terminar empatada:</p>
                     <ol style="margin-left: 20px; font-size: 0.85rem; margin-bottom: 0;">
-                        <li><strong>Revanche Imediata:</strong> Nova partida no modo <strong>Tablita</strong>.</li>
-                        <li><strong>Tempo Reduzido:</strong> 5 segundos por jogada.</li>
-                        <li><strong>Morte Súbita:</strong> Repete-se até haver um vencedor.</li>
+                        <li><strong>Contagem de Peças:</strong> Vence quem tiver mais peças.</li>
+                        <li><strong>Sorteio Automático:</strong> Se as peças forem iguais, o sistema decide na sorte (50/50).</li>
                     </ol>
                 </div>
             </div>
         `;
-        // Reata o evento de fechar no novo botão criado
         const closeBtn = content.querySelector("#close-tournament-info-btn");
         if (closeBtn) closeBtn.onclick = () => overlay.classList.add("hidden");
       }
@@ -866,6 +623,7 @@ window.initLobby = function (socket, UI) {
     .addEventListener("click", () =>
       document.getElementById("tournament-info-overlay").classList.add("hidden")
     );
+
   const copyReferralBtn = document.getElementById("copy-referral-btn");
   if (copyReferralBtn)
     copyReferralBtn.addEventListener("click", () => {

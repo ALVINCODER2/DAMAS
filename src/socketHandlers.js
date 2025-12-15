@@ -17,7 +17,12 @@ const {
   getUniqueCaptureMove,
 } = require("../public/js/gameLogic");
 
-const { startTimer, resetTimer, processEndOfGame } = require("./gameManager");
+const {
+  startTimer,
+  resetTimer,
+  processEndOfGame,
+  initializeManager,
+} = require("./gameManager");
 
 const gameRooms = {};
 let io; // Variável global para instância do Socket.IO
@@ -452,6 +457,9 @@ async function startNextTablitaGame(roomCode) {
 function initializeSocket(ioInstance) {
   io = ioInstance;
 
+  // Inicializa o GameManager com io e gameRooms para evitar erros de dependência circular
+  initializeManager(io, gameRooms);
+
   io.on("connection", (socket) => {
     socket.on("enterLobby", (user) => {
       if (user) socket.userData = user;
@@ -556,6 +564,19 @@ function initializeSocket(ioInstance) {
       const room = gameRooms[roomCode];
       if (!room)
         return socket.emit("joinError", { message: "Sala não encontrada." });
+
+      // Segurança para salas de Torneio
+      if (room.isTournament) {
+        if (
+          !room.expectedPlayers ||
+          !room.expectedPlayers.includes(socket.userData.email)
+        ) {
+          return socket.emit("joinError", {
+            message: "Você não está escalado para esta partida de torneio.",
+          });
+        }
+      }
+
       if (room.players.length >= 2)
         return socket.emit("joinError", { message: "A sala já está cheia." });
       if (room.players[0].socketId === socket.id)
@@ -718,6 +739,7 @@ function initializeSocket(ioInstance) {
     socket.on("rejoinActiveGame", (data) => {
       const { roomCode, user } = data;
       if (!roomCode || !user) return;
+      socket.userData = user; // Garante que o userData esteja atualizado para verificações de torneio
       const room = gameRooms[roomCode];
       if (!room) {
         socket.emit("gameNotFound");
@@ -768,7 +790,16 @@ function initializeSocket(ioInstance) {
           ...timeData,
         });
 
-        startTimer(roomCode);
+        // Só reinicia o timer se o jogo não estiver concluído
+        if (!room.isGameConcluded) {
+          startTimer(roomCode);
+
+          // Força atualização imediata do timer para o usuário que reconectou
+          socket.emit("timerUpdate", {
+            ...timeData,
+            roomCode,
+          });
+        }
       }
     });
 

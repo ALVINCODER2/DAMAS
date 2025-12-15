@@ -1,557 +1,119 @@
-// public/script.js - Gerencia Lógica do Jogo (Versão Final: Sem Alertas + Persistência de Torneio)
+// public/js/script.js - Inicialização e Wiring de Eventos
+// Este arquivo conecta o Socket.IO e os eventos do DOM à lógica do jogo (GameCore)
+
 document.addEventListener("DOMContentLoaded", () => {
   UI.init();
 
   const socket = io({ autoConnect: false });
 
-  // Variáveis Globais de Jogo
+  // Inicializa Módulos Globais (Lobby e Auth)
+  if (window.initLobby) window.initLobby(socket, UI);
+  if (window.initAuth) window.initAuth(socket, UI);
+
+  // Inicializa o Core do Jogo
+  window.GameCore.init(socket, UI);
+
+  // --- VARIÁVEIS GLOBAIS DE USUÁRIO (Sincronizadas com o Auth) ---
   window.currentUser = null;
   window.isSpectator = false;
 
-  // Variáveis Locais de Jogo
-  let myColor = null;
-  let currentRoom = null;
-  let boardState = []; // Estado local
-  let selectedPiece = null;
-  let currentBoardSize = 8;
-  let nextGameInterval = null;
-  let isGameOver = false;
-  let drawCooldownInterval = null;
-  let lastPacketTime = Date.now();
-  let watchdogInterval = null;
-
-  let currentTurnCapturedPieces = [];
-
-  // --- VARIÁVEIS PARA OTIMIZAÇÃO (Lag Zero) ---
-  let lastOptimisticMove = null;
-  let pendingBoardSnapshot = null;
-
-  // --- VARIÁVEIS PARA REPLAY ---
-  let savedReplayData = null;
-  let isReplaying = false;
-
-  // --- FILA DE ATUALIZAÇÕES ---
-  let updateQueue = [];
-  let isProcessingQueue = false;
-
-  async function processUpdateQueue() {
-    if (isProcessingQueue) return;
-    isProcessingQueue = true;
-
-    while (updateQueue.length > 0) {
-      const updateData = updateQueue.shift();
-      try {
-        await processGameUpdate(updateData);
-        UI.highlightMandatoryPieces(updateData.mandatoryPieces);
-      } catch (e) {
-        console.error("Erro ao processar atualização da fila:", e);
-      }
-    }
-
-    isProcessingQueue = false;
-  }
-
-  if (window.initLobby) {
-    window.initLobby(socket, UI);
-  }
-
-  // --- LÓGICA DO JOGO ---
-
-  function startWatchdog() {
-    if (watchdogInterval) return;
-    lastPacketTime = Date.now();
-    watchdogInterval = setInterval(() => {
-      if (currentRoom && !isGameOver && Date.now() - lastPacketTime > 10000) {
-        socket.emit("requestGameSync", { roomCode: currentRoom });
-        lastPacketTime = Date.now();
-      }
-    }, 2000);
-  }
-
-  function stopWatchdog() {
-    if (watchdogInterval) {
-      clearInterval(watchdogInterval);
-      watchdogInterval = null;
-    }
-  }
+  // =================================================================
+  // EVENTOS DO DOM (BOTEIRA E CLICKS)
+  // =================================================================
 
   document.getElementById("resign-btn").addEventListener("click", () => {
-    if (currentRoom && !window.isSpectator && confirm("Deseja desistir?"))
+    if (
+      GameCore.state.currentRoom &&
+      !window.isSpectator &&
+      confirm("Deseja desistir?")
+    )
       socket.emit("playerResign");
   });
 
   document.getElementById("draw-btn").addEventListener("click", () => {
-    if (currentRoom && !window.isSpectator) {
+    if (GameCore.state.currentRoom && !window.isSpectator) {
       document.getElementById("draw-btn").disabled = true;
-      socket.emit("requestDraw", { roomCode: currentRoom });
+      socket.emit("requestDraw", { roomCode: GameCore.state.currentRoom });
     }
   });
 
   document
     .getElementById("spectator-leave-btn")
     .addEventListener("click", () => {
-      if (isReplaying) {
-        isReplaying = false;
+      if (GameCore.state.isReplaying) {
+        GameCore.state.isReplaying = false;
         document.getElementById("game-over-overlay").classList.remove("hidden");
         UI.elements.spectatorIndicator.classList.add("hidden");
         UI.elements.spectatorLeaveBtn.classList.add("hidden");
         return;
       }
-      socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
-      returnToLobbyLogic();
+      socket.emit("leaveEndGameScreen", {
+        roomCode: GameCore.state.currentRoom,
+      });
+      GameCore.returnToLobbyLogic();
     });
 
   document.getElementById("accept-draw-btn").addEventListener("click", () => {
-    if (currentRoom) {
-      socket.emit("acceptDraw", { roomCode: currentRoom });
+    if (GameCore.state.currentRoom) {
+      socket.emit("acceptDraw", { roomCode: GameCore.state.currentRoom });
       document.getElementById("draw-request-overlay").classList.add("hidden");
     }
   });
 
   document.getElementById("decline-draw-btn").addEventListener("click", () => {
-    if (currentRoom) {
-      socket.emit("declineDraw", { roomCode: currentRoom });
+    if (GameCore.state.currentRoom) {
+      socket.emit("declineDraw", { roomCode: GameCore.state.currentRoom });
       document.getElementById("draw-request-overlay").classList.add("hidden");
     }
   });
 
   document.body.addEventListener("click", (e) => {
+    // Revanche
     if (e.target.classList.contains("revanche-btn")) {
-      if (currentRoom && !window.isSpectator) {
-        socket.emit("requestRevanche", { roomCode: currentRoom });
+      if (GameCore.state.currentRoom && !window.isSpectator) {
+        socket.emit("requestRevanche", {
+          roomCode: GameCore.state.currentRoom,
+        });
         document
           .querySelectorAll(".revanche-status")
           .forEach((el) => (el.textContent = "Aguardando oponente..."));
+
+        // CORREÇÃO: Desabilita também o botão de replay para evitar conflito
         document
-          .querySelectorAll(".revanche-btn, .exit-lobby-btn")
+          .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
           .forEach((btn) => (btn.disabled = true));
       }
     }
+    // Sair para Lobby
     if (e.target.classList.contains("exit-lobby-btn")) {
-      if (currentRoom)
-        socket.emit("leaveEndGameScreen", { roomCode: currentRoom });
-      returnToLobbyLogic();
+      if (GameCore.state.currentRoom)
+        socket.emit("leaveEndGameScreen", {
+          roomCode: GameCore.state.currentRoom,
+        });
+      GameCore.returnToLobbyLogic();
     }
+    // Replay
     if (e.target.classList.contains("replay-btn")) {
-      startReplay();
+      GameCore.startReplay();
     }
   });
 
-  async function startReplay() {
-    if (
-      !savedReplayData ||
-      !savedReplayData.history ||
-      savedReplayData.history.length === 0
-    ) {
-      alert("Nenhum replay disponível.");
-      return;
-    }
-
-    isReplaying = true;
-    document.getElementById("game-over-overlay").classList.add("hidden");
-
-    UI.elements.gameStatus.innerHTML =
-      "<span style='color:#f1c40f'>REPLAY DA PARTIDA</span>";
-    UI.elements.spectatorLeaveBtn.classList.remove("hidden");
-    UI.elements.spectatorLeaveBtn.textContent = "Sair do Replay";
-    UI.updateTurnIndicator(false);
-
-    boardState = JSON.parse(JSON.stringify(savedReplayData.initialBoard));
-    const replayBoardSize = savedReplayData.boardSize || currentBoardSize;
-    UI.renderPieces(boardState, replayBoardSize);
-
-    for (const move of savedReplayData.history) {
-      if (!isReplaying) break;
-      await new Promise((r) => setTimeout(r, 800));
-      if (!isReplaying) break;
-
-      await UI.animatePieceMove(move.from, move.to, replayBoardSize);
-      UI.playAudio("move");
-
-      boardState = move.boardState;
-      UI.renderPieces(boardState, replayBoardSize);
-    }
-
-    if (isReplaying) {
-      isReplaying = false;
-      alert("Replay finalizado.");
-      document.getElementById("game-over-overlay").classList.remove("hidden");
-      UI.elements.spectatorLeaveBtn.classList.add("hidden");
-    }
-  }
-
-  // --- OTIMIZAÇÃO: Executa movimento e calcula próxima captura localmente ---
-  async function performOptimisticMove(from, to, moveId) {
-    pendingBoardSnapshot = JSON.parse(JSON.stringify(boardState));
-
-    lastOptimisticMove = {
-      from: { row: from.row, col: from.col },
-      to: { row: to.row, col: to.col },
-      moveId: moveId,
-    };
-
-    const movingPiece = boardState[from.row][from.col];
-    const isKing = movingPiece === "B" || movingPiece === "P";
-    boardState[to.row][to.col] = movingPiece;
-    boardState[from.row][from.col] = 0;
-
-    let capturedPos = null;
-    const dist = Math.abs(to.row - from.row);
-
-    if (dist > 1) {
-      const dr = Math.sign(to.row - from.row);
-      const dc = Math.sign(to.col - from.col);
-      let r = from.row + dr;
-      let c = from.col + dc;
-      while (r !== to.row && c !== to.col) {
-        if (boardState[r][c] !== 0) {
-          capturedPos = { row: r, col: c };
-          break;
-        }
-        r += dr;
-        c += dc;
-      }
-    }
-
-    if (capturedPos) {
-      currentTurnCapturedPieces.push(capturedPos);
-      const capturedSquare = document.querySelector(
-        `.square[data-row="${capturedPos.row}"][data-col="${capturedPos.col}"]`
-      );
-      if (capturedSquare) {
-        const capturedPieceEl = capturedSquare.querySelector(".piece");
-        if (capturedPieceEl) capturedPieceEl.style.opacity = "0.5";
-      }
-      UI.playAudio("capture");
-    } else {
-      UI.playAudio("move");
-    }
-
-    let promoted = false;
-    if (!isKing) {
-      if (movingPiece === "b" && to.row === 0) {
-        boardState[to.row][to.col] = "B";
-        promoted = true;
-      } else if (movingPiece === "p" && to.row === currentBoardSize - 1) {
-        boardState[to.row][to.col] = "P";
-        promoted = true;
-      }
-    }
-
-    await UI.animatePieceMove(from, to, currentBoardSize);
-
-    UI.renderPieces(boardState, currentBoardSize);
-    UI.clearHighlights();
-
-    if (currentTurnCapturedPieces.length > 0) {
-      currentTurnCapturedPieces.forEach((pos) => {
-        const sq = document.querySelector(
-          `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
-        );
-        if (sq && sq.querySelector(".piece"))
-          sq.querySelector(".piece").style.opacity = "0.5";
-      });
-    }
-
-    if (capturedPos && !promoted && window.gameLogic) {
-      const tempGame = {
-        boardState: boardState,
-        boardSize: currentBoardSize,
-        currentPlayer: myColor,
-        turnCapturedPieces: currentTurnCapturedPieces,
-      };
-
-      const nextCaptures = window.gameLogic.getAllPossibleCapturesForPiece(
-        to.row,
-        to.col,
-        tempGame
-      );
-
-      if (nextCaptures && nextCaptures.length > 0) {
-        const newSquare = document.querySelector(
-          `.square[data-row="${to.row}"][data-col="${to.col}"]`
-        );
-        const newPiece = newSquare ? newSquare.querySelector(".piece") : null;
-
-        if (newPiece) {
-          newPiece.classList.add("selected");
-          selectedPiece = { element: newPiece, row: to.row, col: to.col };
-          const validDestinations = nextCaptures.map((seq) => seq[1]);
-          UI.highlightValidMoves(validDestinations);
-          return;
-        }
-      }
-    }
-    selectedPiece = null;
-  }
-
-  function handleBoardClick(e) {
-    if (window.isSpectator || isReplaying) return;
-    if (!myColor) return;
-    if (isProcessingQueue) return;
-
-    const square = e.target.closest(".square");
-    if (!square) return;
-
-    const row = parseInt(square.dataset.row);
-    const col = parseInt(square.dataset.col);
-    const clickedPieceElement = e.target.closest(".piece");
-
-    if (selectedPiece) {
-      if (square.classList.contains("valid-move-highlight")) {
-        const moveFrom = { row: selectedPiece.row, col: selectedPiece.col };
-        const moveTo = { row, col };
-        const moveId =
-          Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-
-        performOptimisticMove(moveFrom, moveTo, moveId).catch(console.error);
-
-        socket.emit("playerMove", {
-          from: moveFrom,
-          to: moveTo,
-          room: currentRoom,
-          moveId: moveId,
-        });
-        return;
-      }
-      if (selectedPiece.row === row && selectedPiece.col === col) {
-        UI.clearHighlights();
-        selectedPiece = null;
-        return;
-      }
-      if (clickedPieceElement) {
-        const pieceColor = clickedPieceElement.classList.contains("white-piece")
-          ? "b"
-          : "p";
-        if (pieceColor === myColor) {
-          selectPieceLogic(clickedPieceElement, row, col);
-          return;
-        }
-      }
-      return;
-    }
-
-    if (clickedPieceElement) {
-      const pieceColor = clickedPieceElement.classList.contains("white-piece")
-        ? "b"
-        : "p";
-      if (pieceColor === myColor) {
-        const mandatoryPieces = document.querySelectorAll(".mandatory-capture");
-        if (mandatoryPieces.length > 0) {
-          if (clickedPieceElement.classList.contains("mandatory-capture")) {
-            selectPieceLogic(clickedPieceElement, row, col);
-          }
-        } else {
-          selectPieceLogic(clickedPieceElement, row, col);
-        }
-      }
-    }
-  }
-
-  function selectPieceLogic(pieceElement, row, col) {
-    UI.clearHighlights();
-    pieceElement.classList.add("selected");
-    selectedPiece = { element: pieceElement, row, col };
-
-    if (window.gameLogic && window.gameLogic.getUniqueCaptureMove) {
-      const tempGame = {
-        boardState: boardState,
-        boardSize: currentBoardSize,
-        currentPlayer: myColor,
-        mustCaptureWith: null,
-        turnCapturedPieces: currentTurnCapturedPieces || [],
-      };
-
-      const uniqueMove = window.gameLogic.getUniqueCaptureMove(
-        row,
-        col,
-        tempGame
-      );
-      if (uniqueMove) {
-        const moveId =
-          Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-        performOptimisticMove({ row, col }, uniqueMove.to, moveId).catch(
-          console.error
-        );
-
-        socket.emit("playerMove", {
-          from: { row, col },
-          to: uniqueMove.to,
-          room: currentRoom,
-          moveId: moveId,
-        });
-        return;
-      }
-    }
-    socket.emit("getValidMoves", { row, col, roomCode: currentRoom });
-  }
-
-  function returnToLobbyLogic() {
-    isGameOver = false;
-    window.isSpectator = false;
-    isReplaying = false;
-    savedReplayData = null;
-    stopWatchdog();
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    if (nextGameInterval) clearInterval(nextGameInterval);
-
-    currentRoom = null;
-    myColor = null;
-    currentBoardSize = 8;
-    updateQueue = [];
-    currentTurnCapturedPieces = [];
-    isProcessingQueue = false;
-    lastOptimisticMove = null;
-    pendingBoardSnapshot = null;
-    boardState = [];
-
-    localStorage.removeItem("checkersCurrentRoom");
-
-    UI.returnToLobbyScreen();
-    document.getElementById("tournament-indicator").classList.add("hidden");
-    if (window.currentUser) socket.emit("enterLobby", window.currentUser);
-  }
-
-  async function processGameUpdate(gameState, suppressSound = false) {
-    if (!gameState || !gameState.boardState) return;
-    lastPacketTime = Date.now();
-
-    currentTurnCapturedPieces = gameState.turnCapturedPieces || [];
-
-    let skipAnimation = false;
-    let isMyMove = false;
-
-    if (gameState.lastMove) {
-      if (
-        lastOptimisticMove &&
-        gameState.lastMove.moveId === lastOptimisticMove.moveId
-      ) {
-        skipAnimation = true;
-        isMyMove = true;
-        lastOptimisticMove = null;
-        pendingBoardSnapshot = null;
-      } else if (
-        lastOptimisticMove &&
-        gameState.lastMove.from.row === lastOptimisticMove.from.row &&
-        gameState.lastMove.from.col === lastOptimisticMove.from.col &&
-        gameState.lastMove.to.row === lastOptimisticMove.to.row &&
-        gameState.lastMove.to.col === lastOptimisticMove.to.col
-      ) {
-        skipAnimation = true;
-        isMyMove = true;
-        lastOptimisticMove = null;
-        pendingBoardSnapshot = null;
-      }
-    }
-
-    if (gameState.lastMove && !suppressSound && !skipAnimation) {
-      await UI.animatePieceMove(
-        gameState.lastMove.from,
-        gameState.lastMove.to,
-        gameState.boardSize
-      );
-    }
-
-    if (!suppressSound && !isMyMove) {
-      if (gameState.lastMove) {
-        const dist = Math.abs(
-          gameState.lastMove.from.row - gameState.lastMove.to.row
-        );
-        if (dist > 1) UI.playAudio("capture");
-        else UI.playAudio("move");
-      }
-    }
-
-    const localStateJson = JSON.stringify(boardState);
-    const serverStateJson = JSON.stringify(gameState.boardState);
-
-    if (localStateJson !== serverStateJson) {
-      boardState = gameState.boardState;
-      UI.renderPieces(boardState, gameState.boardSize);
-    } else {
-      boardState = gameState.boardState;
-    }
-
-    if (currentTurnCapturedPieces.length > 0) {
-      currentTurnCapturedPieces.forEach((pos) => {
-        const cell = document.querySelector(
-          `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
-        );
-        if (cell) {
-          const piece = cell.querySelector(".piece");
-          if (piece) piece.style.opacity = "0.5";
-        }
-      });
-    }
-
-    if (UI.elements.turnDisplay)
-      UI.elements.turnDisplay.textContent =
-        gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
-
-    UI.highlightLastMove(gameState.lastMove);
-
-    if (!window.isSpectator) {
-      const isMyTurn =
-        gameState.currentPlayer === (myColor === "b" ? "b" : "p");
-      UI.updateTurnIndicator(isMyTurn);
-      if (isMyTurn && !suppressSound && navigator.vibrate) {
-        try {
-          navigator.vibrate(200);
-        } catch (e) {}
-      }
-    }
-  }
-
-  socket.on("invalidMove", (data) => {
-    if (pendingBoardSnapshot) {
-      console.warn("Movimento inválido detectado. Revertendo...");
-      boardState = pendingBoardSnapshot;
-      UI.renderPieces(boardState, currentBoardSize);
-      pendingBoardSnapshot = null;
-      lastOptimisticMove = null;
-    }
-
-    if (navigator.vibrate) {
-      try {
-        navigator.vibrate([100, 50, 100]);
-      } catch (e) {}
-    }
-    const gs = UI.elements.gameStatus;
-    const originalText = gs.innerHTML;
-    gs.innerHTML = `<span style="color: #e74c3c; font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 4px;">❌ ${data.message}</span>`;
-    setTimeout(() => {
-      if (gs.innerHTML.includes("❌")) gs.innerHTML = originalText;
-    }, 4000);
-  });
+  // =================================================================
+  // EVENTOS DO SOCKET (RECEBIDOS DO SERVIDOR)
+  // =================================================================
 
   socket.on("connect", () => {
     if (window.currentUser) socket.emit("enterLobby", window.currentUser);
     const savedRoom = localStorage.getItem("checkersCurrentRoom");
     if (window.currentUser && savedRoom) {
-      currentRoom = savedRoom;
+      GameCore.state.currentRoom = savedRoom;
       socket.emit("rejoinActiveGame", {
-        roomCode: currentRoom,
+        roomCode: GameCore.state.currentRoom,
         user: window.currentUser,
       });
       UI.elements.lobbyContainer.classList.add("hidden");
       UI.elements.gameContainer.classList.remove("hidden");
     }
-  });
-
-  socket.on("spectatorJoined", (data) => {
-    window.isSpectator = true;
-    currentRoom = data.gameState.roomCode;
-    currentBoardSize = data.gameState.boardSize;
-    UI.showGameScreen(true);
-
-    boardState = data.gameState.boardState;
-    UI.createBoard(currentBoardSize, handleBoardClick);
-    UI.renderPieces(boardState, currentBoardSize);
-
-    processGameUpdate(data.gameState, true);
-    UI.highlightMandatoryPieces(data.gameState.mandatoryPieces);
-    UI.updatePlayerNames(data.gameState.users);
-    UI.updateTimer(data);
   });
 
   socket.on("gameStart", (gameState) => {
@@ -563,48 +125,63 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
       window.isSpectator = false;
     }
+
     try {
       if (!gameState || !gameState.boardState)
         throw new Error("Dados inválidos");
 
-      isGameOver = false;
-      stopWatchdog();
-      updateQueue = [];
-      isProcessingQueue = false;
-      currentTurnCapturedPieces = [];
-      lastOptimisticMove = null;
+      // CORREÇÃO CRÍTICA: Garante que qualquer replay pare imediatamente
+      GameCore.state.isReplaying = false;
+      GameCore.state.isGameOver = false;
+
+      GameCore.stopWatchdog();
+      GameCore.state.updateQueue = [];
+      GameCore.state.isProcessingQueue = false;
+      GameCore.state.currentTurnCapturedPieces = [];
+      GameCore.state.lastOptimisticMove = null;
 
       document.getElementById("game-over-overlay").classList.add("hidden");
       document.getElementById("next-game-overlay").classList.add("hidden");
 
       UI.showGameScreen(window.isSpectator);
 
-      currentBoardSize = gameState.boardSize;
-      boardState = gameState.boardState;
+      GameCore.state.currentBoardSize = gameState.boardSize;
+      GameCore.state.boardState = gameState.boardState;
 
-      UI.createBoard(currentBoardSize, handleBoardClick);
-      UI.renderPieces(boardState, currentBoardSize);
+      // Passa a função do Core como callback para o clique no tabuleiro
+      UI.createBoard(
+        GameCore.state.currentBoardSize,
+        GameCore.handleBoardClick
+      );
+      UI.renderPieces(
+        GameCore.state.boardState,
+        GameCore.state.currentBoardSize
+      );
 
-      currentRoom = gameState.roomCode;
+      GameCore.state.currentRoom = gameState.roomCode;
 
       if (!window.isSpectator) {
-        localStorage.setItem("checkersCurrentRoom", currentRoom);
-        myColor = socket.id === gameState.players.white ? "b" : "p";
+        localStorage.setItem("checkersCurrentRoom", GameCore.state.currentRoom);
+        GameCore.state.myColor =
+          socket.id === gameState.players.white ? "b" : "p";
+
         let statusText = `Você joga com as ${
-          myColor === "b" ? "Brancas" : "Pretas"
+          GameCore.state.myColor === "b" ? "Brancas" : "Pretas"
         }.`;
         if (gameState.openingName)
           statusText += `<br><small>Sorteio: ${gameState.openingName}</small>`;
+
         UI.elements.gameStatus.innerHTML = statusText;
         UI.elements.board.classList.remove("board-flipped");
-        if (myColor === "p") UI.elements.board.classList.add("board-flipped");
+        if (GameCore.state.myColor === "p")
+          UI.elements.board.classList.add("board-flipped");
       } else {
-        myColor = null;
+        GameCore.state.myColor = null;
         UI.elements.gameStatus.innerHTML = "Espectador: Nova partida iniciada";
         UI.elements.board.classList.remove("board-flipped");
       }
 
-      processGameUpdate(gameState, true);
+      GameCore.processGameUpdate(gameState, true);
       UI.highlightMandatoryPieces(gameState.mandatoryPieces);
       UI.updatePlayerNames(gameState.users);
       UI.playAudio("join");
@@ -612,26 +189,66 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error(e);
       if (!window.isSpectator) {
         alert("Erro ao iniciar.");
-        returnToLobbyLogic();
+        GameCore.returnToLobbyLogic();
       }
     }
   });
 
-  socket.on("timerUpdate", (data) => {
-    lastPacketTime = Date.now();
-    startWatchdog();
+  socket.on("gameStateUpdate", (gs) => {
+    GameCore.state.updateQueue.push(gs);
+    GameCore.processUpdateQueue();
+  });
+
+  socket.on("invalidMove", (data) => {
+    if (GameCore.state.pendingBoardSnapshot) {
+      console.warn("Movimento inválido detectado. Revertendo...");
+      GameCore.state.boardState = GameCore.state.pendingBoardSnapshot;
+      UI.renderPieces(
+        GameCore.state.boardState,
+        GameCore.state.currentBoardSize
+      );
+      GameCore.state.pendingBoardSnapshot = null;
+      GameCore.state.lastOptimisticMove = null;
+    }
+    if (navigator.vibrate)
+      try {
+        navigator.vibrate([100, 50, 100]);
+      } catch (e) {}
+
+    const gs = UI.elements.gameStatus;
+    const originalText = gs.innerHTML;
+    gs.innerHTML = `<span style="color: #e74c3c; font-weight: bold; background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 4px;">❌ ${data.message}</span>`;
+    setTimeout(() => {
+      if (gs.innerHTML.includes("❌")) gs.innerHTML = originalText;
+    }, 4000);
+  });
+
+  socket.on("spectatorJoined", (data) => {
+    window.isSpectator = true;
+    GameCore.state.currentRoom = data.gameState.roomCode;
+    GameCore.state.currentBoardSize = data.gameState.boardSize;
+    UI.showGameScreen(true);
+
+    GameCore.state.boardState = data.gameState.boardState;
+    UI.createBoard(GameCore.state.currentBoardSize, GameCore.handleBoardClick);
+    UI.renderPieces(GameCore.state.boardState, GameCore.state.currentBoardSize);
+
+    GameCore.processGameUpdate(data.gameState, true);
+    UI.highlightMandatoryPieces(data.gameState.mandatoryPieces);
+    UI.updatePlayerNames(data.gameState.users);
     UI.updateTimer(data);
   });
 
-  socket.on("timerPaused", (data) => {
-    lastPacketTime = Date.now();
-    if (UI.elements.timerDisplay)
-      UI.elements.timerDisplay.textContent = "Pausado";
+  socket.on("timerUpdate", (data) => {
+    GameCore.state.lastPacketTime = Date.now();
+    GameCore.startWatchdog();
+    UI.updateTimer(data);
   });
 
-  socket.on("gameStateUpdate", (gs) => {
-    updateQueue.push(gs);
-    processUpdateQueue();
+  socket.on("timerPaused", () => {
+    GameCore.state.lastPacketTime = Date.now();
+    if (UI.elements.timerDisplay)
+      UI.elements.timerDisplay.textContent = "Pausado";
   });
 
   socket.on("showValidMoves", (moves) => {
@@ -639,37 +256,39 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameResumed", (data) => {
-    lastPacketTime = Date.now();
+    GameCore.state.lastPacketTime = Date.now();
     if (window.isSpectator) return;
     document.getElementById("connection-lost-overlay").classList.add("hidden");
-    updateQueue = [];
-    isProcessingQueue = false;
+    GameCore.state.updateQueue = [];
+    GameCore.state.isProcessingQueue = false;
 
-    currentBoardSize = data.gameState.boardSize;
-    boardState = data.gameState.boardState;
-    UI.createBoard(currentBoardSize, handleBoardClick);
-    UI.renderPieces(boardState, currentBoardSize);
+    GameCore.state.currentBoardSize = data.gameState.boardSize;
+    GameCore.state.boardState = data.gameState.boardState;
+    UI.createBoard(GameCore.state.currentBoardSize, GameCore.handleBoardClick);
+    UI.renderPieces(GameCore.state.boardState, GameCore.state.currentBoardSize);
 
-    processGameUpdate(data.gameState, true);
-
+    GameCore.processGameUpdate(data.gameState, true);
     UI.updatePlayerNames(data.gameState.users);
     UI.updateTimer(data);
-    myColor = socket.id === data.gameState.players.white ? "b" : "p";
+
+    GameCore.state.myColor =
+      socket.id === data.gameState.players.white ? "b" : "p";
     UI.elements.board.classList.remove("board-flipped");
-    if (myColor === "p") UI.elements.board.classList.add("board-flipped");
+    if (GameCore.state.myColor === "p")
+      UI.elements.board.classList.add("board-flipped");
   });
 
   socket.on("gameOver", (data) => {
-    if (isGameOver) return;
-    isGameOver = true;
-    stopWatchdog();
-    updateQueue = [];
-    isProcessingQueue = false;
+    if (GameCore.state.isGameOver) return;
+    GameCore.state.isGameOver = true;
+    GameCore.stopWatchdog();
+    GameCore.state.updateQueue = [];
+    GameCore.state.isProcessingQueue = false;
 
-    savedReplayData = {
+    GameCore.state.savedReplayData = {
       history: data.moveHistory,
       initialBoard: data.initialBoardState,
-      boardSize: currentBoardSize,
+      boardSize: GameCore.state.currentBoardSize,
     };
 
     document.getElementById("connection-lost-overlay").classList.add("hidden");
@@ -688,21 +307,19 @@ document.addEventListener("DOMContentLoaded", () => {
       ).textContent = `${wText} venceram! ${data.reason}`;
     } else {
       if (data.isTournament) {
-        if (data.winner === myColor) {
+        if (data.winner === GameCore.state.myColor) {
           document.getElementById("winner-screen").classList.remove("hidden");
           document.querySelector("#winner-screen .revanche-btn").style.display =
             "none";
-
           let msg = document.getElementById("trn-winner-wait-msg");
           if (!msg) {
             msg = document.createElement("p");
             msg.id = "trn-winner-wait-msg";
             msg.style.cssText =
               "color: #f1c40f; margin-top: 10px; font-weight: bold;";
-            const content = document.querySelector(
-              "#winner-screen .modal-content"
-            );
-            if (content) content.appendChild(msg);
+            document
+              .querySelector("#winner-screen .modal-content")
+              .appendChild(msg);
           }
           msg.textContent =
             "Vitória! Aguarde o fim da rodada para o próximo oponente.";
@@ -711,19 +328,18 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("loser-screen").classList.remove("hidden");
           document.querySelector("#loser-screen .revanche-btn").style.display =
             "none";
-
           setTimeout(() => {
             if (
               !document
                 .getElementById("loser-screen")
                 .classList.contains("hidden")
             ) {
-              returnToLobbyLogic();
+              GameCore.returnToLobbyLogic();
             }
           }, 5000);
         }
       } else {
-        if (data.winner === myColor)
+        if (data.winner === GameCore.state.myColor)
           document.getElementById("winner-screen").classList.remove("hidden");
         else document.getElementById("loser-screen").classList.remove("hidden");
       }
@@ -731,16 +347,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameDraw", (data) => {
-    if (isGameOver) return;
-    isGameOver = true;
-    stopWatchdog();
-    updateQueue = [];
-    isProcessingQueue = false;
+    if (GameCore.state.isGameOver) return;
+    GameCore.state.isGameOver = true;
+    GameCore.stopWatchdog();
+    GameCore.state.updateQueue = [];
+    GameCore.state.isProcessingQueue = false;
 
-    savedReplayData = {
+    GameCore.state.savedReplayData = {
       history: data.moveHistory,
       initialBoard: data.initialBoardState,
-      boardSize: currentBoardSize,
+      boardSize: GameCore.state.currentBoardSize,
     };
 
     document.getElementById("connection-lost-overlay").classList.add("hidden");
@@ -763,8 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("nextGameStarting", (data) => {
-    const nextOv = document.getElementById("next-game-overlay");
-    nextOv.classList.remove("hidden");
+    document.getElementById("next-game-overlay").classList.remove("hidden");
     document.getElementById("game-over-overlay").classList.add("hidden");
     document.getElementById(
       "match-score-display"
@@ -772,11 +387,12 @@ document.addEventListener("DOMContentLoaded", () => {
     let cd = 5;
     const tEl = document.getElementById("next-game-timer");
     tEl.textContent = cd;
-    if (nextGameInterval) clearInterval(nextGameInterval);
-    nextGameInterval = setInterval(() => {
+    if (GameCore.state.nextGameInterval)
+      clearInterval(GameCore.state.nextGameInterval);
+    GameCore.state.nextGameInterval = setInterval(() => {
       cd--;
       tEl.textContent = cd;
-      if (cd <= 0) clearInterval(nextGameInterval);
+      if (cd <= 0) clearInterval(GameCore.state.nextGameInterval);
     }, 1000);
   });
 
@@ -799,13 +415,14 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.disabled = true;
     let cd = 30;
     btn.textContent = `Empate (${cd}s)`;
-    if (drawCooldownInterval) clearInterval(drawCooldownInterval);
-    drawCooldownInterval = setInterval(() => {
+    if (GameCore.state.drawCooldownInterval)
+      clearInterval(GameCore.state.drawCooldownInterval);
+    GameCore.state.drawCooldownInterval = setInterval(() => {
       cd--;
       if (cd > 0) btn.textContent = `Empate (${cd}s)`;
       else {
-        clearInterval(drawCooldownInterval);
-        if (!isGameOver) {
+        clearInterval(GameCore.state.drawCooldownInterval);
+        if (!GameCore.state.isGameOver) {
           btn.disabled = false;
           btn.textContent = "Empate";
         }
@@ -826,12 +443,12 @@ document.addEventListener("DOMContentLoaded", () => {
           .getElementById("game-over-overlay")
           .classList.contains("hidden")
       )
-        returnToLobbyLogic();
+        GameCore.returnToLobbyLogic();
     }, 3000);
   });
   socket.on("gameNotFound", () => {
     alert("Jogo não encontrado.");
-    returnToLobbyLogic();
+    GameCore.returnToLobbyLogic();
   });
   socket.on("opponentConnectionLost", (d) => {
     if (!window.isSpectator) {
@@ -843,20 +460,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
   socket.on("opponentDisconnected", () => {
-    if (!window.isSpectator) returnToLobbyLogic();
+    if (!window.isSpectator) GameCore.returnToLobbyLogic();
   });
 
-  socket.on("tournamentStarted", (data) =>
-    showTournamentBracket(data.bracket, 1)
+  // --- EVENTOS DO TORNEIO (Mantidos aqui pois são de alto nível) ---
+
+  socket.on(
+    "tournamentStarted",
+    (data) =>
+      window.showTournamentBracket &&
+      window.showTournamentBracket(data.bracket, 1)
   );
-  socket.on("tournamentRoundUpdate", (data) =>
-    showTournamentBracket(data.bracket, data.round)
+  socket.on(
+    "tournamentRoundUpdate",
+    (data) =>
+      window.showTournamentBracket &&
+      window.showTournamentBracket(data.bracket, data.round)
   );
 
-  // --- ALTERAÇÃO: Fim do Torneio com Pódio Persistente ---
   socket.on("tournamentEnded", (data) => {
     const today = new Date().toLocaleDateString();
-    // Salva o resultado no navegador para exibir o pódio
     localStorage.setItem(
       `tournament_result_${today}`,
       JSON.stringify({
@@ -866,17 +489,13 @@ document.addEventListener("DOMContentLoaded", () => {
         runnerUpPrize: data.runnerUpPrize,
       })
     );
-
     if (window.updateTournamentStatus) window.updateTournamentStatus();
     if (window.currentUser) window.location.reload();
   });
 
-  // --- ALTERAÇÃO: Cancelamento com Status Persistente ---
-  socket.on("tournamentCancelled", (data) => {
+  socket.on("tournamentCancelled", () => {
     const today = new Date().toLocaleDateString();
-    // Marca como cancelado para o dia todo
     localStorage.setItem(`tournament_cancelled_${today}`, "true");
-
     if (window.updateTournamentStatus) window.updateTournamentStatus();
     if (window.currentUser) window.location.reload();
   });
@@ -904,7 +523,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  function showTournamentBracket(matches, round) {
+  // Helper local para mostrar bracket (se necessário)
+  window.showTournamentBracket = function (matches, round) {
     const overlay = document.getElementById("tournament-bracket-overlay");
     const list = document.getElementById("tournament-matches-list");
     const roundTitle = document.getElementById("tournament-round-display");
@@ -928,5 +548,5 @@ document.addEventListener("DOMContentLoaded", () => {
       list.appendChild(div);
     });
     closeBtn.onclick = () => overlay.classList.add("hidden");
-  }
+  };
 });
