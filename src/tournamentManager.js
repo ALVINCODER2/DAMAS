@@ -17,7 +17,7 @@ function initializeTournamentManager(ioInstance, gameRoomsInstance) {
   io = ioInstance;
   gameRooms = gameRoomsInstance;
 
-  // Verifica o horário a cada 30 segundos
+  // Verifica o horário a cada 10 segundos
   checkInterval = setInterval(checkSchedule, 10 * 1000);
   console.log(
     `[Torneio] Gerenciador iniciado. Agendado para ${TOURNAMENT_HOUR}:${TOURNAMENT_MINUTE.toString().padStart(
@@ -77,39 +77,79 @@ async function checkSchedule() {
   }
 }
 
+// --- FUNÇÃO DE INSCRIÇÃO SEGURA (ATÔMICA) ---
 async function registerPlayer(email) {
-  const tournament = await getTodaysTournament();
+  // 1. Verifica estado preliminar do torneio
+  const tournamentCheck = await getTodaysTournament();
 
-  if (tournament.status !== "open") {
+  if (tournamentCheck.status !== "open") {
     return {
       success: false,
       message: "Inscrições encerradas ou torneio em andamento.",
     };
   }
-  if (tournament.participants.includes(email)) {
+  if (tournamentCheck.participants.includes(email)) {
     return { success: false, message: "Você já está inscrito." };
   }
 
-  const user = await User.findOne({ email });
-  if (!user || user.saldo < tournament.entryFee) {
+  // 2. COBRANÇA ATÔMICA (Segurança Financeira)
+  // Só desconta se o usuário tiver saldo suficiente no momento exato da query
+  const userUpdate = await User.findOneAndUpdate(
+    { email: email, saldo: { $gte: tournamentCheck.entryFee } },
+    { $inc: { saldo: -tournamentCheck.entryFee } },
+    { new: true }
+  );
+
+  if (!userUpdate) {
     return { success: false, message: "Saldo insuficiente para inscrição." };
   }
 
-  user.saldo -= tournament.entryFee;
-  await user.save();
+  try {
+    // 3. INSCRIÇÃO ATÔMICA (Segurança de Dados)
+    // Usa $addToSet para evitar duplicação e garante que o torneio ainda está 'open'
+    const updatedTournament = await Tournament.findOneAndUpdate(
+      { _id: tournamentCheck._id, status: "open" },
+      {
+        $addToSet: { participants: email },
+        $inc: { prizePool: tournamentCheck.entryFee },
+      },
+      { new: true }
+    );
 
-  tournament.participants.push(email);
-  tournament.prizePool += tournament.entryFee;
-  await tournament.save();
+    if (!updatedTournament) {
+      // Caso raríssimo: O torneio mudou de status (fechou) APÓS a cobrança do usuário.
+      // DEVOLUÇÃO IMEDIATA (Rollback)
+      await User.findOneAndUpdate(
+        { email },
+        { $inc: { saldo: tournamentCheck.entryFee } }
+      );
+      return {
+        success: false,
+        message:
+          "O torneio foi iniciado ou cancelado durante sua inscrição. Valor estornado.",
+      };
+    }
 
-  io.emit("tournamentUpdate", {
-    participantsCount: tournament.participants.length,
-    prizePool: tournament.prizePool,
-  });
+    if (io) {
+      io.emit("tournamentUpdate", {
+        participantsCount: updatedTournament.participants.length,
+        prizePool: updatedTournament.prizePool,
+      });
+    }
 
-  return { success: true, message: "Inscrição realizada com sucesso!" };
+    return { success: true, message: "Inscrição realizada com sucesso!" };
+  } catch (err) {
+    console.error("Erro crítico na inscrição:", err);
+    // Reembolso de segurança em caso de erro de banco de dados
+    await User.findOneAndUpdate(
+      { email },
+      { $inc: { saldo: tournamentCheck.entryFee } }
+    );
+    return { success: false, message: "Erro interno. Tente novamente." };
+  }
 }
 
+// --- FUNÇÃO DE SAÍDA SEGURA (ATÔMICA) ---
 async function unregisterPlayer(email) {
   const tournament = await getTodaysTournament();
 
@@ -119,25 +159,47 @@ async function unregisterPlayer(email) {
       message: "Não é possível sair agora (Torneio já iniciou ou fechou).",
     };
   }
-  if (!tournament.participants.includes(email)) {
-    return { success: false, message: "Você não está inscrito." };
+
+  // 1. REMOÇÃO ATÔMICA DO TORNEIO
+  // Tenta remover o jogador. Se falhar (não estava inscrito ou torneio fechou), não devolve dinheiro.
+  const updatedTournament = await Tournament.findOneAndUpdate(
+    { _id: tournament._id, status: "open", participants: email },
+    {
+      $pull: { participants: email },
+      $inc: { prizePool: -tournament.entryFee },
+    },
+    { new: true }
+  );
+
+  if (!updatedTournament) {
+    return {
+      success: false,
+      message: "Você não está inscrito ou o torneio já fechou.",
+    };
   }
 
-  tournament.participants = tournament.participants.filter((p) => p !== email);
-  tournament.prizePool -= tournament.entryFee;
-  if (tournament.prizePool < 0) tournament.prizePool = 0;
-  await tournament.save();
-
-  const user = await User.findOne({ email });
-  if (user) {
-    user.saldo += tournament.entryFee;
-    await user.save();
+  // Correção visual para não deixar prizePool negativo por erro de arredondamento (raro)
+  if (updatedTournament.prizePool < 0) {
+    await Tournament.updateOne(
+      { _id: tournament._id },
+      { $set: { prizePool: 0 } }
+    );
   }
 
-  io.emit("tournamentUpdate", {
-    participantsCount: tournament.participants.length,
-    prizePool: tournament.prizePool,
-  });
+  // 2. REEMBOLSO ATÔMICO
+  // Como a remoção do torneio foi confirmada, devolvemos o dinheiro com segurança.
+  await User.findOneAndUpdate(
+    { email },
+    { $inc: { saldo: tournament.entryFee } }
+  );
+
+  if (io) {
+    io.emit("tournamentUpdate", {
+      participantsCount: updatedTournament.participants.length,
+      prizePool:
+        updatedTournament.prizePool < 0 ? 0 : updatedTournament.prizePool,
+    });
+  }
 
   return { success: true, message: "Inscrição cancelada e valor reembolsado." };
 }
@@ -151,6 +213,7 @@ async function cancelTournamentAndRefund(tournament, reason) {
   tournament.status = "cancelled";
   await tournament.save();
 
+  // Reembolso em massa seguro
   for (const email of tournament.participants) {
     const updatedUser = await User.findOneAndUpdate(
       { email },
@@ -165,7 +228,7 @@ async function cancelTournamentAndRefund(tournament, reason) {
     }
   }
 
-  // Limpa salas de jogo da memória usando a referência injetada
+  // Limpa salas de jogo da memória
   if (tournament.matches && gameRooms) {
     tournament.matches.forEach((m) => {
       if (m.roomCode && gameRooms[m.roomCode]) delete gameRooms[m.roomCode];
@@ -204,10 +267,12 @@ async function startTournament(tournament) {
     }
   });
 
+  // W.O. para ausentes
   if (absentPlayers.length > 0) {
     console.log(
-      `[Torneio] ${absentPlayers.length} jogadores ausentes. Eles perdem a inscrição (W.O.).`
+      `[Torneio] ${absentPlayers.length} jogadores ausentes. W.O. aplicado.`
     );
+    // Atualiza a lista de participantes no banco
     tournament.participants = presentPlayers;
     await tournament.save();
 
@@ -221,26 +286,12 @@ async function startTournament(tournament) {
     console.log(
       `[Torneio] Cancelado: Apenas ${tournament.participants.length} jogadores online. Mínimo: ${MIN_PLAYERS}.`
     );
-    tournament.status = "cancelled";
-    await tournament.save();
-
-    for (const email of originalParticipants) {
-      const updatedUser = await User.findOneAndUpdate(
-        { email },
-        { $inc: { saldo: tournament.entryFee } },
-        { new: true }
-      );
-      if (updatedUser) {
-        io.emit("balanceUpdate", {
-          email: updatedUser.email,
-          newSaldo: updatedUser.saldo,
-        });
-      }
-    }
-
-    io.emit("tournamentCancelled", {
-      message: `Torneio cancelado por falta de quórum (Mínimo ${MIN_PLAYERS} jogadores). Todos foram reembolsados.`,
-    });
+    // Reutiliza a função de cancelamento que já faz o reembolso correto
+    // Precisamos recarregar o torneio ou passar o objeto atualizado
+    await cancelTournamentAndRefund(
+      tournament,
+      `Torneio cancelado por falta de quórum (Mínimo ${MIN_PLAYERS} jogadores). Todos foram reembolsados.`
+    );
     return;
   }
 
@@ -290,14 +341,13 @@ async function processRoundMatches(tournament) {
       match.roomCode = roomCode;
       match.status = "active";
 
-      // Usa a referência injetada de gameRooms
       if (gameRooms) {
         gameRooms[roomCode] = {
           roomCode,
           bet: 0,
           gameMode: "classic",
           timeControl: "move",
-          timerDuration: 7,
+          timerDuration: 7, // 7 segundos por jogada
           players: [],
           isTournament: true,
           matchId: match.matchId,
@@ -313,6 +363,7 @@ async function processRoundMatches(tournament) {
           roomCode: roomCode,
         });
 
+        // Timeout para W.O. se alguém não entrar na sala
         setTimeout(async () => {
           const room = gameRooms[roomCode];
           if (room && !room.isGameConcluded && room.players.length < 2) {
@@ -325,13 +376,13 @@ async function processRoundMatches(tournament) {
             let winner = null;
             if (joined.includes(p1) && !joined.includes(p2)) winner = p1;
             else if (joined.includes(p2) && !joined.includes(p1)) winner = p2;
-            else winner = Math.random() < 0.5 ? p1 : p2;
+            else winner = Math.random() < 0.5 ? p1 : p2; // Sorteio se ambos faltarem
 
             await handleTournamentGameEnd(winner, null, room);
 
             if (gameRooms[roomCode]) delete gameRooms[roomCode];
           }
-        }, 60 * 1000);
+        }, 60 * 1000); // 60 segundos para entrar
       } else {
         console.error(
           "[Torneio] CRÍTICO: gameRooms não definido no processRoundMatches"
@@ -353,6 +404,7 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
   );
   if (matchIndex === -1) return;
 
+  // Se não houve jogo (W.O. direto)
   if (!room.game) {
     tournament.matches[matchIndex].winner = winnerEmail;
     tournament.matches[matchIndex].status = "finished";
@@ -364,6 +416,7 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
     return;
   }
 
+  // Se houve jogo mas deu empate (Timer ou Regra de Empate)
   if (!winnerEmail) {
     console.log(
       `[Torneio] Empate na partida ${room.matchId}. Iniciando desempate (Tablita 5s)...`
@@ -429,6 +482,7 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
     return;
   }
 
+  // Vitória normal
   tournament.matches[matchIndex].winner = winnerEmail;
   tournament.matches[matchIndex].status = "finished";
 
@@ -437,7 +491,7 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
     `[Torneio] Partida ${room.matchId} finalizada. Vencedor: ${winnerEmail}`
   );
 
-  // Lógica para assistir oponente (Se o próximo oponente estiver jogando)
+  // Funcionalidade "Assistir Oponente"
   if (winnerEmail) {
     const currentRoundMatches = tournament.matches.filter(
       (m) => m.round === tournament.round
@@ -447,7 +501,7 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
     );
 
     if (myRelativeIndex !== -1) {
-      // Se índice par (0, 2...), oponente vem do próximo (1, 3...). Se ímpar, do anterior.
+      // Se índice par, oponente vem do próximo. Se ímpar, do anterior.
       const siblingIndex =
         myRelativeIndex % 2 === 0 ? myRelativeIndex + 1 : myRelativeIndex - 1;
 
@@ -528,8 +582,8 @@ async function distributePrizes(tournament, championEmail) {
   tournament.status = "completed";
 
   const totalPool = tournament.prizePool;
-  const championPrize = totalPool * 0.7;
-  const runnerUpPrize = totalPool * 0.3;
+  const championPrize = totalPool * 0.7; // 70% para o campeão
+  const runnerUpPrize = totalPool * 0.3; // 30% para o vice
 
   if (championEmail) {
     const updatedChampion = await User.findOneAndUpdate(
@@ -575,7 +629,7 @@ async function recoverStuckTournaments() {
     const stuck = await Tournament.find({ status: "active" });
     if (stuck.length > 0) {
       console.log(
-        `[Torneio] Encontrados ${stuck.length} torneios travados. Cancelando...`
+        `[Torneio] Encontrados ${stuck.length} torneios travados. Cancelando e Reembolsando...`
       );
       for (const t of stuck) {
         await cancelTournamentAndRefund(
