@@ -308,7 +308,7 @@ window.initLobby = function (socket, UI) {
         info.id = "trn-info-display";
         info.style.cssText =
           "text-align: center; margin-bottom: 10px; color: #f1c40f; font-weight: bold;";
-        info.innerHTML = `<i class="fa-regular fa-clock"></i> Início às 23:59 BRT`;
+        info.innerHTML = `<i class="fa-regular fa-clock"></i> Início às 21:00 BRT`;
         body.insertBefore(info, body.firstChild);
       }
 
