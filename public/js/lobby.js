@@ -789,25 +789,12 @@ window.initLobby = function (socket, UI) {
               color = "#e74c3c";
             }
           }
-
-          // Lógica robusta para exibir oponente ou Reembolso
-          let opponentName = "Sistema";
-          let betLabel = "Aposta";
-
-          // Se o backend enviar type='refund' ou se não tiver oponente definido (caso de sistema)
-          if (m.type === "refund" || (!m.player2 && !m.winner)) {
-            resultText = "REEMBOLSO";
-            color = "#f1c40f"; // Amarelo Ouro
-            opponentName = "Torneio Cancelado";
-            betLabel = "Valor";
-          } else {
-            const opEmail =
-              m.player1 === window.currentUser.email ? m.player2 : m.player1;
-            opponentName = opEmail ? opEmail.split("@")[0] : "Desconhecido";
-          }
-
+          const opponent =
+            m.player1 === window.currentUser.email ? m.player2 : m.player1;
           const date = new Date(m.createdAt).toLocaleDateString();
-          li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${opponentName}</span><span>${betLabel}: <strong>R$ ${m.bet.toFixed(
+          li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+            opponent.split("@")[0]
+          }</span><span>Aposta: <strong>R$ ${m.bet.toFixed(
             2
           )}</strong></span></div>`;
           ul.appendChild(li);

@@ -15,9 +15,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Estilos -->
-  <link rel="stylesheet" href="css/style.css?v=1.0.10" />
-  <link rel="stylesheet" href="css/game.css?v=1.0.10" />
-  <link rel="stylesheet" href="css/tournament.css?v=1.0.10" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/game.css" />
+  <link rel="stylesheet" href="css/tournament.css" />
 
   <!-- SDKs -->
   <script src="https://sdk.mercadopago.com/js/v2"></script>
@@ -289,7 +289,7 @@
           <img id="white-player-avatar" src="" class="avatar-small hidden">
           <div class="player-details">
             <span id="white-player-name">Jog 1</span>
-            <div class="piece-icon white-piece-icon"></div>
+            <div class="piece-indicator white"></div>
           </div>
         </div>
         <div class="vs-timer">
@@ -298,7 +298,7 @@
         <div class="player-card black-player">
           <div class="player-details right">
             <span id="black-player-name">Jog 2</span>
-            <div class="piece-icon black-piece-icon"></div>
+            <div class="piece-indicator black"></div>
           </div>
           <img id="black-player-avatar" src="" class="avatar-small hidden">
         </div>
@@ -591,13 +591,14 @@
   <audio id="join-sound" src="/sounds/join.mp3"></audio>
 
   <!-- Scripts -->
-  <script src="js/gameLogic.js?v=1.0.10"></script>
-  <script src="js/ui-helpers.js?v=1.0.10"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/gameLogic.js"></script>
+  <script src="js/ui-helpers.js"></script>
   <!-- Incluindo os arquivos separados -->
-  <script src="js/lobby.js?v=1.0.10"></script>
-  <script src="js/auth.js?v=1.0.10"></script>
+  <script src="js/lobby.js"></script>
+  <script src="js/auth.js"></script>
   <!-- Novo Core do Jogo -->
-  <script src="js/gameCore.js?v=1.0.10"></script>
+  <script src="js/gameCore.js"></script>
 
   <script>
     // Função para abrir/fechar seções (como o card de afiliados)
@@ -608,7 +609,7 @@
       else body.style.display = "block";
     }
   </script>
-  <script src="js/script.js?v=1.0.10"></script>
+  <script src="js/script.js"></script>
 </body>
 
 </html>
