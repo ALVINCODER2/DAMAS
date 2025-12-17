@@ -1,5 +1,6 @@
 const Tournament = require("../models/Tournament");
 const User = require("../models/User");
+const MatchHistory = require("../models/MatchHistory"); // <--- IMPORTANTE: Adicionado para registrar o histórico
 
 // Configurações
 const MIN_PLAYERS = 4;
@@ -213,18 +214,40 @@ async function cancelTournamentAndRefund(tournament, reason) {
   tournament.status = "cancelled";
   await tournament.save();
 
-  // Reembolso em massa seguro
+  // Reembolso em massa seguro e Registro no Histórico
   for (const email of tournament.participants) {
     const updatedUser = await User.findOneAndUpdate(
       { email },
       { $inc: { saldo: tournament.entryFee } },
       { new: true }
     );
-    if (updatedUser && io) {
-      io.emit("balanceUpdate", {
-        email: updatedUser.email,
-        newSaldo: updatedUser.saldo,
-      });
+
+    if (updatedUser) {
+      // 1. Notifica via Socket
+      if (io) {
+        io.emit("balanceUpdate", {
+          email: updatedUser.email,
+          newSaldo: updatedUser.saldo,
+        });
+      }
+
+      // 2. Salva no Histórico do Usuário
+      try {
+        await MatchHistory.create({
+          player1: email,
+          player2: "Sistema (Reembolso)",
+          winner: email, // Define usuário como vencedor para indicar ganho ($)
+          bet: tournament.entryFee,
+          gameMode: "Torneio",
+          reason: `Cancelado: ${reason}`,
+          createdAt: new Date(),
+        });
+      } catch (histError) {
+        console.error(
+          `Erro ao salvar histórico de reembolso para ${email}:`,
+          histError
+        );
+      }
     }
   }
 
@@ -286,11 +309,10 @@ async function startTournament(tournament) {
     console.log(
       `[Torneio] Cancelado: Apenas ${tournament.participants.length} jogadores online. Mínimo: ${MIN_PLAYERS}.`
     );
-    // Reutiliza a função de cancelamento que já faz o reembolso correto
-    // Precisamos recarregar o torneio ou passar o objeto atualizado
+    // Reutiliza a função de cancelamento que já faz o reembolso correto E O HISTÓRICO
     await cancelTournamentAndRefund(
       tournament,
-      `Torneio cancelado por falta de quórum (Mínimo ${MIN_PLAYERS} jogadores). Todos foram reembolsados.`
+      `Quórum insuficiente (Mínimo ${MIN_PLAYERS}).`
     );
     return;
   }
