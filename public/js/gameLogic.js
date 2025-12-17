@@ -508,10 +508,25 @@
     return null;
   }
 
+  function shouldResetDrawCounter(board, from, isCapture) {
+    const piece = board[from.row][from.col];
+    if (!piece) return false;
+
+    // 1. Captura de peça (simples ou dama) reseta a contagem
+    if (isCapture) return true;
+
+    // 2. Movimento de peça simples (não-dama) reseta a contagem
+    const isKing = piece === "B" || piece === "P";
+    if (!isKing) return true;
+
+    return false;
+  }
+
   exports.findBestCaptureMoves = findBestCaptureMoves;
   exports.isMoveValid = isMoveValid;
   exports.checkWinCondition = checkWinCondition;
   exports.getAllPossibleCapturesForPiece = getAllPossibleCapturesForPiece;
   exports.hasValidMoves = hasValidMoves;
   exports.getUniqueCaptureMove = getUniqueCaptureMove;
+  exports.shouldResetDrawCounter = shouldResetDrawCounter;
 })(typeof exports === "undefined" ? (this.gameLogic = {}) : exports);

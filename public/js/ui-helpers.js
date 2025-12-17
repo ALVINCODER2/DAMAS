@@ -99,7 +99,12 @@ window.UI = {
       const isFlipped = this.elements.board.classList.contains("board-flipped");
 
       piece.style.willChange = "transform";
-      piece.style.zIndex = 100;
+      piece.style.zIndex = 999;
+
+      // CORREÇÃO: Eleva o quadrado pai para evitar que a peça passe "por baixo" de outros quadrados
+      const originalSquareZIndex = square.style.zIndex;
+      square.style.zIndex = 1000;
+      square.style.position = "relative";
 
       // Evento de fim de transição para limpeza garantida
       const onTransitionEnd = (e) => {
@@ -109,6 +114,12 @@ window.UI = {
         piece.style.zIndex = "";
         piece.style.transition = "";
         piece.style.transform = "";
+        piece.style.boxShadow = "";
+
+        // Restaura o quadrado pai
+        square.style.zIndex = originalSquareZIndex;
+        square.style.position = "";
+
         resolve();
       };
 
@@ -116,15 +127,18 @@ window.UI = {
         piece.style.transition = "transform 0.15s linear";
         piece.addEventListener("transitionend", onTransitionEnd);
 
+        // Adiciona sombra para profundidade (simulando o lift 3D)
+        piece.style.boxShadow = "0 15px 30px rgba(0,0,0,0.5)";
+
         // Fallback de segurança
         setTimeout(() => {
           onTransitionEnd({ propertyName: "transform" });
         }, 200);
 
         if (isFlipped) {
-          piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px)`;
+          piece.style.transform = `rotate(180deg) translate(${deltaX}px, ${deltaY}px) scale(1.15)`;
         } else {
-          piece.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+          piece.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1.15)`;
         }
       });
     });
@@ -226,10 +240,22 @@ window.UI = {
       this.boardCache[row] = [];
       for (let col = 0; col < boardSize; col++) {
         const square = document.createElement("div");
-        square.classList.add(
-          "square",
-          (row + col) % 2 === 1 ? "dark" : "light"
-        );
+        const isDark = (row + col) % 2 === 1;
+        square.classList.add("square", isDark ? "dark" : "light");
+
+        // TEXTURA REALISTA E VÍVIDA (Madeira Envernizada)
+        if (isDark) {
+          // Escura: Gradiente de Mogno/Café com sombra interna para profundidade
+          square.style.background =
+            "radial-gradient(circle at center, #6D4C41, #3E2723)";
+          square.style.boxShadow = "inset 0 0 15px rgba(0,0,0,0.5)";
+        } else {
+          // Clara: Gradiente de Marfim/Madeira Clara
+          square.style.background =
+            "radial-gradient(circle at center, #FFF8E1, #D7CCC8)";
+          square.style.boxShadow = "inset 0 0 5px rgba(0,0,0,0.1)";
+        }
+
         square.dataset.row = row;
         square.dataset.col = col;
 

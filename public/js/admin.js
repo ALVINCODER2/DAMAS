@@ -443,6 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
       boardState: JSON.parse(JSON.stringify(initialBoard)),
       boardSize: 8,
       currentPlayer: "b",
+      drawCounter: 0,
     };
     selectedPiece = null;
     lastTestGameState = null;
@@ -463,10 +464,20 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const square = document.createElement("div");
-        square.classList.add(
-          "square",
-          (row + col) % 2 === 1 ? "dark" : "light"
-        );
+        const isDark = (row + col) % 2 === 1;
+        square.classList.add("square", isDark ? "dark" : "light");
+
+        // TEXTURA REALISTA (Admin)
+        if (isDark) {
+          square.style.background =
+            "radial-gradient(circle at center, #6D4C41, #3E2723)";
+          square.style.boxShadow = "inset 0 0 15px rgba(0,0,0,0.5)";
+        } else {
+          square.style.background =
+            "radial-gradient(circle at center, #FFF8E1, #D7CCC8)";
+          square.style.boxShadow = "inset 0 0 5px rgba(0,0,0,0.1)";
+        }
+
         square.dataset.row = row;
         square.dataset.col = col;
         boardElement.appendChild(square);
@@ -514,6 +525,10 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    if (testGame.drawCounter >= 20) {
+      testStatus.textContent += " - EMPATE (Regra das 20 Jogadas)!";
+    }
+
     const bestCaptures = window.gameLogic.findBestCaptureMoves(
       testGame.currentPlayer,
       testGame
@@ -550,6 +565,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (isValid.valid) {
           lastTestGameState = JSON.parse(JSON.stringify(testGame));
+
+          // Regra das 20 Jogadas: Verifica se deve resetar ou incrementar
+          if (
+            window.gameLogic.shouldResetDrawCounter(
+              testGame.boardState,
+              move.from,
+              isValid.isCapture
+            )
+          ) {
+            testGame.drawCounter = 0;
+          } else {
+            testGame.drawCounter = (testGame.drawCounter || 0) + 1;
+          }
+
           const piece = testGame.boardState[move.from.row][move.from.col];
           testGame.boardState[move.to.row][move.to.col] = piece;
           testGame.boardState[move.from.row][move.from.col] = 0;

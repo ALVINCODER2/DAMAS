@@ -136,6 +136,7 @@ window.GameCore = (function () {
       while (r !== to.row && c !== to.col) {
         if (state.boardState[r][c] !== 0) {
           capturedPos = { row: r, col: c };
+          state.currentTurnCapturedPieces.push(capturedPos);
           break;
         }
         r += dr;
@@ -144,7 +145,6 @@ window.GameCore = (function () {
     }
 
     if (capturedPos) {
-      state.currentTurnCapturedPieces.push(capturedPos);
       const capturedSquare = document.querySelector(
         `.square[data-row="${capturedPos.row}"][data-col="${capturedPos.col}"]`
       );
