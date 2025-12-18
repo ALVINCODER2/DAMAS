@@ -1220,6 +1220,34 @@ function initializeSocket(ioInstance) {
       resetTimer(roomCode);
       io.to(originalRequesterId).emit("drawDeclined");
     });
+    socket.on("acceptDraw", (data) => {
+      const { roomCode } = data;
+      const room = gameRooms[roomCode];
+      if (!room || !room.drawOfferBy) return;
+      // Only the other player may accept
+      if (room.drawOfferBy === socket.id) return;
+      try {
+        room.drawOfferBy = null;
+        // Declare draw
+        processEndOfGame(
+          null,
+          null,
+          room,
+          "Empate por acordo entre jogadores."
+        );
+        // ensure room is cleaned up in case processEndOfGame didn't delete it
+        if (gameRooms[roomCode] && gameRooms[roomCode].isGameConcluded) {
+          try {
+            delete gameRooms[roomCode];
+            if (io) io.emit("updateLobby", getLobbyInfo());
+          } catch (e) {
+            console.error("Error removing room after draw accepted:", e);
+          }
+        }
+      } catch (e) {
+        console.error("Error handling acceptDraw:", e);
+      }
+    });
     socket.on("requestRevanche", async ({ roomCode }) => {
       const room = gameRooms[roomCode];
       if (!room || !room.isGameConcluded) return;
