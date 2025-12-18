@@ -19,6 +19,13 @@ window.GameCore = (function () {
     drawCooldownInterval: null,
     lastPacketTime: Date.now(),
     watchdogInterval: null,
+    // Timer cliente (sincronização com servidor)
+    clientTimerInterval: null,
+    serverTimerActive: false,
+    displayedWhiteTime: null,
+    displayedBlackTime: null,
+    displayedTimeLeft: null,
+    lastServerCurrentPlayer: null,
 
     // Capturas e Turno
     currentTurnCapturedPieces: [],
@@ -35,6 +42,58 @@ window.GameCore = (function () {
     drawMovesCounter: 0,
     lastMoveWasProgress: false,
   };
+
+  // --- TIMER LOCAL (BÁSICO) ---
+  function startTimer() {
+    if (state.clientTimerInterval) return;
+    state.clientTimerInterval = setInterval(() => {
+      if (!state.serverTimerActive) return stopTimer();
+      // Modo match (white/black)
+      if (
+        state.displayedWhiteTime !== null &&
+        state.displayedBlackTime !== null
+      ) {
+        if (state.lastServerCurrentPlayer === "b") {
+          state.displayedWhiteTime = Math.max(0, state.displayedWhiteTime - 1);
+        } else {
+          state.displayedBlackTime = Math.max(0, state.displayedBlackTime - 1);
+        }
+        UI.updateTimer({
+          whiteTime: state.displayedWhiteTime,
+          blackTime: state.displayedBlackTime,
+        });
+      } else if (state.displayedTimeLeft !== null) {
+        state.displayedTimeLeft = Math.max(0, state.displayedTimeLeft - 1);
+        UI.updateTimer({ timeLeft: state.displayedTimeLeft });
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (state.clientTimerInterval) {
+      clearInterval(state.clientTimerInterval);
+      state.clientTimerInterval = null;
+    }
+  }
+
+  function handleTimerState(data) {
+    // data: { timerActive, whiteTime, blackTime, timeLeft, currentPlayer }
+    if (!data) return;
+    if (data.timerActive !== undefined)
+      state.serverTimerActive = !!data.timerActive;
+    if (data.whiteTime !== undefined) state.displayedWhiteTime = data.whiteTime;
+    if (data.blackTime !== undefined) state.displayedBlackTime = data.blackTime;
+    if (data.timeLeft !== undefined) state.displayedTimeLeft = data.timeLeft;
+    if (data.currentPlayer !== undefined)
+      state.lastServerCurrentPlayer = data.currentPlayer;
+
+    // Atualiza imediatamente a UI
+    UI.updateTimer(data);
+
+    // Controla o timer local
+    if (state.serverTimerActive) startTimer();
+    else stopTimer();
+  }
 
   // --- INICIALIZAÇÃO ---
   function init(socketInstance, uiInstance) {
@@ -110,6 +169,96 @@ window.GameCore = (function () {
       document.getElementById("game-over-overlay").classList.remove("hidden");
       state.UI.elements.spectatorLeaveBtn.classList.add("hidden");
     }
+  }
+
+  // --- ESPECTADOR ---
+  function initializeSpectatorMode(roomCode, gameState) {
+    state.currentRoom = roomCode;
+    state.myColor = null;
+    window.isSpectator = true;
+    state.isReplaying = false;
+    state.isGameOver = false;
+
+    state.boardState = gameState.boardState;
+    state.currentBoardSize = gameState.boardSize || 8;
+    state.currentTurnCapturedPieces = gameState.turnCapturedPieces || [];
+
+    // UI: Mostra o jogo e esconde loading
+    const loadingEl =
+      document.getElementById("loading-overlay") ||
+      document.getElementById("loading-screen");
+    if (loadingEl) loadingEl.classList.add("hidden");
+
+    // Use API de UI consistente para mostrar a tela de jogo
+    if (state.UI && state.UI.showGameScreen) state.UI.showGameScreen(true);
+
+    // Garante orientação padrão (brancas embaixo) para espectadores
+    if (state.UI && state.UI.elements && state.UI.elements.board)
+      state.UI.elements.board.classList.remove("board-flipped");
+
+    state.UI.elements.gameStatus.innerHTML =
+      "<span style='color:#3498db'>MODO ESPECTADOR</span>";
+    state.UI.elements.spectatorLeaveBtn.classList.remove("hidden");
+    state.UI.elements.spectatorLeaveBtn.textContent = "Sair";
+
+    state.UI.updateTurnIndicator(false);
+
+    // Cria o tabuleiro antes de desenhar as peças (evita falha quando o DOM não existe)
+    if (state.UI && state.UI.createBoard) {
+      // Garantia extra: se não houver boardState no payload, inicializa um vazio
+      if (!Array.isArray(state.boardState) || state.boardState.length === 0) {
+        const size = state.currentBoardSize || 8;
+        const empty = Array.from({ length: size }, () =>
+          Array.from({ length: size }, () => 0)
+        );
+        state.boardState = empty;
+      }
+
+      // Força visibilidade do container de jogo
+      try {
+        const gc = document.getElementById("game-container");
+        if (gc && gc.classList.contains("hidden"))
+          gc.classList.remove("hidden");
+      } catch (e) {}
+
+      state.UI.createBoard(state.currentBoardSize, handleBoardClick);
+      state.UI.renderPieces(state.boardState, state.currentBoardSize);
+    }
+
+    // Garantir que botões de jogador não apareçam para espectadores
+    try {
+      if (state.UI && state.UI.elements) {
+        if (state.UI.elements.resignBtn)
+          state.UI.elements.resignBtn.classList.add("hidden");
+        if (state.UI.elements.drawBtn)
+          state.UI.elements.drawBtn.classList.add("hidden");
+      }
+      // Também marca globalmente
+      window.isSpectator = true;
+    } catch (e) {
+      // silencioso
+    }
+    // Garantir que botões de jogador não apareçam para espectadores (forçado)
+    try {
+      if (state.UI && state.UI.elements) {
+        if (state.UI.elements.resignBtn) {
+          state.UI.elements.resignBtn.classList.add("hidden");
+          state.UI.elements.resignBtn.style.display = "none";
+        }
+        if (state.UI.elements.drawBtn) {
+          state.UI.elements.drawBtn.classList.add("hidden");
+          state.UI.elements.drawBtn.style.display = "none";
+        }
+        if (state.UI.elements.spectatorIndicator)
+          state.UI.elements.spectatorIndicator.classList.remove("hidden");
+      }
+      // Também marca globalmente
+      window.isSpectator = true;
+    } catch (e) {
+      // silencioso
+    }
+
+    startWatchdog();
   }
 
   // --- MOVIMENTO OTIMISTA (CLIENT-SIDE) ---
@@ -594,6 +743,20 @@ window.GameCore = (function () {
         } catch (e) {}
       }
     }
+
+    // Atualiza estado do timer conforme enviado pelo servidor (se disponível)
+    const timerData = {};
+    if (gameState.timerActive !== undefined)
+      timerData.timerActive = gameState.timerActive;
+    if (gameState.whiteTime !== undefined)
+      timerData.whiteTime = gameState.whiteTime;
+    if (gameState.blackTime !== undefined)
+      timerData.blackTime = gameState.blackTime;
+    if (gameState.timeLeft !== undefined)
+      timerData.timeLeft = gameState.timeLeft;
+    if (gameState.currentPlayer !== undefined)
+      timerData.currentPlayer = gameState.currentPlayer;
+    if (Object.keys(timerData).length > 0) handleTimerState(timerData);
   }
 
   return {
@@ -602,10 +765,15 @@ window.GameCore = (function () {
     startWatchdog,
     stopWatchdog,
     startReplay,
+    initializeSpectatorMode,
     performOptimisticMove,
     handleBoardClick,
     returnToLobbyLogic,
     processUpdateQueue,
     processGameUpdate,
+    // Timer API
+    handleTimerState,
+    startTimer,
+    stopTimer,
   };
 })();

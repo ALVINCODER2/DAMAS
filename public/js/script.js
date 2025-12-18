@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.currentUser = null;
   window.isSpectator = false;
 
+  // Toast removido em limpeza de produção
+
   // --- RESTAURAÇÃO DE SESSÃO (Apenas na página de jogo) ---
   if (isGamePage) {
     const savedEmail = localStorage.getItem("checkersUserEmail");
@@ -147,6 +149,16 @@ document.addEventListener("DOMContentLoaded", () => {
         UI.elements.gameContainer.classList.remove("hidden");
       }
     }
+    // Fallback: reemitir pedido de espectador caso haja um pedido pendente salvo
+    try {
+      const spectateRoom = localStorage.getItem("spectateRoom");
+      const spectatePending = localStorage.getItem("spectatePending");
+      if (spectateRoom && spectatePending === "1") {
+        socket.emit("joinAsSpectator", { roomCode: spectateRoom });
+        // limpa flag para não repetir
+        localStorage.removeItem("spectatePending");
+      }
+    } catch (e) {}
   });
 
   socket.on("gameStart", (gameState) => {
@@ -263,32 +275,84 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 4000);
   });
 
-  socket.on("spectatorJoined", (data) => {
+  socket.on("spectatorJoined", (payload) => {
+    // payload: { gameState, whiteTime?, blackTime?, timeLeft?, timeControl?, isSpectator: true }
+    // spectator payload recebido
+
     if (!isGamePage) {
-      localStorage.setItem("checkersCurrentRoom", data.gameState.roomCode);
+      if (payload && payload.gameState && payload.gameState.roomCode)
+        localStorage.setItem("checkersCurrentRoom", payload.gameState.roomCode);
       window.location.href = "/jogo.html";
       return;
     }
 
-    window.isSpectator = true;
-    GameCore.state.currentRoom = data.gameState.roomCode;
-    GameCore.state.currentBoardSize = data.gameState.boardSize;
-    UI.showGameScreen(true);
+    if (!payload || !payload.gameState) {
+      console.warn("spectatorJoined missing gameState");
+      return;
+    }
 
-    GameCore.state.boardState = data.gameState.boardState;
-    UI.createBoard(GameCore.state.currentBoardSize, GameCore.handleBoardClick);
-    UI.renderPieces(GameCore.state.boardState, GameCore.state.currentBoardSize);
+    // Garantir que overlays que poderiam bloquear a view estejam ocultos
+    [
+      "game-over-overlay",
+      "next-game-overlay",
+      "connection-lost-overlay",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && !el.classList.contains("hidden")) el.classList.add("hidden");
+    });
 
-    GameCore.processGameUpdate(data.gameState, true);
-    UI.highlightMandatoryPieces(data.gameState.mandatoryPieces);
-    UI.updatePlayerNames(data.gameState.users);
-    UI.updateTimer(data);
+    // Inicializa UI/board como espectador
+    GameCore.initializeSpectatorMode(
+      payload.gameState.roomCode,
+      payload.gameState
+    );
+    UI.updatePlayerNames(payload.gameState.users);
+    UI.highlightMandatoryPieces(payload.gameState.mandatoryPieces || []);
+
+    // Passa estado de tempo (se houver)
+    GameCore.handleTimerState({
+      timerActive: !!(payload.gameState && payload.gameState.timerActive),
+      whiteTime: payload.whiteTime,
+      blackTime: payload.blackTime,
+      timeLeft: payload.timeLeft,
+      currentPlayer: payload.gameState && payload.gameState.currentPlayer,
+    });
+
+    // notificação de espectador removida
+
+    // Força exibição do tabuleiro e ocultação de elementos de espera que ainda possam aparecer
+    try {
+      const boardWrapper = document.getElementById("board-wrapper");
+      const boardEl = document.getElementById("board");
+      const statusEl = document.getElementById("game-status");
+      const playersHud = document.getElementById("players-hud");
+      if (boardWrapper) boardWrapper.style.display = "block";
+      if (boardEl) boardEl.style.display = "grid";
+      if (statusEl) statusEl.style.display = "none";
+      if (playersHud) playersHud.style.display = "flex";
+
+      // Esconde botões de jogador por segurança
+      const resign = document.getElementById("resign-btn");
+      const draw = document.getElementById("draw-btn");
+      const specLeave = document.getElementById("spectator-leave-btn");
+      if (resign) resign.style.display = "none";
+      if (draw) draw.style.display = "none";
+      if (specLeave) specLeave.classList.remove("hidden");
+    } catch (e) {
+      console.warn("Could not force UI adjustments for spectator", e);
+    }
   });
 
   socket.on("timerUpdate", (data) => {
     GameCore.state.lastPacketTime = Date.now();
     GameCore.startWatchdog();
-    UI.updateTimer(data);
+    GameCore.handleTimerState({
+      timerActive: data.gameState && data.gameState.timerActive,
+      whiteTime: data.whiteTime,
+      blackTime: data.blackTime,
+      timeLeft: data.timeLeft,
+      currentPlayer: data.gameState && data.gameState.currentPlayer,
+    });
   });
 
   socket.on("timerPaused", () => {
@@ -320,7 +384,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     GameCore.processGameUpdate(data.gameState, true);
     UI.updatePlayerNames(data.gameState.users);
-    UI.updateTimer(data);
+    GameCore.handleTimerState(data);
 
     GameCore.state.myColor =
       socket.id === data.gameState.players.white ? "b" : "p";

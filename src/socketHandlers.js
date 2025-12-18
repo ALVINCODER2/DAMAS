@@ -32,7 +32,7 @@ function getLobbyInfo() {
     .filter(
       (room) =>
         room.players.length === 1 && !room.isGameConcluded && !room.isPrivate
-    ) // Filtra salas privadas
+    )
     .map((room) => {
       const p1 = room.players[0].user;
       return {
@@ -50,7 +50,7 @@ function getLobbyInfo() {
     .filter(
       (room) =>
         room.players.length === 2 && !room.isGameConcluded && !room.isPrivate
-    ) // Filtra privadas
+    )
     .map((room) => {
       const p1 = room.players[0].user;
       const p2 = room.players[1].user;
@@ -188,6 +188,8 @@ async function startGameLogic(room) {
     boardState: boardState,
     boardSize: boardSize,
     currentPlayer: "b",
+    // O timer só será ativado no primeiro movimento válido
+    timerActive: false,
     isFirstMove: true,
     movesSinceCapture: 0,
     damaMovesWithoutCaptureOrPawnMove: 0,
@@ -224,6 +226,9 @@ async function startGameLogic(room) {
     mandatoryPieces,
   };
 
+  // Garantir que timerActive esteja explícito no payload
+  gameState.timerActive = !!room.game.timerActive;
+
   io.to(room.roomCode).emit("gameStart", gameState);
   io.to(whitePlayer.socketId).emit("gameStart", gameState);
   io.to(blackPlayer.socketId).emit("gameStart", gameState);
@@ -246,6 +251,9 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
   if (game.isFirstMove) {
     game.isFirstMove = false;
+    // Marca que o timer está oficialmente ativo (será enviado no estado do jogo)
+    game.timerActive = true;
+    // Inicia o timer no servidor
     startTimer(roomCode);
   }
 
@@ -533,6 +541,10 @@ function initializeSocket(ioInstance) {
           room.game
         ).map((seq) => seq[0]),
       };
+
+      // Garantir campos explícitos para espectadores
+      gameState.boardState = room.game.boardState;
+      gameState.boardSize = room.game.boardSize;
 
       let timeData = {};
       if (room.timeControl === "match") {
@@ -859,19 +871,30 @@ function initializeSocket(ioInstance) {
         }
 
         if (room.game) {
-          io.to(roomCode).emit("gameResumed", {
+          // Garantir timerActive explícito e logar estado de resumir jogo
+          const gameResumedPayload = {
             gameState: room.game,
             ...timeData,
-          });
+          };
+          gameResumedPayload.gameState.timerActive = !!room.game.timerActive;
+          // Emitting gameResumed (timerActive included)
+          io.to(roomCode).emit("gameResumed", gameResumedPayload);
 
-          // Só reinicia o timer se o jogo não estiver concluído
-          if (!room.isGameConcluded) {
+          // Só reinicia o timer se o jogo não estiver concluído e o timer já estiver ativo
+          if (!room.isGameConcluded && room.game && room.game.timerActive) {
             startTimer(roomCode);
 
             // Força atualização imediata do timer para o usuário que reconectou
             socket.emit("timerUpdate", {
               ...timeData,
               roomCode,
+            });
+          } else {
+            // Mesmo que não reinicie, envia estado atual do tempo (pausado ou não iniciado)
+            socket.emit("timerUpdate", {
+              ...timeData,
+              roomCode,
+              timerActive: room.game ? !!room.game.timerActive : false,
             });
           }
         }

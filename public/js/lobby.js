@@ -210,7 +210,40 @@ window.initLobby = function (socket, UI) {
     }
     if (e.target.classList.contains("watch-game-btn")) {
       const roomCode = e.target.dataset.roomCode;
-      if (roomCode) socket.emit("joinAsSpectator", { roomCode });
+      if (roomCode) {
+        socket.emit("joinAsSpectator", { roomCode });
+        // Fallback: salva pedido de espectador para reconexões/redirecionamento
+        try {
+          localStorage.setItem("spectateRoom", roomCode);
+          localStorage.setItem("spectatePending", "1");
+          if (!window.location.pathname.includes("jogo.html")) {
+            window.location.href = "/jogo.html";
+            return;
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Pré-inicializa UI com tabuleiro vazio para melhor UX
+        try {
+          const size = 8;
+          const empty = Array.from({ length: size }, () =>
+            Array.from({ length: size }, () => 0)
+          );
+          if (window.GameCore && window.GameCore.initializeSpectatorMode) {
+            window.GameCore.initializeSpectatorMode(roomCode, {
+              roomCode,
+              boardState: empty,
+              boardSize: size,
+              users: { whiteName: "Brancas", blackName: "Pretas" },
+              mandatoryPieces: [],
+              timerActive: false,
+            });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
     }
   });
 

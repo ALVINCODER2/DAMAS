@@ -22,6 +22,7 @@ function startTimer(roomCode) {
   const room = gameRooms[roomCode];
   if (!room) return;
   if (room.isGameConcluded) return;
+  // startTimer called for room (timerActive state respected)
   if (room.timerInterval) clearInterval(room.timerInterval);
 
   if (room.timeControl === "match") {
@@ -47,6 +48,7 @@ function startTimer(roomCode) {
         whiteTime: room.whiteTime,
         blackTime: room.blackTime,
         roomCode: roomCode,
+        currentPlayer: room.game && room.game.currentPlayer,
       });
 
       if (timeOver) {
@@ -60,6 +62,7 @@ function startTimer(roomCode) {
     io.to(roomCode).emit("timerUpdate", {
       timeLeft: room.timeLeft,
       roomCode: roomCode,
+      currentPlayer: room.game && room.game.currentPlayer,
     });
 
     room.timerInterval = setInterval(() => {
