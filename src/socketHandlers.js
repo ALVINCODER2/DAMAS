@@ -696,13 +696,14 @@ function initializeSocket(ioInstance) {
           // AND immediately remove the room and force requester(s) back to lobby.
           if (room.revancheRequests && room.revancheRequests.size > 0) {
             try {
-              for (const reqId of Array.from(room.revancheRequests)) {
-                if (reqId) {
-                  io.to(reqId).emit("revancheDeclined", {
+              for (const email of Array.from(room.revancheRequests)) {
+                const p = room.players.find((pl) => pl.user.email === email);
+                if (p && p.socketId) {
+                  io.to(p.socketId).emit("revancheDeclined", {
                     message:
                       "Seu oponente optou por assistir a partida em vez de aceitar a revanche.",
                   });
-                  io.to(reqId).emit("forceReturnToLobby");
+                  io.to(p.socketId).emit("forceReturnToLobby");
                 }
               }
             } catch (innerErr) {
@@ -1229,8 +1230,6 @@ function initializeSocket(ioInstance) {
           delete gameRooms[roomCode];
           io.emit("updateLobby", getLobbyInfo());
         }
-      } else if (room && room.isGameConcluded) {
-        socket.emit("leaveEndGameScreen", { roomCode });
       }
     });
 
@@ -1326,17 +1325,20 @@ function initializeSocket(ioInstance) {
     socket.on("requestRevanche", async ({ roomCode }) => {
       const room = gameRooms[roomCode];
       if (!room || !room.isGameConcluded) return;
-      const isPlayer = room.players.some((p) => p.socketId === socket.id);
-      if (!isPlayer) return;
+
+      const player = room.players.find((p) => p.socketId === socket.id);
+      if (!player) return;
 
       if (!room.revancheRequests) room.revancheRequests = new Set();
-      room.revancheRequests.add(socket.id);
-      if (room.players.length === 2 && room.revancheRequests.size === 2) {
-        const player1SocketId = room.players[0].socketId;
-        const player2SocketId = room.players[1].socketId;
+      // Usa Email em vez de Socket ID para persistência entre reconexões
+      room.revancheRequests.add(player.user.email);
+
+      if (room.players.length === 2) {
+        const p1Email = room.players[0].user.email;
+        const p2Email = room.players[1].user.email;
         if (
-          room.revancheRequests.has(player1SocketId) &&
-          room.revancheRequests.has(player2SocketId)
+          room.revancheRequests.has(p1Email) &&
+          room.revancheRequests.has(p2Email)
         ) {
           try {
             const player1 = room.players[0];
@@ -1403,7 +1405,9 @@ function initializeSocket(ioInstance) {
     });
     socket.on("leaveEndGameScreen", ({ roomCode }) => {
       const room = gameRooms[roomCode];
-      if (!room) return;
+      // Proteção CRÍTICA: Só processa saída se o jogo REALMENTE estiver concluído.
+      // Isso evita que o timeout de 5s da revanche mate um jogo que acabou de começar.
+      if (!room || !room.isGameConcluded) return;
 
       const playerWhoLeft = room.players.find((p) => p.socketId === socket.id);
       if (playerWhoLeft) {

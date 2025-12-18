@@ -493,7 +493,7 @@ window.GameCore = (function () {
       .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
       .forEach((btn) => (btn.disabled = true));
 
-    let seconds = 5;
+    let seconds = 5; // Mantido 5s conforme solicitado
     const updateStatus = () => {
       document.querySelectorAll(".revanche-status").forEach((el) => {
         el.textContent = `Aguardando... (${seconds}s)`;
@@ -507,6 +507,10 @@ window.GameCore = (function () {
       if (seconds <= 0) {
         clearInterval(state.revancheInterval);
         state.revancheInterval = null;
+        // Garante que o servidor saiba que saímos, evitando início tardio
+        state.socket.emit("leaveEndGameScreen", {
+          roomCode: state.currentRoom,
+        });
         returnToLobbyLogic();
       } else {
         updateStatus();
