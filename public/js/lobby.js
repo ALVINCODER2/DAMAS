@@ -41,8 +41,8 @@ window.initLobby = function (socket, UI) {
     const updateTimer = () => {
       const now = new Date();
       const target = new Date();
-      const targetHour = 21;
-      const targetMinute = 0;
+      const targetHour = 14;
+      const targetMinute = 45;
 
       target.setHours(targetHour, targetMinute, 0, 0);
 
