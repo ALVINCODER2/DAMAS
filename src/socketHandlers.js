@@ -607,6 +607,16 @@ function initializeSocket(ioInstance) {
       socket.emit("updateLobby", getLobbyInfo());
     });
 
+    // Lightweight ping/pong for client RTT measurement
+    socket.on("pingCheck", (clientTs) => {
+      try {
+        // Echo back the same timestamp so client can compute RTT
+        socket.emit("pongCheck", clientTs);
+      } catch (e) {
+        console.error("Error responding to pingCheck:", e);
+      }
+    });
+
     socket.on("joinAsSpectator", ({ roomCode }) => {
       if (!SPECTATING_ENABLED) {
         socket.emit("joinError", {

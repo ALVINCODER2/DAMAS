@@ -7,6 +7,72 @@ document.addEventListener("DOMContentLoaded", () => {
   const socket = io({ autoConnect: false });
   const isGamePage = window.location.pathname.includes("jogo.html");
 
+  // --- Ping indicator (RTT) ---
+  function createPingIndicator() {
+    if (document.getElementById("ping-indicator")) return;
+    const d = document.createElement("div");
+    d.id = "ping-indicator";
+    d.style.cssText =
+      "position:fixed;right:16px;bottom:16px;padding:10px 14px;background:rgba(10,24,40,0.85);color:#fff;border-radius:10px;font-size:14px;font-weight:600;min-width:96px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:2px solid rgba(255,255,255,0.06);z-index:2147483647;cursor:default;";
+    d.textContent = "Ping: —";
+    document.body.appendChild(d);
+  }
+
+  function updatePingIndicator(rtt) {
+    createPingIndicator();
+    const el = document.getElementById("ping-indicator");
+    if (!el) return;
+    if (typeof rtt !== "number") {
+      el.textContent = "Ping: —";
+      el.style.background = "rgba(80,80,80,0.85)";
+      el.title = "Aguardando medição...";
+      return;
+    }
+    const v = Math.max(0, Math.round(rtt));
+    el.textContent = `Ping: ${v} ms`;
+    if (v < 80) {
+      el.style.background = "linear-gradient(90deg,#2ecc71,#27ae60)";
+      el.title = "Conexão ótima";
+    } else if (v < 250) {
+      el.style.background = "linear-gradient(90deg,#f1c40f,#e67e22)";
+      el.title = "Conexão razoável";
+    } else if (v < 600) {
+      el.style.background = "linear-gradient(90deg,#e67e22,#e74c3c)";
+      el.title = "Latência alta";
+    } else {
+      el.style.background = "linear-gradient(90deg,#c0392b,#8e44ad)";
+      el.title = "Conexão crítica";
+    }
+  }
+
+  let __pingInterval = null;
+  function startPingChecks() {
+    if (__pingInterval) return;
+    createPingIndicator();
+    __pingInterval = setInterval(() => {
+      try {
+        const t = Date.now();
+        socket.emit("pingCheck", t);
+        const timeoutId = setTimeout(() => updatePingIndicator("—"), 2500);
+        socket.once("pongCheck", (ts) => {
+          try {
+            if (ts !== t) {
+              // ignore mismatched timestamps
+              return;
+            }
+            const rtt = Date.now() - ts;
+            clearTimeout(timeoutId);
+            updatePingIndicator(rtt);
+          } catch (e) {}
+        });
+      } catch (e) {}
+    }, 5000);
+  }
+
+  // Start ping checks once connected (or when already connected)
+  if (socket.connected) startPingChecks();
+  else socket.once("connect", startPingChecks);
+
   // Inicializa Módulos Globais (Lobby e Auth)
   if (window.initLobby) window.initLobby(socket, UI);
   if (window.initAuth) window.initAuth(socket, UI);
