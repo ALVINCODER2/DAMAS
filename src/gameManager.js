@@ -49,6 +49,7 @@ function startTimer(roomCode) {
         blackTime: room.blackTime,
         roomCode: roomCode,
         currentPlayer: room.game && room.game.currentPlayer,
+        timerActive: room.game ? !!room.game.timerActive : true,
       });
 
       if (timeOver) {
@@ -63,6 +64,7 @@ function startTimer(roomCode) {
       timeLeft: room.timeLeft,
       roomCode: roomCode,
       currentPlayer: room.game && room.game.currentPlayer,
+      timerActive: room.game ? !!room.game.timerActive : true,
     });
 
     room.timerInterval = setInterval(() => {

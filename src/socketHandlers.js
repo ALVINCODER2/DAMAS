@@ -976,7 +976,25 @@ function initializeSocket(ioInstance) {
       if (!isPlayer) return;
 
       room.drawOfferBy = socket.id;
-      if (room.timerInterval) clearInterval(room.timerInterval);
+      if (room.timerInterval) {
+        clearInterval(room.timerInterval);
+        room.timerInterval = null;
+      }
+
+      // Notify both players that the timer is paused and send current time state
+      const timeData =
+        room.timeControl === "match"
+          ? { whiteTime: room.whiteTime, blackTime: room.blackTime }
+          : { timeLeft: room.timeLeft };
+      io.to(roomCode).emit("timerPaused");
+      io.to(roomCode).emit("timerUpdate", {
+        ...timeData,
+        roomCode,
+        timerActive: false,
+        // include currentPlayer if available
+        currentPlayer: room.game && room.game.currentPlayer,
+      });
+
       const opponent = room.players.find((p) => p.socketId !== socket.id);
       if (opponent) io.to(opponent.socketId).emit("drawRequested");
       socket.emit("drawRequestSent");
