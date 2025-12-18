@@ -41,6 +41,7 @@ window.GameCore = (function () {
     isProcessingQueue: false,
     drawMovesCounter: 0,
     lastMoveWasProgress: false,
+    revancheInterval: null,
   };
 
   // --- TIMER LOCAL (BÁSICO) ---
@@ -480,6 +481,46 @@ window.GameCore = (function () {
     });
   }
 
+  // --- REVANCHE ---
+  function handleRevancheRequest() {
+    if (!state.currentRoom || window.isSpectator) return;
+
+    state.socket.emit("requestRevanche", {
+      roomCode: state.currentRoom,
+    });
+
+    document
+      .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
+      .forEach((btn) => (btn.disabled = true));
+
+    let seconds = 5;
+    const updateStatus = () => {
+      document.querySelectorAll(".revanche-status").forEach((el) => {
+        el.textContent = `Aguardando... (${seconds}s)`;
+      });
+    };
+    updateStatus();
+
+    if (state.revancheInterval) clearInterval(state.revancheInterval);
+    state.revancheInterval = setInterval(() => {
+      seconds--;
+      if (seconds <= 0) {
+        clearInterval(state.revancheInterval);
+        state.revancheInterval = null;
+        returnToLobbyLogic();
+      } else {
+        updateStatus();
+      }
+    }, 1000);
+  }
+
+  function cancelRevancheTimeout() {
+    if (state.revancheInterval) {
+      clearInterval(state.revancheInterval);
+      state.revancheInterval = null;
+    }
+  }
+
   // --- RETORNO AO LOBBY ---
   function returnToLobbyLogic() {
     state.isGameOver = false;
@@ -489,6 +530,7 @@ window.GameCore = (function () {
     stopWatchdog();
     if (state.drawCooldownInterval) clearInterval(state.drawCooldownInterval);
     if (state.nextGameInterval) clearInterval(state.nextGameInterval);
+    if (state.revancheInterval) clearInterval(state.revancheInterval);
 
     state.currentRoom = null;
     state.myColor = null;
@@ -787,5 +829,7 @@ window.GameCore = (function () {
     handleTimerState,
     startTimer,
     stopTimer,
+    handleRevancheRequest,
+    cancelRevancheTimeout,
   };
 })();

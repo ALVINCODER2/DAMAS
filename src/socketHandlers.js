@@ -692,6 +692,56 @@ function initializeSocket(ioInstance) {
       // Defer emissions to next tick to avoid blocking the main flow
       setImmediate(() => {
         try {
+          // If there was a pending revanche request, treat spectating as a decline
+          // AND immediately remove the room and force requester(s) back to lobby.
+          if (room.revancheRequests && room.revancheRequests.size > 0) {
+            try {
+              for (const reqId of Array.from(room.revancheRequests)) {
+                if (reqId) {
+                  io.to(reqId).emit("revancheDeclined", {
+                    message:
+                      "Seu oponente optou por assistir a partida em vez de aceitar a revanche.",
+                  });
+                  io.to(reqId).emit("forceReturnToLobby");
+                }
+              }
+            } catch (innerErr) {
+              console.error("Error notifying revanche requesters:", innerErr);
+            }
+
+            // Clear any timers on the room to avoid leaks
+            try {
+              if (room.timerInterval) clearInterval(room.timerInterval);
+              if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
+              if (room.disconnectTimeout) clearTimeout(room.disconnectTimeout);
+              if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
+            } catch (tErr) {
+              console.warn("Error clearing room timers before deletion:", tErr);
+            }
+
+            // Remove the room immediately and notify lobby
+            try {
+              delete gameRooms[roomCode];
+              if (io) io.emit("updateLobby", getLobbyInfo());
+            } catch (delErr) {
+              console.error(
+                "Error deleting room after spectate/revanche:",
+                delErr
+              );
+            }
+
+            // Notify the spectator that the room was closed
+            try {
+              socket.emit("joinError", {
+                message:
+                  "A partida foi encerrada porque um jogador solicitou revanche e o outro optou por assistir.",
+              });
+            } catch (emitErr) {}
+
+            // Do not proceed with spectator join since room was removed
+            return;
+          }
+
           socket.emit("spectatorJoined", {
             gameState,
             ...timeData,
@@ -1014,6 +1064,11 @@ function initializeSocket(ioInstance) {
       const player = room.players.find((p) => p.user.email === user.email);
       if (player) {
         player.socketId = socket.id;
+        // If a creator/player rejoins and there was a scheduled cleanup for private room, cancel it
+        if (room.cleanupTimeout) {
+          clearTimeout(room.cleanupTimeout);
+          room.cleanupTimeout = null;
+        }
         if (room.game && room.game.users) {
           if (room.game.users.white === user.email) {
             room.game.players.white = socket.id;
@@ -1152,8 +1207,28 @@ function initializeSocket(ioInstance) {
           }, WAIT_TIME * 1000);
         }
       } else if (room && room.players.length === 1 && !room.isGameConcluded) {
-        delete gameRooms[roomCode];
-        io.emit("updateLobby", getLobbyInfo());
+        // For private rooms, do not delete immediately — schedule a delayed cleanup
+        if (room.isPrivate) {
+          try {
+            if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
+            // keep private room available for 30 minutes for sharing the code
+            room.cleanupTimeout = setTimeout(() => {
+              try {
+                delete gameRooms[roomCode];
+                if (io) io.emit("updateLobby", getLobbyInfo());
+              } catch (e) {
+                console.error("Error cleaning up private room:", e);
+              }
+            }, 30 * 60 * 1000);
+            // notify lobby so UI shows private room still available (optional)
+            io.emit("updateLobby", getLobbyInfo());
+          } catch (e) {
+            console.error("Error scheduling cleanup for private room:", e);
+          }
+        } else {
+          delete gameRooms[roomCode];
+          io.emit("updateLobby", getLobbyInfo());
+        }
       } else if (room && room.isGameConcluded) {
         socket.emit("leaveEndGameScreen", { roomCode });
       }

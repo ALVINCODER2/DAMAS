@@ -166,19 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.body.addEventListener("click", (e) => {
     // Revanche
     if (e.target.classList.contains("revanche-btn")) {
-      if (GameCore.state.currentRoom && !window.isSpectator) {
-        socket.emit("requestRevanche", {
-          roomCode: GameCore.state.currentRoom,
-        });
-        document
-          .querySelectorAll(".revanche-status")
-          .forEach((el) => (el.textContent = "Aguardando oponente..."));
-
-        // CORREÇÃO: Desabilita também o botão de replay para evitar conflito
-        document
-          .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
-          .forEach((btn) => (btn.disabled = true));
-      }
+      GameCore.handleRevancheRequest();
     }
     // Sair para Lobby
     if (e.target.classList.contains("exit-lobby-btn")) {
@@ -263,6 +251,7 @@ document.addEventListener("DOMContentLoaded", () => {
       GameCore.state.isReplaying = false;
       GameCore.state.isGameOver = false;
 
+      GameCore.cancelRevancheTimeout();
       GameCore.stopWatchdog();
       GameCore.state.updateQueue = [];
       GameCore.state.isProcessingQueue = false;
@@ -673,6 +662,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("draw-request-overlay").classList.add("hidden")
   );
   socket.on("revancheDeclined", (d) => {
+    GameCore.cancelRevancheTimeout();
     document.querySelectorAll(".revanche-status").forEach((el) => {
       el.textContent = d.message;
       el.style.color = "#e74c3c";
@@ -685,6 +675,54 @@ document.addEventListener("DOMContentLoaded", () => {
       )
         GameCore.returnToLobbyLogic();
     }, 3000);
+  });
+
+  // Aggressive handler: ensure user is ejected to lobby immediately
+  socket.on("forceReturnToLobby", () => {
+    try {
+      // Stop GameCore timers/watchdogs if available
+      try {
+        if (window.GameCore && window.GameCore.stopWatchdog)
+          window.GameCore.stopWatchdog();
+        if (window.GameCore && window.GameCore.state) {
+          const s = window.GameCore.state;
+          if (s.clientTimerInterval) clearInterval(s.clientTimerInterval);
+          if (s.nextGameInterval) clearInterval(s.nextGameInterval);
+          if (s.drawCooldownInterval) clearInterval(s.drawCooldownInterval);
+          s.isReplaying = false;
+          s.isGameOver = true;
+          s.currentRoom = null;
+        }
+      } catch (e) {}
+
+      // Clear relevant overlays and UI elements
+      try {
+        [
+          "game-over-overlay",
+          "next-game-overlay",
+          "connection-lost-overlay",
+          "draw-request-overlay",
+        ].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && !el.classList.contains("hidden"))
+            el.classList.add("hidden");
+        });
+        // reset endgame UI if available
+        if (window.UI && window.UI.resetEndGameUI) window.UI.resetEndGameUI();
+      } catch (e) {}
+
+      // Remove any saved room and force navigate to lobby
+      try {
+        localStorage.removeItem("checkersCurrentRoom");
+      } catch (e) {}
+
+      // final redirect
+      window.location.href = "/";
+    } catch (e) {
+      try {
+        window.location.href = "/";
+      } catch (ee) {}
+    }
   });
   socket.on("gameNotFound", () => {
     alert("Jogo não encontrado.");
@@ -788,6 +826,14 @@ document.addEventListener("DOMContentLoaded", () => {
     socket.emit("joinAsSpectator", { roomCode: data.roomCode });
     UI.elements.gameStatus.innerHTML =
       "<span style='color:#f1c40f'>Assistindo provável oponente...</span>";
+  });
+
+  socket.on("forceReturnToLobby", () => {
+    try {
+      GameCore.returnToLobbyLogic();
+    } catch (e) {
+      window.location.href = "/";
+    }
   });
 
   // Helper local para mostrar bracket (se necessário)
