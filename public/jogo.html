@@ -27,15 +27,14 @@
 
     <style>
         /* --- CONTAINER PRINCIPAL OTIMIZADO --- */
+        /* --- CONTAINER PRINCIPAL OTIMIZADO --- */
         #game-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             width: 100%;
             max-width: 95vw;
-            /* Usa 95% da largura da tela */
             min-width: 300px;
-            /* Largura mínima para não quebrar */
             margin: 0 auto;
             padding: 10px;
             box-sizing: border-box;
@@ -49,7 +48,6 @@
         @media (min-width: 768px) {
             #game-container {
                 max-width: 700px;
-                /* Largura máxima confortável para tablets/desktops */
                 padding: 20px;
                 margin-top: 10px;
             }
@@ -60,7 +58,6 @@
             #game-container {
                 padding: 8px;
                 max-width: 98vw;
-                /* Usa quase toda a tela */
             }
         }
 
@@ -72,15 +69,41 @@
             width: 100%;
             justify-content: center;
             flex-wrap: wrap;
-            /* Permite quebra em telas muito pequenas */
         }
 
         #players-hud {
             width: 100%;
             max-width: 100%;
-            /* Ocupa toda largura disponível */
             margin-bottom: 12px;
             box-sizing: border-box;
+            display: flex;
+            /* Adicionado para alinhar os elementos */
+            justify-content: space-between;
+            /* Distribui os elementos */
+            align-items: center;
+            /* Centraliza verticalmente */
+            gap: 10px;
+            /* Espaço entre elementos */
+            padding: 0 10px;
+        }
+
+        /* Remove a antiga classe .vs-timer separada e integra no HUD */
+        .vs-timer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            /* Largura fixa para o timer */
+            height: 50px;
+            background: linear-gradient(135deg, #1a237e, #283593);
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+            /* Impede que o timer encolha demais */
         }
 
         #board-wrapper {
@@ -94,12 +117,11 @@
 
         #board {
             width: 100% !important;
-            max-width: min(700px, 80vh) !important;
-            /* Altura aumentada para melhor visualização */
+            max-width: min(700px, 85vh) !important;
+            /* Aumentei de 80vh para 85vh */
             height: auto !important;
             aspect-ratio: 1 / 1;
             margin: 0 auto !important;
-            /* Mantém quadrado perfeito */
         }
 
         /* Ajuste do tabuleiro para telas menores */
@@ -137,16 +159,12 @@
             width: 100%;
             justify-content: center;
             flex-wrap: wrap;
-            /* Botões podem quebrar linha em telas muito pequenas */
         }
 
         .btn-game {
             min-width: 100px;
-            /* Largura mínima dos botões */
             flex: 1 1 auto;
-            /* Cresce e encolhe conforme disponível */
             max-width: 140px;
-            /* Limita expansão excessiva */
         }
 
         /* Ajuste específico para telas muito estreitas */
@@ -165,22 +183,21 @@
         /* Ajuste do HUD para telas estreitas */
         @media (max-width: 480px) {
             #players-hud {
-                padding: 8px 12px;
-                /* Garante que os itens fiquem alinhados e não quebrem a linha */
+                padding: 8px 5px;
+                /* Reduzi o padding para dar mais espaço */
                 display: flex;
                 align-items: center;
+                justify-content: space-between;
             }
 
             .player-card {
                 font-size: 0.85rem;
                 gap: 6px;
-                /* Permite que o card do jogador encolha e esconde o conteúdo que transborda */
                 flex: 1;
                 min-width: 0;
                 overflow: hidden;
             }
 
-            /* Garante que o nome do jogador não quebre a linha, para o overflow do pai funcionar */
             .player-details {
                 white-space: nowrap;
             }
@@ -191,25 +208,35 @@
             }
 
             .vs-timer {
-                width: 36px;
-                height: 36px;
+                width: 40px;
+                /* Um pouco maior para melhor visibilidade */
+                height: 40px;
                 font-size: 0.9rem;
             }
+        }
 
+        /* Ajuste para telas muito pequenas */
+        @media (max-width: 320px) {
+            #players-hud {
+                gap: 5px;
+            }
+
+            .vs-timer {
+                width: 36px;
+                height: 36px;
+                font-size: 0.8rem;
+            }
         }
 
         /* --- TOUCH-FRIENDLY PARA CELULARES --- */
         @media (hover: none) and (pointer: coarse) {
             .btn-game {
                 padding: 12px 8px;
-                /* Mais área de toque */
                 min-height: 44px;
-                /* Tamanho mínimo recomendado para toque */
             }
 
             .piece {
                 cursor: default;
-                /* Remove cursor em dispositivos touch */
             }
         }
 
