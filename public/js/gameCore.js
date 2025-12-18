@@ -32,6 +32,8 @@ window.GameCore = (function () {
     // Fila
     updateQueue: [],
     isProcessingQueue: false,
+    drawMovesCounter: 0,
+    lastMoveWasProgress: false,
   };
 
   // --- INICIALIZAÇÃO ---
@@ -156,6 +158,9 @@ window.GameCore = (function () {
     } else {
       state.UI.playAudio("move");
     }
+
+    // RASTREAMENTO DE PROGRESSO (Regra das 20 Jogadas)
+    state.lastMoveWasProgress = !isKing || capturedPos !== null;
 
     let promoted = false;
     if (!isKing) {
@@ -345,6 +350,7 @@ window.GameCore = (function () {
     state.lastOptimisticMove = null;
     state.pendingBoardSnapshot = null;
     state.boardState = [];
+    state.drawMovesCounter = 0;
 
     localStorage.removeItem("checkersCurrentRoom");
 
@@ -502,6 +508,42 @@ window.GameCore = (function () {
       }
     }
 
+    // --- REGRA DAS 20 JOGADAS ---
+    if (gameState.lastMove) {
+      let isProgress = false;
+      if (skipAnimation) {
+        isProgress = state.lastMoveWasProgress;
+      } else {
+        // Movimento do oponente ou sync: verifica estado anterior
+        const from = gameState.lastMove.from;
+        const piece = state.boardState[from.row][from.col];
+        const isKing = piece === "B" || piece === "P";
+        const dist = Math.abs(gameState.lastMove.to.row - from.row);
+        const isCapture =
+          (gameState.turnCapturedPieces &&
+            gameState.turnCapturedPieces.length > 0) ||
+          dist > 1;
+        isProgress = !isKing || isCapture;
+      }
+
+      if (isProgress) state.drawMovesCounter = 0;
+      else state.drawMovesCounter++;
+
+      if (state.drawMovesCounter >= 20 && !state.isGameOver) {
+        if (
+          state.drawMovesCounter === 20 &&
+          state.myColor &&
+          !window.isSpectator
+        ) {
+          // Solicita empate automaticamente ao atingir o limite
+          state.socket.emit("requestDraw", {
+            roomCode: state.currentRoom,
+            reason: "Regra das 20 Jogadas",
+          });
+        }
+      }
+    }
+
     // 4. ATUALIZAÇÃO DO ESTADO E RENDERIZAÇÃO
     const localStateJson = JSON.stringify(state.boardState);
     const serverStateJson = JSON.stringify(gameState.boardState);
@@ -533,9 +575,12 @@ window.GameCore = (function () {
       });
     }
 
-    if (state.UI.elements.turnDisplay)
-      state.UI.elements.turnDisplay.textContent =
-        gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
+    if (state.UI.elements.turnDisplay) {
+      let turnText = gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
+      if (state.drawMovesCounter >= 10)
+        turnText += ` (${state.drawMovesCounter}/20)`;
+      state.UI.elements.turnDisplay.textContent = turnText;
+    }
 
     state.UI.highlightLastMove(gameState.lastMove);
 

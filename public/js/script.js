@@ -178,6 +178,7 @@ document.addEventListener("DOMContentLoaded", () => {
       GameCore.state.isProcessingQueue = false;
       GameCore.state.currentTurnCapturedPieces = [];
       GameCore.state.lastOptimisticMove = null;
+      GameCore.state.drawMovesCounter = 0;
 
       document.getElementById("game-over-overlay").classList.add("hidden");
       document.getElementById("next-game-overlay").classList.add("hidden");

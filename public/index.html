@@ -15,15 +15,13 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Estilos -->
-  <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/game.css" />
-  <link rel="stylesheet" href="css/tournament.css" />
-  <link rel="stylesheet" href="css/board-visuals.css" />
+  <link rel="stylesheet" href="css/style.css?v=10" />
+  <link rel="stylesheet" href="css/game.css?v=10" />
+  <link rel="stylesheet" href="css/tournament.css?v=10" />
 
   <!-- SDKs -->
   <script src="https://sdk.mercadopago.com/js/v2"></script>
   <script src="/socket.io/socket.io.js"></script>
-
 </head>
 
 <body>
@@ -410,6 +408,7 @@
     </div>
   </div>
 
+  <!-- Modais de Jogo -->
   <div id="confirm-bet-overlay" class="hidden modal-overlay">
     <div class="modal-card">
       <h3>Confirmar Aposta</h3>
@@ -484,17 +483,18 @@
     </div>
   </div>
 
+  <!-- ÁUDIOS -->
   <audio id="join-sound" src="/sounds/join.mp3"></audio>
 
   <!-- Scripts -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/gameLogic.js"></script>
-  <script src="js/ui-helpers.js"></script>
+  <script src="js/gameLogic.js?v=10"></script>
+  <script src="js/ui-helpers.js?v=10"></script>
   <!-- Incluindo os arquivos separados -->
-  <script src="js/lobby.js"></script>
-  <script src="js/auth.js"></script>
+  <script src="js/lobby.js?v=10"></script>
+  <script src="js/auth.js?v=10"></script>
   <!-- Novo Core do Jogo -->
-  <script src="js/gameCore.js"></script>
+  <script src="js/gameCore.js?v=10"></script>
 
   <script>
     // Função para abrir/fechar seções (como o card de afiliados)
@@ -505,7 +505,7 @@
       else body.style.display = "block";
     }
   </script>
-  <script src="js/script.js"></script>
+  <script src="js/script.js?v=10"></script>
 </body>
 
 </html>

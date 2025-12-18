@@ -508,10 +508,22 @@
     return null;
   }
 
+  function isProgressMove(board, from, to, capturedPieces) {
+    // 1. Check Capture
+    if (capturedPieces && capturedPieces.length > 0) return true;
+    if (Math.abs(to.row - from.row) > 1) return true;
+    // 2. Check Simple Piece Move
+    const piece = board[from.row][from.col];
+    if (!piece) return false;
+    const isKing = piece === "B" || piece === "P";
+    return !isKing;
+  }
+
   exports.findBestCaptureMoves = findBestCaptureMoves;
   exports.isMoveValid = isMoveValid;
   exports.checkWinCondition = checkWinCondition;
   exports.getAllPossibleCapturesForPiece = getAllPossibleCapturesForPiece;
   exports.hasValidMoves = hasValidMoves;
   exports.getUniqueCaptureMove = getUniqueCaptureMove;
+  exports.isProgressMove = isProgressMove;
 })(typeof exports === "undefined" ? (this.gameLogic = {}) : exports);

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Damas Arena - Partida</title>
+    <title>Damas Arena - Partida (Atualizada)</title>
 
     <!-- Fontes -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -16,295 +16,287 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Estilos -->
-    <link rel="stylesheet" href="css/style.css" />
-    <link rel="stylesheet" href="css/game.css" />
-    <link rel="stylesheet" href="css/tournament.css" />
-    <link rel="stylesheet" href="css/board-visuals.css" />
+    <link rel="stylesheet" href="css/style.css?v=10" />
+    <link rel="stylesheet" href="css/game.css?v=10" />
+    <link rel="stylesheet" href="css/tournament.css?v=10" />
+    <link rel="stylesheet" href="css/board-visuals.css?v=10" />
+
+    <!-- Estilos inline adicionados para atualização visual (sem mudança no fundo do body) -->
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        #game-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #001f3f;
+            /* Azul marinho para combinar com o fundo (ajustado para navy blue) */
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            /* Sombra suave */
+            color: #ffffff;
+            /* Texto branco para contraste com o fundo escuro */
+        }
+
+        .players-hud .player-card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            /* Sombras nos cartões */
+            padding: 10px;
+            transition: transform 0.2s;
+            /* Animação ao hover */
+        }
+
+        .players-hud .player-card:hover {
+            transform: scale(1.05);
+        }
+
+        .vs-timer {
+            font-size: 2em;
+            color: #e67e22;
+            /* Cor laranja vibrante para timer */
+            animation: pulse 1s infinite;
+            /* Animação de pulso */
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        #board-wrapper {
+            border: 2px solid #34495e;
+            /* Borda no tabuleiro */
+            border-radius: 5px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin: 20px 0;
+        }
+
+        .btn-game {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            /* Espaço entre ícone e texto */
+            font-size: 1em;
+            font-weight: bold;
+            padding: 12px 24px;
+            /* Padding maior para botões mais confortáveis */
+            border: none;
+            border-radius: 8px;
+            /* Bordas mais arredondadas */
+            cursor: pointer;
+            transition: all 0.3s ease;
+            /* Transição suave para hover */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            /* Sombra para profundidade */
+        }
+
+        .btn-game:hover {
+            transform: translateY(-3px);
+            /* Elevação ao hover */
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+            /* Sombra mais forte */
+        }
+
+        .btn-game i {
+            font-size: 1.2em;
+            /* Ícones um pouco maiores */
+        }
+
+        .btn-lose {
+            background: linear-gradient(to bottom, #e74c3c, #c0392b);
+            /* Gradiente vermelho para desistir */
+            color: white;
+        }
+
+        .btn-lose:hover {
+            background: linear-gradient(to bottom, #c0392b, #a93226);
+            /* Hover mais escuro */
+        }
+
+        .btn-draw {
+            background: linear-gradient(to bottom, #f39c12, #e67e22);
+            /* Gradiente amarelo/laranja para empate */
+            color: white;
+        }
+
+        .btn-draw:hover {
+            background: linear-gradient(to bottom, #e67e22, #d35400);
+            /* Hover mais vibrante */
+        }
+
+        .btn-exit {
+            background: linear-gradient(to bottom, #3498db, #2980b9);
+            /* Gradiente azul para sair (se aplicável) */
+            color: white;
+        }
+
+        .btn-exit:hover {
+            background: linear-gradient(to bottom, #2980b9, #2471a3);
+        }
+
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+            /* Transição suave para modais */
+        }
+
+        /* Ajustes adicionais para contraste no container escuro */
+        #game-status,
+        #game-info p {
+            color: #ffffff;
+            /* Texto branco */
+        }
+
+        /* Adicione mais estilos conforme necessário */
+    </style>
 
     <!-- SDKs -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script src="/socket.io/socket.io.js"></script>
 
-    <style>
-        /* --- CONTAINER PRINCIPAL OTIMIZADO --- */
-        #game-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 100%;
-            max-width: 95vw;
-            min-width: 300px;
-            margin: 0 auto;
-            padding: 10px;
-            box-sizing: border-box;
-            background: linear-gradient(to bottom, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
-        /* Desktop */
-        @media (min-width: 600px) {
-            #board {
-                box-sizing: border-box;
-            }
-
-        }
-
-        /* Mobile mantém borda maior */
-        @media (max-width: 767px) {
-            #board {
-                border-width: 10px !important;
-            }
-        }
-
-
-        /* Ajustes para telas maiores */
-        @media (min-width: 768px) {
-            #game-container {
-                max-width: 700px;
-                padding: 20px;
-                margin-top: 10px;
-            }
-        }
-
-        /* Ajustes para telas muito pequenas */
-        @media (max-width: 360px) {
-            #game-container {
-                padding: 8px;
-                max-width: 98vw;
-            }
-        }
-
-        /* --- ELEMENTOS INTERNOS --- */
-        .game-top-bar {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
-            width: 100%;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        #players-hud {
-            width: 100%;
-            max-width: 100%;
-            margin-bottom: 12px;
-            box-sizing: border-box;
-            display: flex;
-            /* Adicionado para alinhar os elementos */
-            justify-content: space-between;
-            /* Distribui os elementos */
-            align-items: center;
-            /* Centraliza verticalmente */
-            gap: 10px;
-            /* Espaço entre elementos */
-            padding: 0 10px;
-        }
-
-        /* Remove a antiga classe .vs-timer separada e integra no HUD */
-        .vs-timer {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 50px;
-            /* Largura fixa para o timer */
-            height: 50px;
-            background: linear-gradient(135deg, #1a237e, #283593);
-            border-radius: 50%;
-            color: white;
-            font-weight: bold;
-            font-size: 1.2rem;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            flex-shrink: 0;
-            /* Impede que o timer encolha demais */
-        }
-
-        #board-wrapper {
-            width: 100%;
-            display: flex;
-            justify-content: center;
-        }
-
-        #board {
-            width: min(95vw, 95vh);
-            height: min(95vw, 95vh);
-            aspect-ratio: 1 / 1;
-            max-width: 100%;
-            max-height: 100%;
-        }
-
-        #game-info {
-            width: 100%;
-            margin-top: 15px;
-            box-sizing: border-box;
-            background: rgba(23, 32, 48, 0.9);
-            border-radius: 10px;
-            padding: 15px;
-        }
-
-        #game-buttons {
-            display: flex;
-            gap: 8px;
-            width: 100%;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .btn-game {
-            min-width: 100px;
-            flex: 1 1 auto;
-            max-width: 140px;
-        }
-
-        /* Ajuste específico para telas muito estreitas */
-        @media (max-width: 400px) {
-            #game-buttons {
-                gap: 6px;
-            }
-
-            .btn-game {
-                min-width: 90px;
-                font-size: 0.7rem;
-                padding: 8px 6px;
-            }
-        }
-
-        /* Ajuste do HUD para telas estreitas */
-        @media (max-width: 480px) {
-            #players-hud {
-                padding: 8px 5px;
-                /* Reduzi o padding para dar mais espaço */
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            }
-
-            .player-card {
-                font-size: 0.85rem;
-                gap: 6px;
-                flex: 1;
-                min-width: 0;
-                overflow: hidden;
-            }
-
-            .player-details {
-                white-space: nowrap;
-            }
-
-            .avatar-small {
-                width: 30px;
-                height: 30px;
-            }
-
-            .vs-timer {
-                width: 40px;
-                /* Um pouco maior para melhor visibilidade */
-                height: 40px;
-                font-size: 0.9rem;
-            }
-        }
-
-        /* Ajuste para telas muito pequenas */
-        @media (max-width: 320px) {
-            #players-hud {
-                gap: 5px;
-            }
-
-            .vs-timer {
-                width: 36px;
-                height: 36px;
-                font-size: 0.8rem;
-            }
-        }
-
-        /* --- TOUCH-FRIENDLY PARA CELULARES --- */
-        @media (hover: none) and (pointer: coarse) {
-            .btn-game {
-                padding: 12px 8px;
-                min-height: 44px;
-            }
-
-            .piece {
-                cursor: default;
-            }
-        }
-
-        /* --- INDICADORES DE PEDRA (Visual) --- */
-        .piece-indicator {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            display: inline-block;
-            vertical-align: middle;
-            margin: 0 6px;
-            box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
-        }
-
-        .piece-indicator.white {
-            background: radial-gradient(circle at 30% 30%, #ffffff, #cfd8dc);
-            border: 1px solid #90a4ae;
-        }
-
-        .piece-indicator.black {
-            background: radial-gradient(circle at 30% 30%, #616161, #212121);
-            border: 1px solid #000000;
-        }
-    </style>
 </head>
 
 <body>
-    <div id="main-container">
-        <!-- =========================================
-         TELA DE JOGO
-         ========================================= -->
-        <div id="game-container">
-            <div class="game-top-bar">
-                <div id="spectator-indicator" class="hidden badge-warning">ESPECTADOR</div>
-                <div id="tournament-indicator" class="hidden badge-purple">TORNEIO</div>
+    <!-- =========================================
+             3. TELA DE JOGO
+             ========================================= -->
+    <div id="game-container" class="hidden">
+        <div class="game-top-bar">
+            <div id="spectator-indicator" class="hidden badge-warning">ESPECTADOR</div>
+            <div id="tournament-indicator" class="hidden badge-purple">TORNEIO</div>
+        </div>
+
+
+
+        <div id="players-hud" class="players-hud">
+            <style>
+                .player-details {
+                    display: flex;
+                    align-items: center;
+                    /* Alinha verticalmente o nome e o indicador */
+                    gap: 8px;
+                    /* Espaço entre o nome e o indicador */
+                }
+
+                .piece-indicator {
+                    width: 24px;
+                    /* Tamanho maior para destaque */
+                    height: 24px;
+                    border-radius: 50%;
+                    /* Forma circular */
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                    /* Sombra para profundidade */
+                }
+
+                .piece-indicator.white {
+                    background-color: #ffffff;
+                    /* Cor branca */
+                    border: 2px solid #000000;
+                    /* Borda preta para alto contraste */
+                }
+
+                .piece-indicator.black {
+                    background-color: #000000;
+                    /* Cor preta */
+                    border: 2px solid #ffffff;
+                    /* Borda branca para alto contraste */
+                }
+
+                .player-details.right {
+                    flex-direction: row-reverse;
+                    /* Inverte ordem para jogador preto */
+                    text-align: right;
+                }
+
+                .player-card {
+                    padding: 15px;
+                    /* Mais padding para espaço */
+                    border-radius: 12px;
+                    /* Bordas mais arredondadas */
+                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+                    /* Sombra mais pronunciada */
+                    transition: transform 0.3s ease;
+                    /* Animação suave ao hover */
+                }
+
+                .player-card:hover {
+                    transform: translateY(-5px);
+                    /* Efeito de elevação ao hover */
+                }
+
+                .player-card.white-player {
+                    background: linear-gradient(to bottom, #f0f0f0, #ffffff);
+                    /* Gradiente sutil para branco */
+                    color: #000000;
+                    /* Texto preto para alto contraste */
+                }
+
+                .player-card.black-player {
+                    background: linear-gradient(to bottom, #333333, #1a1a1a);
+                    /* Gradiente escuro para preto */
+                    color: #ffffff;
+                    /* Texto branco para alto contraste */
+                }
+
+                #white-player-name,
+                #black-player-name {
+                    font-weight: 900;
+                    /* Negrito mais forte para melhor visibilidade */
+                    font-size: 1.3em;
+                    /* Maior para destaque */
+                    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+                    /* Sombra mais forte no texto para elegância e contraste */
+                }
+            </style>
+            <div class="player-card white-player">
+                <img id="white-player-avatar" src="" class="avatar-small hidden">
+                <div class="player-details">
+                    <span id="white-player-name">TESTE</span>
+                    <div class="piece-indicator white"></div>
+                </div>
             </div>
-
-            <div id="players-hud" class="players-hud hidden">
-                <div class="player-card white-player">
-                    <img id="white-player-avatar" src="" class="avatar-small hidden">
-                    <div class="player-details" style="display: flex; align-items: center;">
-                        <span id="white-player-name">Jog 1</span>
-                        <div class="piece-indicator white" title="Brancas"></div>
-                    </div>
-                </div>
-                <div class="vs-timer">
-                    <span id="timer">40</span>
-                </div>
-                <div class="player-card black-player">
-                    <div class="player-details right"
-                        style="display: flex; align-items: center; justify-content: flex-end;">
-                        <div class="piece-indicator black" title="Pretas"></div>
-                        <span id="black-player-name">Jog 2</span>
-                    </div>
-                    <img id="black-player-avatar" src="" class="avatar-small hidden">
-                </div>
+            <div class="vs-timer">
+                <span id="timer">32s</span>
             </div>
-
-            <p id="game-status">Aguardando...</p>
-
-            <div id="board-wrapper">
-                <div id="board"></div>
-            </div>
-
-            <div id="game-info">
-                <p>Vez de: <span id="turn">Brancas</span></p>
-                <div id="game-buttons">
-                    <button id="resign-btn" class="btn-game btn-lose"><i class="fa-solid fa-flag"></i> Desistir</button>
-                    <button id="draw-btn" class="btn-game btn-draw"><i class="fa-solid fa-handshake"></i>
-                        Empate</button>
-                    <button id="spectator-leave-btn" class="hidden btn-game btn-exit">Sair</button>
+            <div class="player-card black-player">
+                <div class="player-details right">
+                    <span id="black-player-name">ALVIN</span>
+                    <div class="piece-indicator black"></div>
                 </div>
+                <img id="black-player-avatar" src="" class="avatar-small hidden">
+            </div>
+        </div>
+
+        <p id="game-status">Aguardando...</p>
+
+        <div id="board-wrapper">
+            <div id="board"></div>
+        </div>
+
+        <div id="game-info">
+            <p>Vez de: <span id="turn">Brancas</span></p>
+            <div id="game-buttons">
+                <button id="resign-btn" class="btn-game btn-lose"><i class="fa-solid fa-flag"></i> Desistir</button>
+                <button id="draw-btn" class="btn-game btn-draw"><i class="fa-solid fa-handshake"></i> Empate</button>
+                <button id="spectator-leave-btn" class="hidden btn-game btn-exit">Sair</button>
             </div>
         </div>
     </div>
 
-    <!-- Modais de Jogo -->
+    <!-- Modais, áudios e scripts permanecem iguais -->
     <div id="game-over-overlay" class="hidden modal-overlay">
         <div class="modal-card">
             <div id="winner-screen" class="hidden">
@@ -341,7 +333,6 @@
             </div>
         </div>
     </div>
-
     <div id="next-game-overlay" class="hidden modal-overlay">
         <div class="modal-card">
             <h2 id="next-game-title"></h2>
@@ -349,7 +340,6 @@
             <p>Iniciando em <span id="next-game-timer"></span></p>
         </div>
     </div>
-
     <div id="draw-request-overlay" class="hidden modal-overlay">
         <div class="modal-card">
             <h3>Pedido de Empate</h3>
@@ -357,7 +347,6 @@
             <button id="decline-draw-btn" class="btn-close">Recusar</button>
         </div>
     </div>
-
     <div id="connection-lost-overlay" class="hidden modal-overlay">
         <div class="modal-card">
             <h3>Conexão</h3>
@@ -365,16 +354,14 @@
         </div>
     </div>
 
-    <!-- ÁUDIOS -->
     <audio id="move-sound" src="/sounds/move.mp3"></audio>
     <audio id="capture-sound" src="/sounds/capture.mp3"></audio>
 
-    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
-    <script src="js/gameLogic.js"></script>
-    <script src="js/ui-helpers.js"></script>
-    <script src="js/gameCore.js"></script>
-    <script src="js/script.js"></script>
+    <script src="js/gameLogic.js?v=10"></script>
+    <script src="js/ui-helpers.js?v=10"></script>
+    <script src="js/gameCore.js?v=10"></script>
+    <script src="js/script.js?v=10"></script>
 </body>
 
 </html>
