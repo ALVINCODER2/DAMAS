@@ -34,6 +34,8 @@ const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
 const io = socketIo(server, {
+  pingInterval: 25000,
+  pingTimeout: 60000,
   cors: {
     origin: "*",
     methods: ["GET", "POST"],

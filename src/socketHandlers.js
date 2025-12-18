@@ -26,6 +26,8 @@ const {
 
 const gameRooms = {};
 let io; // Variável global para instância do Socket.IO
+// Contador simples para razões de desconexão (diagnóstico)
+const disconnectReasonCounts = {};
 
 function getLobbyInfo() {
   const waitingRooms = Object.values(gameRooms)
@@ -518,6 +520,9 @@ async function startNextTablitaGame(roomCode) {
 function initializeSocket(ioInstance) {
   io = ioInstance;
 
+  // Feature flag: disable spectating temporarily
+  const SPECTATING_ENABLED = false;
+
   // Inicializa o GameManager com io e gameRooms para evitar erros de dependência circular
   initializeManager(io, gameRooms);
 
@@ -528,6 +533,20 @@ function initializeSocket(ioInstance) {
     });
 
     socket.on("joinAsSpectator", ({ roomCode }) => {
+      if (!SPECTATING_ENABLED) {
+        socket.emit("joinError", {
+          message: "Espectadores temporariamente desativados.",
+        });
+        console.log(
+          `[Socket] joinAsSpectator blocked (feature disabled): socket=${socket.id} room=${roomCode}`
+        );
+        return;
+      }
+      console.log(
+        `[Socket] joinAsSpectator request: socket=${socket.id} user=${
+          socket.userData?.email || "unknown"
+        } room=${roomCode}`
+      );
       const room = gameRooms[roomCode];
       if (!room || room.players.length < 2 || room.isGameConcluded) {
         return socket.emit("joinError", {
@@ -535,18 +554,43 @@ function initializeSocket(ioInstance) {
         });
       }
 
-      socket.join(roomCode);
+      // Safety: if the requesting socket is already a player in this room,
+      // reject the spectator request to avoid client-side UI confusion
+      // that could make a player unintentionally disconnect or hide controls.
+      if (room.players.some((p) => p.socketId === socket.id)) {
+        console.log(
+          `[Socket] joinAsSpectator rejected: socket=${socket.id} user=${
+            socket.userData?.email || "unknown"
+          } is a player in room=${roomCode}`
+        );
+        return socket.emit("joinError", {
+          message: "Você já é jogador desta sala.",
+        });
+      }
+
+      try {
+        socket.join(roomCode);
+      } catch (e) {
+        console.error(
+          `[Socket] joinAsSpectator: socket.join failed for ${socket.id} room=${roomCode}`,
+          e
+        );
+        return socket.emit("joinError", {
+          message: "Erro ao entrar como espectador.",
+        });
+      }
+
       // Track spectators per room
       if (!room.spectators) room.spectators = new Set();
-      room.spectators.add(socket.id);
+      if (!room.spectators.has(socket.id)) room.spectators.add(socket.id);
 
       const gameState = {
         ...room.game,
         roomCode: room.roomCode,
-        mandatoryPieces: findBestCaptureMoves(
-          room.game.currentPlayer,
-          room.game
-        ).map((seq) => seq[0]),
+        // Avoid heavy synchronous computation for spectators to prevent
+        // event-loop blocking under load. Mandatory pieces are optional
+        // for spectators and can be computed asynchronously later if needed.
+        mandatoryPieces: [],
       };
 
       // Garantir campos explícitos para espectadores
@@ -560,17 +604,35 @@ function initializeSocket(ioInstance) {
         timeData = { timeLeft: room.timeLeft };
       }
 
-      socket.emit("spectatorJoined", {
-        gameState,
-        ...timeData,
-        timeControl: room.timeControl,
-        isSpectator: true,
-        spectatorCount: room.spectators ? room.spectators.size : 0,
-      });
+      // Defer emissions to next tick to avoid blocking the main flow
+      setImmediate(() => {
+        try {
+          socket.emit("spectatorJoined", {
+            gameState,
+            ...timeData,
+            timeControl: room.timeControl,
+            isSpectator: true,
+            spectatorCount: room.spectators ? room.spectators.size : 0,
+          });
 
-      // Notify room about updated spectator count
-      io.to(roomCode).emit("spectatorCount", {
-        count: room.spectators ? room.spectators.size : 0,
+          // Notify room about updated spectator count
+          io.to(roomCode).emit("spectatorCount", {
+            count: room.spectators ? room.spectators.size : 0,
+          });
+
+          console.log(
+            `[Socket] spectatorJoined: socket=${socket.id} user=${
+              socket.userData?.email || "unknown"
+            } room=${roomCode} count=${
+              room.spectators ? room.spectators.size : 0
+            }`
+          );
+        } catch (e) {
+          console.error(
+            `[Socket] Error emitting spectator events for room=${roomCode}`,
+            e
+          );
+        }
       });
     });
 
@@ -918,7 +980,7 @@ function initializeSocket(ioInstance) {
       }
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason) => {
       const WAIT_TIME = 60;
       let roomCode = Object.keys(gameRooms).find((rc) =>
         gameRooms[rc].players.some((p) => p.socketId === socket.id)
@@ -941,8 +1003,18 @@ function initializeSocket(ioInstance) {
         }
       }
 
-      if (!roomCode) return;
+      if (!roomCode) {
+        console.log(
+          `[Socket] disconnect: no room found for socket ${socket.id} reason=${reason}`
+        );
+        return;
+      }
       const room = gameRooms[roomCode];
+      console.log(
+        `[Socket] disconnect: socket=${socket.id} user=${
+          socket.userData?.email || "unknown"
+        } room=${roomCode} reason=${reason}`
+      );
 
       if (room && !room.isGameConcluded && room.players.length === 2) {
         const opponent = room.players.find((p) => p.socketId !== socket.id);
@@ -952,6 +1024,9 @@ function initializeSocket(ioInstance) {
           io.to(opponent.socketId).emit("opponentConnectionLost", {
             waitTime: WAIT_TIME,
           });
+          console.log(
+            `[Socket] Notified opponent ${opponent.socketId} of disconnect, starting ${WAIT_TIME}s timeout for room ${roomCode}`
+          );
           room.disconnectTimeout = setTimeout(() => {
             if (!gameRooms[roomCode]) return;
             const disconnectedPlayer = room.players.find(
@@ -1031,12 +1106,6 @@ function initializeSocket(ioInstance) {
       const opponent = room.players.find((p) => p.socketId !== socket.id);
       if (opponent) io.to(opponent.socketId).emit("drawRequested");
       socket.emit("drawRequestSent");
-    });
-    socket.on("acceptDraw", (data) => {
-      const { roomCode } = data;
-      const room = gameRooms[roomCode];
-      if (!room || !room.drawOfferBy || room.drawOfferBy === socket.id) return;
-      processEndOfGame(null, null, room, "Empate acordado entre os jogadores.");
     });
     socket.on("declineDraw", (data) => {
       const { roomCode } = data;

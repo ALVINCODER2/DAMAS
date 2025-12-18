@@ -134,6 +134,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("connect", () => {
     if (window.currentUser) socket.emit("enterLobby", window.currentUser);
+    // Prioritize pending spectate requests to avoid rejoining as player
+    try {
+      const spectateRoom = localStorage.getItem("spectateRoom");
+      const spectatePending = localStorage.getItem("spectatePending");
+      if (spectateRoom && spectatePending === "1") {
+        socket.emit("joinAsSpectator", { roomCode: spectateRoom });
+        localStorage.removeItem("spectatePending");
+        // Do not attempt to rejoin as player when spectating
+        return;
+      }
+    } catch (e) {}
+
     const savedRoom = localStorage.getItem("checkersCurrentRoom");
     if (window.currentUser && savedRoom) {
       GameCore.state.currentRoom = savedRoom;
