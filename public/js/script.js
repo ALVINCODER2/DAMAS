@@ -237,6 +237,21 @@ document.addEventListener("DOMContentLoaded", () => {
       UI.highlightMandatoryPieces(gameState.mandatoryPieces);
       UI.updatePlayerNames(gameState.users);
       UI.playAudio("join");
+      // Garantia extra: atualiza indicador de turno imediatamente
+      try {
+        const normalize = (v) => {
+          if (!v) return null;
+          if (v === "b" || v === "p") return v;
+          const s = String(v).toLowerCase();
+          if (s.includes("branc") || s.includes("white")) return "b";
+          if (s.includes("pret") || s.includes("black") || s.includes("preta"))
+            return "p";
+          return null;
+        };
+        const cur = normalize(gameState.currentPlayer);
+        const mine = GameCore.state.myColor === "b" ? "b" : "p";
+        UI.updateTurnIndicator(!!(cur && mine && cur === mine));
+      } catch (e) {}
     } catch (e) {
       console.error(e);
       if (!window.isSpectator) {
@@ -419,6 +434,21 @@ document.addEventListener("DOMContentLoaded", () => {
     UI.elements.board.classList.remove("board-flipped");
     if (GameCore.state.myColor === "p")
       UI.elements.board.classList.add("board-flipped");
+    // Garantia extra: atualiza indicador de turno após rejoin/resume
+    try {
+      const normalize = (v) => {
+        if (!v) return null;
+        if (v === "b" || v === "p") return v;
+        const s = String(v).toLowerCase();
+        if (s.includes("branc") || s.includes("white")) return "b";
+        if (s.includes("pret") || s.includes("black") || s.includes("preta"))
+          return "p";
+        return null;
+      };
+      const cur = normalize(data.gameState.currentPlayer);
+      const mine = GameCore.state.myColor === "b" ? "b" : "p";
+      UI.updateTurnIndicator(!!(cur && mine && cur === mine));
+    } catch (e) {}
   });
 
   socket.on("gameOver", (data) => {

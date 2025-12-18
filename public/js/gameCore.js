@@ -734,9 +734,21 @@ window.GameCore = (function () {
     state.UI.highlightLastMove(gameState.lastMove);
 
     if (!window.isSpectator) {
+      const normalizePlayer = (val) => {
+        if (!val) return null;
+        if (val === "b" || val === "p") return val;
+        const s = String(val).toLowerCase();
+        if (s.includes("branc") || s.includes("white")) return "b";
+        if (s.includes("pret") || s.includes("black") || s.includes("preta"))
+          return "p";
+        return null;
+      };
+
+      const normalizedCurrent = normalizePlayer(gameState.currentPlayer);
+      const myCanonical = state.myColor === "b" ? "b" : "p";
       const isMyTurn =
-        gameState.currentPlayer === (state.myColor === "b" ? "b" : "p");
-      state.UI.updateTurnIndicator(isMyTurn);
+        normalizedCurrent && myCanonical && normalizedCurrent === myCanonical;
+      state.UI.updateTurnIndicator(!!isMyTurn);
       if (isMyTurn && !suppressSound && navigator.vibrate) {
         try {
           navigator.vibrate(200);
