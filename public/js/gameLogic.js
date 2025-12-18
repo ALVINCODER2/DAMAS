@@ -508,31 +508,10 @@
     return null;
   }
 
-  // Implementação da Regra das 20 Jogadas (Partida Parada)
-  function calculateNextDrawCounter(currentCounter, piece, isCapture) {
-    // Se houve captura, a contagem zera
-    if (isCapture) return 0;
-
-    // Se peça simples (não-dama) moveu, a contagem zera
-    // Assumindo que peças simples são minúsculas ('b', 'p') e damas maiúsculas ('B', 'P')
-    const isDama = piece && piece === piece.toUpperCase();
-    if (!isDama) return 0;
-
-    // Se for movimento de Dama sem captura, incrementa a contagem
-    return (currentCounter || 0) + 1;
-  }
-
-  function checkDraw(game) {
-    // Verifica se atingiu 20 jogadas sem progresso (10 de cada jogador)
-    return (game.drawCounter || 0) >= 20;
-  }
-
   exports.findBestCaptureMoves = findBestCaptureMoves;
   exports.isMoveValid = isMoveValid;
   exports.checkWinCondition = checkWinCondition;
   exports.getAllPossibleCapturesForPiece = getAllPossibleCapturesForPiece;
   exports.hasValidMoves = hasValidMoves;
   exports.getUniqueCaptureMove = getUniqueCaptureMove;
-  exports.calculateNextDrawCounter = calculateNextDrawCounter;
-  exports.checkDraw = checkDraw;
 })(typeof exports === "undefined" ? (this.gameLogic = {}) : exports);

@@ -15,49 +15,13 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Estilos -->
-  <link rel="stylesheet" href="css/style.css?v=1.0.2" />
-  <link rel="stylesheet" href="css/game.css?v=1.0.2" />
-  <link rel="stylesheet" href="css/tournament.css?v=1.0.2" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/game.css" />
+  <link rel="stylesheet" href="css/tournament.css" />
 
   <!-- SDKs -->
   <script src="https://sdk.mercadopago.com/js/v2"></script>
   <script src="/socket.io/socket.io.js"></script>
-
-  <style>
-    /* ESTILO DE EMERGÊNCIA - COLOCAR NO HEAD DO HTML */
-    #board {
-      width: 600px !important;
-      height: 600px !important;
-      max-width: 95vw !important;
-      max-height: 95vw !important;
-      margin: 0 auto !important;
-      display: grid !important;
-      grid-template-columns: repeat(8, 1fr) !important;
-      grid-template-rows: repeat(8, 1fr) !important;
-      border: 12px solid #5c3a21 !important;
-      /* Borda Madeira Realista */
-      border-radius: 6px !important;
-      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.6), inset 0 0 15px rgba(0, 0, 0, 0.7) !important;
-      /* Profundidade 3D */
-      background-color: #2b1d16 !important;
-      /* Fundo escuro para compor */
-
-      /* OTIMIZAÇÃO DE PERFORMANCE (ANTI-LAG) */
-      transform: translate3d(0, 0, 0) !important;
-      /* Força uso da GPU */
-      contain: layout paint !important;
-      /* Isola renderização do tabuleiro */
-      touch-action: none !important;
-      /* Melhora resposta ao toque e evita scroll */
-    }
-
-    #board-wrapper {
-      height: auto !important;
-      min-height: 320px !important;
-      padding: 10px !important;
-      overflow: visible !important;
-    }
-  </style>
 </head>
 
 <body>
@@ -310,358 +274,342 @@
       </div>
 
     </div> <!-- Fim Lobby -->
+
     <!-- =========================================
-     3. TELA DE JOGO
-     ========================================= -->
+         3. TELA DE JOGO
+         ========================================= -->
     <div id="game-container" class="hidden">
       <div class="game-top-bar">
         <div id="spectator-indicator" class="hidden badge-warning">ESPECTADOR</div>
         <div id="tournament-indicator" class="hidden badge-purple">TORNEIO</div>
       </div>
 
-      <!-- Players HUD -->
       <div id="players-hud" class="players-hud hidden">
         <div class="player-card white-player">
-          <img id="white-player-avatar" src="" class="avatar-small hidden" alt="Jogador Brancas">
+          <img id="white-player-avatar" src="" class="avatar-small hidden">
           <div class="player-details">
-            <span id="white-player-name" class="player-name">Jogador 1</span>
+            <span id="white-player-name">Jog 1</span>
             <div class="piece-indicator white"></div>
           </div>
         </div>
-
         <div class="vs-timer">
           <span id="timer">40</span>
         </div>
-
         <div class="player-card black-player">
           <div class="player-details right">
-            <span id="black-player-name" class="player-name">Jogador 2</span>
+            <span id="black-player-name">Jog 2</span>
             <div class="piece-indicator black"></div>
           </div>
-          <img id="black-player-avatar" src="" class="avatar-small hidden" alt="Jogador Pretas">
+          <img id="black-player-avatar" src="" class="avatar-small hidden">
         </div>
       </div>
 
-      <!-- Status do Jogo -->
-      <div id="game-status-wrapper">
-        <p id="game-status">Aguardando início da partida...</p>
-      </div>
+      <p id="game-status">Aguardando...</p>
 
-      <!-- Tabuleiro -->
       <div id="board-wrapper">
         <div id="board"></div>
       </div>
 
-      <!-- Informações e Controles -->
-      <div id="game-info-wrapper">
-        <div id="game-info">
-          <p>Vez de: <span id="turn">Brancas</span></p>
-          <div id="game-buttons">
-            <button id="resign-btn" class="btn-game btn-lose">
-              <i class="fa-solid fa-flag"></i> Desistir
-            </button>
-            <button id="draw-btn" class="btn-game btn-draw">
-              <i class="fa-solid fa-handshake"></i> Pedir Empate
-            </button>
-            <button id="spectator-leave-btn" class="hidden btn-game btn-exit">
-              <i class="fa-solid fa-door-open"></i> Sair
-            </button>
-          </div>
+      <div id="game-info">
+        <p>Vez de: <span id="turn">Brancas</span></p>
+        <div id="game-buttons">
+          <button id="resign-btn" class="btn-game btn-lose"><i class="fa-solid fa-flag"></i> Desistir</button>
+          <button id="draw-btn" class="btn-game btn-draw"><i class="fa-solid fa-handshake"></i> Empate</button>
+          <button id="spectator-leave-btn" class="hidden btn-game btn-exit">Sair</button>
         </div>
       </div>
     </div>
 
-    <!-- =========================================
+  </div> <!-- Fim Main Container -->
+
+  <!-- =========================================
        4. MODAIS E OVERLAYS
        ========================================= -->
 
-    <!-- Modal PIX -->
-    <div id="pix-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3><i class="fa-brands fa-pix"></i> Depósito Automático</h3>
-        <input type="number" id="deposit-amount" class="modern-input" placeholder="Valor (R$)" value="5.00">
-        <button id="pay-mercadopago-btn" class="btn-confirm full-width">Gerar QR Code</button>
-        <div id="mp-loading" class="hidden">
-          <div class="spinner"></div>
-        </div>
-        <div id="qr-code-container" class="hidden">
-          <p style="font-size:0.8em; color:#ccc;">Copie e pague no seu banco:</p>
-          <img id="qr-code-img" src="" alt="QR"
-            style="max-width:150px; margin:10px auto; display:block; border-radius:5px;">
-          <textarea id="pix-copy-paste" readonly class="modern-textarea"></textarea>
-          <button id="copy-pix-code-btn" class="btn-secondary">Copiar Código</button>
-        </div>
-        <button id="close-pix-overlay-btn" class="btn-close">Fechar</button>
+  <!-- Modal PIX -->
+  <div id="pix-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3><i class="fa-brands fa-pix"></i> Depósito Automático</h3>
+      <input type="number" id="deposit-amount" class="modern-input" placeholder="Valor (R$)" value="5.00">
+      <button id="pay-mercadopago-btn" class="btn-confirm full-width">Gerar QR Code</button>
+      <div id="mp-loading" class="hidden">
+        <div class="spinner"></div>
+      </div>
+      <div id="qr-code-container" class="hidden">
+        <p style="font-size:0.8em; color:#ccc;">Copie e pague no seu banco:</p>
+        <img id="qr-code-img" src="" alt="QR"
+          style="max-width:150px; margin:10px auto; display:block; border-radius:5px;">
+        <textarea id="pix-copy-paste" readonly class="modern-textarea"></textarea>
+        <button id="copy-pix-code-btn" class="btn-secondary">Copiar Código</button>
+      </div>
+      <button id="close-pix-overlay-btn" class="btn-close">Fechar</button>
+    </div>
+  </div>
+
+  <!-- Modal Perfil -->
+  <div id="profile-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3>Editar Perfil</h3>
+      <div style="text-align:center; margin:10px 0;">
+        <img id="profile-preview-img" src="" class="avatar-preview">
+      </div>
+      <input type="text" id="profile-username-input" class="modern-input" placeholder="Novo Nick">
+      <input type="text" id="profile-avatar-input" class="modern-input" placeholder="URL da Imagem">
+      <p id="profile-message"></p>
+      <button id="save-profile-btn" class="btn-confirm full-width">Salvar</button>
+      <button id="close-profile-btn" class="btn-close">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Modal Retirada -->
+  <div id="withdraw-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3>Solicitar Saque</h3>
+      <p style="color:#e74c3c; font-size:0.8rem; margin-bottom:10px;">Taxa de 30% no saque.</p>
+      <form id="withdraw-form">
+        <input type="text" id="withdraw-pix-key" placeholder="Chave PIX" class="modern-input" required>
+        <input type="number" id="withdraw-amount" placeholder="Valor (Min R$30)" min="30" class="modern-input" required>
+        <button type="submit" class="btn-confirm full-width">Solicitar</button>
+      </form>
+      <p id="withdraw-message"></p>
+      <button id="close-withdraw-overlay-btn" class="btn-close">Fechar</button>
+    </div>
+  </div>
+
+  <!-- Modal Tutorial GERAL -->
+  <div id="general-tutorial-overlay" class="hidden modal-overlay">
+    <div class="modal-card" style="text-align:left; max-width: 600px;">
+      <h3 style="text-align:center; color:#f1c40f; margin-bottom: 20px;">📖 Como Funciona</h3>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #2ecc71;">🎮 1. Partidas Valendo Dinheiro</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          Você pode criar ou entrar em salas de aposta. O vencedor leva o valor apostado pelo oponente (menos uma
+          pequena taxa da banca, se houver).
+          <br><strong>Modos:</strong> Clássico, Tablita (Sorteio de Abertura) e Internacional (10x10).
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #f39c12;">🏆 2. Torneio Diário</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          Todos os dias às <strong>21:00</strong>. Inscrição barata e prêmios divididos entre Campeão (50%) e Vice
+          (30%). É mata-mata: perdeu, saiu!
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #3498db;">💰 3. Depósitos e Saques (PIX)</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          <strong>Depósito:</strong> Automático via PIX QR Code. O saldo cai na hora!<br>
+          <strong>Saque:</strong> Solicite a retirada para sua chave PIX. Mínimo de R$ 30,00 (taxa de 30% aplicada no
+          saque).
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h4 style="color: #9b59b6;">💸 4. Ganhe Indicando Amigos</h4>
+        <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
+          Envie seu link de indicação. Se seu amigo se cadastrar e fizer um primeiro depósito de pelo menos R$ 5,00,
+          você ganha <strong>R$ 1,00</strong> de bônus automaticamente!
+        </p>
+      </div>
+
+      <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+
+      <h3 style="text-align:center; color:#e85d40; margin-bottom: 15px;">📜 Regras Brasileiras</h3>
+      <ul style="font-size:0.9rem; line-height:1.5; padding-left:20px; color:#ddd; list-style-type: disc;">
+        <li>A captura é Obrigatória.</li>
+        <li>É obrigado a capturar pela Lei da Maioria.</li>
+        <li>Pode capturar para trás.</li>
+        <li>Não existe sopro.</li>
+        <li>Pedra e Dama têm o mesmo valor para capturar e ser capturada.</li>
+        <li>Só de passar pela casa de coroação a pedra NÃO se transforma em Dama (precisa parar).</li>
+        <li>É permitido passar pela mesma casa mais de uma vez na captura.</li>
+        <li>NÃO pode capturar a mesma Peça mais de uma vez.</li>
+        <li>Primeiro efetua o movimento de captura, depois retira-se as peças.</li>
+        <li>Vitória ao capturar todas as peças ou bloquear o oponente.</li>
+      </ul>
+
+      <div style="text-align:center; margin-top: 20px;">
+        <button id="close-tutorial-btn" class="btn-close">Fechar Tutorial</button>
       </div>
     </div>
+  </div>
 
-    <!-- Modal Perfil -->
-    <div id="profile-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3>Editar Perfil</h3>
-        <div style="text-align:center; margin:10px 0;">
-          <img id="profile-preview-img" src="" class="avatar-preview">
-        </div>
-        <input type="text" id="profile-username-input" class="modern-input" placeholder="Novo Nick">
-        <input type="text" id="profile-avatar-input" class="modern-input" placeholder="URL da Imagem">
-        <p id="profile-message"></p>
-        <button id="save-profile-btn" class="btn-confirm full-width">Salvar</button>
-        <button id="close-profile-btn" class="btn-close">Cancelar</button>
-      </div>
+  <!-- Outros Modais -->
+  <div id="referrals-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3>Indicações</h3>
+      <div id="referrals-list"></div>
+      <button id="close-referrals-overlay-btn" class="btn-close">Fechar</button>
     </div>
-
-    <!-- Modal Retirada -->
-    <div id="withdraw-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3>Solicitar Saque</h3>
-        <p style="color:#e74c3c; font-size:0.8rem; margin-bottom:10px;">Taxa de 30% no saque.</p>
-        <form id="withdraw-form">
-          <input type="text" id="withdraw-pix-key" placeholder="Chave PIX" class="modern-input" required>
-          <input type="number" id="withdraw-amount" placeholder="Valor (Min R$30)" min="30" class="modern-input"
-            required>
-          <button type="submit" class="btn-confirm full-width">Solicitar</button>
-        </form>
-        <p id="withdraw-message"></p>
-        <button id="close-withdraw-overlay-btn" class="btn-close">Fechar</button>
-      </div>
+  </div>
+  <div id="history-overlay" class="hidden modal-overlay">
+    <div class="modal-card" style="max-width:500px;">
+      <h3>Histórico</h3>
+      <div id="history-list"></div>
+      <button id="close-history-overlay-btn" class="btn-close">Fechar</button>
     </div>
+  </div>
 
-    <!-- Modal Tutorial GERAL -->
-    <div id="general-tutorial-overlay" class="hidden modal-overlay">
-      <div class="modal-card" style="text-align:left; max-width: 600px;">
-        <h3 style="text-align:center; color:#f1c40f; margin-bottom: 20px;">📖 Como Funciona</h3>
-
-        <div style="margin-bottom: 20px;">
-          <h4 style="color: #2ecc71;">🎮 1. Partidas Valendo Dinheiro</h4>
-          <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
-            Você pode criar ou entrar em salas de aposta. O vencedor leva o valor apostado pelo oponente (menos uma
-            pequena taxa da banca, se houver).
-            <br><strong>Modos:</strong> Clássico, Tablita (Sorteio de Abertura) e Internacional (10x10).
-          </p>
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <h4 style="color: #f39c12;">🏆 2. Torneio Diário</h4>
-          <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
-            Todos os dias às <strong>21:00</strong>. Inscrição barata e prêmios divididos entre Campeão (50%) e Vice
-            (30%). É mata-mata: perdeu, saiu!
-          </p>
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <h4 style="color: #3498db;">💰 3. Depósitos e Saques (PIX)</h4>
-          <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
-            <strong>Depósito:</strong> Automático via PIX QR Code. O saldo cai na hora!<br>
-            <strong>Saque:</strong> Solicite a retirada para sua chave PIX. Mínimo de R$ 30,00 (taxa de 30% aplicada no
-            saque).
-          </p>
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <h4 style="color: #9b59b6;">💸 4. Ganhe Indicando Amigos</h4>
-          <p style="font-size: 0.9em; color: #ddd; margin-top: 5px;">
-            Envie seu link de indicação. Se seu amigo se cadastrar e fizer um primeiro depósito de pelo menos R$ 5,00,
-            você ganha <strong>R$ 1,00</strong> de bônus automaticamente!
-          </p>
-        </div>
-
-        <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-
-        <h3 style="text-align:center; color:#e85d40; margin-bottom: 15px;">📜 Regras Brasileiras</h3>
-        <ul style="font-size:0.9rem; line-height:1.5; padding-left:20px; color:#ddd; list-style-type: disc;">
-          <li>A captura é Obrigatória.</li>
-          <li>É obrigado a capturar pela Lei da Maioria.</li>
-          <li>Pode capturar para trás.</li>
-          <li>Não existe sopro.</li>
-          <li>Pedra e Dama têm o mesmo valor para capturar e ser capturada.</li>
-          <li>Só de passar pela casa de coroação a pedra NÃO se transforma em Dama (precisa parar).</li>
-          <li>É permitido passar pela mesma casa mais de uma vez na captura.</li>
-          <li>NÃO pode capturar a mesma Peça mais de uma vez.</li>
-          <li>Primeiro efetua o movimento de captura, depois retira-se as peças.</li>
-          <li>Vitória ao capturar todas as peças ou bloquear o oponente.</li>
-        </ul>
-
-        <div style="text-align:center; margin-top: 20px;">
-          <button id="close-tutorial-btn" class="btn-close">Fechar Tutorial</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Outros Modais -->
-    <div id="referrals-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3>Indicações</h3>
-        <div id="referrals-list"></div>
-        <button id="close-referrals-overlay-btn" class="btn-close">Fechar</button>
-      </div>
-    </div>
-    <div id="history-overlay" class="hidden modal-overlay">
-      <div class="modal-card" style="max-width:500px;">
-        <h3>Histórico</h3>
-        <div id="history-list"></div>
-        <button id="close-history-overlay-btn" class="btn-close">Fechar</button>
-      </div>
-    </div>
-
-    <!-- Modais de Jogo -->
-    <div id="game-over-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <div id="winner-screen" class="hidden">
-          <h1 style="color:#2ecc71">Vitória!</h1>
-          <p class="revanche-status"></p>
-          <div class="confirm-buttons">
-            <button class="replay-btn btn-secondary">Assistir Partida</button>
-            <button class="revanche-btn btn-confirm">Revanche</button>
-            <button class="exit-lobby-btn btn-close">Sair</button>
-          </div>
-        </div>
-        <div id="loser-screen" class="hidden">
-          <h1 style="color:#e74c3c">Derrota</h1>
-          <p class="revanche-status"></p>
-          <div class="confirm-buttons">
-            <button class="replay-btn btn-secondary">Assistir Partida</button>
-            <button class="revanche-btn btn-confirm">Revanche</button>
-            <button class="exit-lobby-btn btn-close">Sair</button>
-          </div>
-        </div>
-        <div id="draw-screen" class="hidden">
-          <h1>Empate</h1>
-          <p id="draw-reason"></p>
-          <p class="revanche-status"></p>
-          <div class="confirm-buttons">
-            <button class="replay-btn btn-secondary">Assistir Partida</button>
-            <button class="revanche-btn btn-confirm">Revanche</button>
-            <button class="exit-lobby-btn btn-close">Sair</button>
-          </div>
-        </div>
-        <div id="spectator-end-screen" class="hidden">
-          <p id="spectator-end-message"></p>
+  <!-- Modais de Jogo -->
+  <div id="game-over-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <div id="winner-screen" class="hidden">
+        <h1 style="color:#2ecc71">Vitória!</h1>
+        <p class="revanche-status"></p>
+        <div class="confirm-buttons">
+          <button class="replay-btn btn-secondary">Assistir Partida</button>
+          <button class="revanche-btn btn-confirm">Revanche</button>
           <button class="exit-lobby-btn btn-close">Sair</button>
         </div>
       </div>
-    </div>
-    <div id="confirm-bet-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3>Confirmar Aposta</h3>
-        <p>Valor: <strong id="confirm-bet-amount"></strong></p>
-        <p id="confirm-game-mode"></p>
-        <div class="confirm-buttons" style="margin-top:15px;">
-          <button id="accept-bet-btn" class="btn-confirm">Aceitar</button>
-          <button id="decline-bet-btn" class="btn-close">Recusar</button>
+      <div id="loser-screen" class="hidden">
+        <h1 style="color:#e74c3c">Derrota</h1>
+        <p class="revanche-status"></p>
+        <div class="confirm-buttons">
+          <button class="replay-btn btn-secondary">Assistir Partida</button>
+          <button class="revanche-btn btn-confirm">Revanche</button>
+          <button class="exit-lobby-btn btn-close">Sair</button>
         </div>
       </div>
-    </div>
-    <div id="tournament-bracket-overlay" class="hidden modal-overlay">
-      <div class="modal-card" style="max-width:95%;">
-        <h3>Chaveamento</h3>
-        <p id="tournament-round-display"></p>
-        <div id="tournament-matches-list"></div>
-        <button id="close-bracket-btn" class="btn-close">Fechar</button>
+      <div id="draw-screen" class="hidden">
+        <h1>Empate</h1>
+        <p id="draw-reason"></p>
+        <p class="revanche-status"></p>
+        <div class="confirm-buttons">
+          <button class="replay-btn btn-secondary">Assistir Partida</button>
+          <button class="revanche-btn btn-confirm">Revanche</button>
+          <button class="exit-lobby-btn btn-close">Sair</button>
+        </div>
+      </div>
+      <div id="spectator-end-screen" class="hidden">
+        <p id="spectator-end-message"></p>
+        <button class="exit-lobby-btn btn-close">Sair</button>
       </div>
     </div>
+  </div>
+  <div id="confirm-bet-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3>Confirmar Aposta</h3>
+      <p>Valor: <strong id="confirm-bet-amount"></strong></p>
+      <p id="confirm-game-mode"></p>
+      <div class="confirm-buttons" style="margin-top:15px;">
+        <button id="accept-bet-btn" class="btn-confirm">Aceitar</button>
+        <button id="decline-bet-btn" class="btn-close">Recusar</button>
+      </div>
+    </div>
+  </div>
+  <div id="tournament-bracket-overlay" class="hidden modal-overlay">
+    <div class="modal-card" style="max-width:95%;">
+      <h3>Chaveamento</h3>
+      <p id="tournament-round-display"></p>
+      <div id="tournament-matches-list"></div>
+      <button id="close-bracket-btn" class="btn-close">Fechar</button>
+    </div>
+  </div>
 
-    <!-- MODAL INFO TORNEIO (ATUALIZADO) -->
-    <div id="tournament-info-overlay" class="hidden modal-overlay">
-      <div class="modal-card" style="max-width: 450px; text-align: left;">
-        <h3
-          style="color: #f1c40f; margin-bottom: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-          🏆 Guia do Torneio</h3>
+  <!-- MODAL INFO TORNEIO (ATUALIZADO) -->
+  <div id="tournament-info-overlay" class="hidden modal-overlay">
+    <div class="modal-card" style="max-width: 450px; text-align: left;">
+      <h3
+        style="color: #f1c40f; margin-bottom: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+        🏆 Guia do Torneio</h3>
+
+      <div
+        style="text-align:left; line-height:1.6; color:#e0e0e0; font-size: 0.95rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
+
+        <div style="margin-bottom: 15px;">
+          <h4 style="color: #3498db; margin-bottom: 5px;"><i class="fa-regular fa-clock"></i> Horário & Inscrição</h4>
+          <p style="margin-left: 10px;">• <strong>Início:</strong> Todos os dias às <strong>21:00</strong> (Horário de
+            Brasília).</p>
+          <p style="margin-left: 10px;">• <strong>Entrada:</strong> R$ 2,00 (Debitado do saldo).</p>
+          <p style="margin-left: 10px;">• <strong>Check-in:</strong> Esteja online no lobby 2 minutos antes.</p>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <h4 style="color: #2ecc71; margin-bottom: 5px;"><i class="fa-solid fa-sack-dollar"></i> Premiação (Sem Taxas!)
+          </h4>
+          <p style="margin-left: 10px;">O valor total das inscrições vai para o pote e é dividido assim:</p>
+          <ul style="margin-left: 25px; list-style-type: none; padding:0;">
+            <li>🥇 <strong>Campeão:</strong> Leva 70% do pote.</li>
+            <li>🥈 <strong>Vice-Campeão:</strong> Leva 30% do pote.</li>
+          </ul>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <h4 style="color: #e74c3c; margin-bottom: 5px;"><i class="fa-solid fa-chess-board"></i> Regras da Partida</h4>
+          <p style="margin-left: 10px;">• <strong>Formato:</strong> Mata-mata (Eliminação Simples).</p>
+          <p style="margin-left: 10px;">• <strong>Tempo:</strong> Jogo rápido! <strong>7 segundos</strong> por jogada.
+          </p>
+          <p style="margin-left: 10px;">• <strong>Mínimo:</strong> 4 jogadores para o torneio acontecer.</p>
+        </div>
 
         <div
-          style="text-align:left; line-height:1.6; color:#e0e0e0; font-size: 0.95rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
-
-          <div style="margin-bottom: 15px;">
-            <h4 style="color: #3498db; margin-bottom: 5px;"><i class="fa-regular fa-clock"></i> Horário & Inscrição</h4>
-            <p style="margin-left: 10px;">• <strong>Início:</strong> Todos os dias às <strong>21:00</strong> (Horário de
-              Brasília).</p>
-            <p style="margin-left: 10px;">• <strong>Entrada:</strong> R$ 2,00 (Debitado do saldo).</p>
-            <p style="margin-left: 10px;">• <strong>Check-in:</strong> Esteja online no lobby 2 minutos antes.</p>
-          </div>
-
-          <div style="margin-bottom: 15px;">
-            <h4 style="color: #2ecc71; margin-bottom: 5px;"><i class="fa-solid fa-sack-dollar"></i> Premiação (Sem
-              Taxas!)
-            </h4>
-            <p style="margin-left: 10px;">O valor total das inscrições vai para o pote e é dividido assim:</p>
-            <ul style="margin-left: 25px; list-style-type: none; padding:0;">
-              <li>🥇 <strong>Campeão:</strong> Leva 70% do pote.</li>
-              <li>🥈 <strong>Vice-Campeão:</strong> Leva 30% do pote.</li>
-            </ul>
-          </div>
-
-          <div style="margin-bottom: 15px;">
-            <h4 style="color: #e74c3c; margin-bottom: 5px;"><i class="fa-solid fa-chess-board"></i> Regras da Partida
-            </h4>
-            <p style="margin-left: 10px;">• <strong>Formato:</strong> Mata-mata (Eliminação Simples).</p>
-            <p style="margin-left: 10px;">• <strong>Tempo:</strong> Jogo rápido! <strong>7 segundos</strong> por jogada.
-            </p>
-            <p style="margin-left: 10px;">• <strong>Mínimo:</strong> 4 jogadores para o torneio acontecer.</p>
-          </div>
-
-          <div
-            style="background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 6px; border-left: 3px solid #f1c40f;">
-            <h4 style="color: #f1c40f; margin-bottom: 5px; font-size: 0.9rem;">🤝 Critérios de Desempate</h4>
-            <p style="font-size: 0.85rem;">Se a partida terminar empatada:</p>
-            <ol style="margin-left: 20px; font-size: 0.85rem; margin-bottom: 0;">
-              <li><strong>Revanche Imediata:</strong> Nova partida no modo <strong>Tablita</strong>.</li>
-              <li><strong>Tempo Reduzido:</strong> 5 segundos por jogada.</li>
-              <li><strong>Morte Súbita:</strong> Repete-se até haver um vencedor.</li>
-            </ol>
-          </div>
-        </div>
-
-        <div style="text-align: center; margin-top: 15px;">
-          <button id="close-tournament-info-btn" class="btn-close">Fechar</button>
+          style="background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 6px; border-left: 3px solid #f1c40f;">
+          <h4 style="color: #f1c40f; margin-bottom: 5px; font-size: 0.9rem;">🤝 Critérios de Desempate</h4>
+          <p style="font-size: 0.85rem;">Se a partida terminar empatada:</p>
+          <ol style="margin-left: 20px; font-size: 0.85rem; margin-bottom: 0;">
+            <li><strong>Revanche Imediata:</strong> Nova partida no modo <strong>Tablita</strong>.</li>
+            <li><strong>Tempo Reduzido:</strong> 5 segundos por jogada.</li>
+            <li><strong>Morte Súbita:</strong> Repete-se até haver um vencedor.</li>
+          </ol>
         </div>
       </div>
-    </div>
 
-    <div id="next-game-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h2 id="next-game-title"></h2>
-        <p id="match-score-display"></p>
-        <p>Iniciando em <span id="next-game-timer"></span></p>
+      <div style="text-align: center; margin-top: 15px;">
+        <button id="close-tournament-info-btn" class="btn-close">Fechar</button>
       </div>
     </div>
-    <div id="draw-request-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3>Pedido de Empate</h3>
-        <button id="accept-draw-btn" class="btn-confirm">Aceitar</button>
-        <button id="decline-draw-btn" class="btn-close">Recusar</button>
-      </div>
+  </div>
+
+  <div id="next-game-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h2 id="next-game-title"></h2>
+      <p id="match-score-display"></p>
+      <p>Iniciando em <span id="next-game-timer"></span></p>
     </div>
-    <div id="connection-lost-overlay" class="hidden modal-overlay">
-      <div class="modal-card">
-        <h3>Conexão</h3>
-        <p id="connection-lost-message"></p>
-      </div>
+  </div>
+  <div id="draw-request-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3>Pedido de Empate</h3>
+      <button id="accept-draw-btn" class="btn-confirm">Aceitar</button>
+      <button id="decline-draw-btn" class="btn-close">Recusar</button>
     </div>
+  </div>
+  <div id="connection-lost-overlay" class="hidden modal-overlay">
+    <div class="modal-card">
+      <h3>Conexão</h3>
+      <p id="connection-lost-message"></p>
+    </div>
+  </div>
 
-    <!-- ÁUDIOS -->
-    <audio id="move-sound" src="/sounds/move.mp3"></audio>
-    <audio id="capture-sound" src="/sounds/capture.mp3"></audio>
-    <audio id="join-sound" src="/sounds/join.mp3"></audio>
+  <!-- ÁUDIOS -->
+  <audio id="move-sound" src="/sounds/move.mp3"></audio>
+  <audio id="capture-sound" src="/sounds/capture.mp3"></audio>
+  <audio id="join-sound" src="/sounds/join.mp3"></audio>
 
-    <!-- Scripts -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/gameLogic.js?v=1.0.1"></script>
-    <script src="js/ui-helpers.js?v=1.0.1"></script>
-    <!-- Incluindo os arquivos separados -->
-    <script src="js/lobby.js?v=1.0.1"></script>
-    <script src="js/auth.js?v=1.0.1"></script>
-    <!-- Novo Core do Jogo -->
-    <script src="js/gameCore.js?v=1.0.1"></script>
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/gameLogic.js"></script>
+  <script src="js/ui-helpers.js"></script>
+  <!-- Incluindo os arquivos separados -->
+  <script src="js/lobby.js"></script>
+  <script src="js/auth.js"></script>
+  <!-- Novo Core do Jogo -->
+  <script src="js/gameCore.js"></script>
 
-    <script>
-      // Função para abrir/fechar seções (como o card de afiliados)
-      function toggleSection(element) {
-        const body = element.nextElementSibling;
-        element.classList.toggle('active');
-        if (body.style.display === "block") body.style.display = "none";
-        else body.style.display = "block";
-      }
-    </script>
-    <script src="js/script.js?v=1.0.1"></script>
+  <script>
+    // Função para abrir/fechar seções (como o card de afiliados)
+    function toggleSection(element) {
+      const body = element.nextElementSibling;
+      element.classList.toggle('active');
+      if (body.style.display === "block") body.style.display = "none";
+      else body.style.display = "block";
+    }
+  </script>
+  <script src="js/script.js"></script>
 </body>
 
 </html>
