@@ -26,6 +26,16 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: "", // URL da imagem
   },
+  // --- PREFERÊNCIAS DE VISUALIZAÇÃO DO USUÁRIO ---
+  preferences: {
+    type: {
+      boardLight: { type: String, default: "#f0d9b5" },
+      boardDark: { type: String, default: "#b58863" },
+      pieceWhite: { type: String, default: "#ffffff" },
+      pieceBlack: { type: String, default: "#555555" },
+    },
+    default: {},
+  },
   // --- CAMPOS PARA INDICAÇÃO ---
   referredBy: {
     type: String, // Email de quem indicou este usuário

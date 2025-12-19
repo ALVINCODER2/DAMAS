@@ -5,6 +5,7 @@ window.initLobby = function (socket, UI) {
   let tempRoomCode = null;
   let tournamentCountdownInterval = null;
   let countdownClosedByUser = false;
+  let currentSelectedPresetId = null;
 
   // --- HELPER: UPDATE WELCOME MESSAGE (Global) ---
   window.updateLobbyWelcome = function () {
@@ -26,10 +27,220 @@ window.initLobby = function (socket, UI) {
           avatarImg.src = window.currentUser.avatar;
         } else {
           avatarImg.src = `https://ui-avatars.com/api/?name=${displayName}&background=random`;
+          console.log("[prefs] populatePresets start");
         }
       }
     }
   };
+
+  function populatePresets() {
+    try {
+      const container = document.getElementById("prefs-presets");
+      if (!container) return;
+      container.innerHTML = "";
+      const presets = window.BOARD_PRESETS || [];
+      presets.forEach((p) => {
+        const sw = document.createElement("button");
+        sw.type = "button";
+        sw.className = "prefs-preset-btn";
+        sw.title = p.name || p.id;
+        sw.style.cssText = `width:64px;height:48px;border-radius:6px;border:2px solid transparent;padding:4px;background:#111;display:flex;align-items:center;justify-content:center;cursor:pointer;`;
+
+        // mini visual: a pequena grade 2x2 com cores
+        sw.innerHTML = `
+          <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;border-radius:4px;overflow:hidden;">
+            <div style="background:${p.boardLight}"></div>
+            <div style="background:${p.boardDark}"></div>
+            <div style="background:${p.boardDark}"></div>
+            <div style="background:${p.boardLight}"></div>
+          </div>
+        `;
+
+        sw.addEventListener("click", () => {
+          // Seleciona preset
+          currentSelectedPresetId = p.id;
+          // highlight
+          document.querySelectorAll(".prefs-preset-btn").forEach((btn) => {
+            btn.style.borderColor = "transparent";
+            btn.style.boxShadow = "none";
+          });
+          sw.style.borderColor = "#f1c40f";
+          sw.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
+
+          // Aplica preset ao preview e tabuleiro principal
+          const prefsNow = {
+            presetId: p.id,
+            boardLight: p.boardLight,
+            boardDark: p.boardDark,
+            pieceWhite: p.pieceWhite,
+            pieceBlack: p.pieceBlack,
+          };
+          window.userPreferences = prefsNow;
+          if (window.UI && window.UI.applyPreferences)
+            window.UI.applyPreferences(prefsNow);
+          try {
+            const previewBoard = document.getElementById("prefs-preview-board");
+            if (previewBoard && window.UI && window.UI.renderBoardInto) {
+              const sample = makeEmptyBoard(previewBoard.dataset.size || 8);
+              window.UI.renderBoardInto(previewBoard, sample, 8);
+              previewBoard
+                .querySelectorAll(".light, .dark")
+                .forEach((sq) => (sq.style.backgroundImage = "none"));
+            }
+          } catch (e) {}
+        });
+
+        container.appendChild(sw);
+        // se já selecionado, aplica destaque
+        if (currentSelectedPresetId && currentSelectedPresetId === p.id) {
+          sw.style.borderColor = "#f1c40f";
+          sw.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
+        }
+      });
+    } catch (e) {
+      console.error("populatePresets error", e);
+    }
+  }
+
+  async function loadAndApplyPreferences() {
+    try {
+      let prefs = null;
+      if (window.currentUser && window.currentUser.email) {
+        const res = await fetch(
+          `/api/user/preferences?email=${encodeURIComponent(
+            window.currentUser.email
+          )}`
+        );
+        if (res.ok) {
+          const j = await res.json();
+          prefs = j.preferences;
+        }
+      }
+      if (!prefs) {
+        const key = `prefs_${window.currentUser?.email || "anon"}`;
+        const ls = localStorage.getItem(key);
+        if (ls) prefs = JSON.parse(ls);
+      }
+      if (prefs && window.UI && window.UI.applyPreferences)
+        // If prefs only contains presetId, expand it to actual colors
+        try {
+          if (prefs.presetId && !(prefs.boardLight && prefs.boardDark)) {
+            const preset = (window.BOARD_PRESETS || []).find(
+              (x) => x.id === prefs.presetId
+            );
+            if (preset) {
+              prefs = Object.assign({}, preset, prefs);
+            }
+          }
+        } catch (e) {}
+      window.UI.applyPreferences(prefs);
+      window.userPreferences = prefs || {};
+    } catch (e) {}
+  }
+
+  // --- PREVIEW BOARD HELPERS ---
+  function makeEmptyBoard(size) {
+    return Array.from({ length: size }, (_, r) =>
+      Array.from({ length: size }, (_, c) => {
+        // peças em casas escuras: linhas 0-2 -> black ('p'), 5-7 -> white ('b')
+        if (size === 8) {
+          if (r <= 2 && (r + c) % 2 === 1) return "p";
+          if (r >= 5 && (r + c) % 2 === 1) return "b";
+        }
+        return 0;
+      })
+    );
+  }
+
+  function renderPreviewBoard(boardEl, boardState) {
+    try {
+      const size = boardState.length || 8;
+      if (window.UI && window.UI.renderBoardInto) {
+        window.UI.renderBoardInto(boardEl, boardState, size);
+        // remove texturas caso existam (garante que cor apareça)
+        boardEl
+          .querySelectorAll(".light, .dark")
+          .forEach((sq) => (sq.style.backgroundImage = "none"));
+      } else {
+        boardEl.innerHTML = "";
+      }
+    } catch (e) {
+      console.error("renderPreviewBoard error", e);
+    }
+  }
+
+  function initPreviewBoard() {
+    const previewBoard = document.getElementById("prefs-preview-board");
+    if (!previewBoard) return;
+    const size = 8;
+    const sample = makeEmptyBoard(size);
+    renderPreviewBoard(previewBoard, sample);
+
+    // Aplica preferências iniciais ao preview (se existirem)
+    const prefs = window.userPreferences || {};
+    // Se existir presetId, aplica cores correspondentes
+    if (prefs.presetId && window.BOARD_PRESETS) {
+      const p = (window.BOARD_PRESETS || []).find(
+        (x) => x.id === prefs.presetId
+      );
+      if (p) {
+        previewBoard.style.setProperty("--light-square", p.boardLight);
+        previewBoard.style.setProperty("--dark-square", p.boardDark);
+        previewBoard.style.setProperty("--white-piece-color-1", p.pieceWhite);
+        previewBoard.style.setProperty("--black-piece-color-1", p.pieceBlack);
+        currentSelectedPresetId = p.id;
+      }
+    } else {
+      if (prefs.boardLight)
+        previewBoard.style.setProperty("--light-square", prefs.boardLight);
+      if (prefs.boardDark)
+        previewBoard.style.setProperty("--dark-square", prefs.boardDark);
+      if (prefs.pieceWhite)
+        previewBoard.style.setProperty(
+          "--white-piece-color-1",
+          prefs.pieceWhite
+        );
+      if (prefs.pieceBlack)
+        previewBoard.style.setProperty(
+          "--black-piece-color-1",
+          prefs.pieceBlack
+        );
+    }
+
+    // highlight preset if selected
+    setTimeout(() => {
+      if (!currentSelectedPresetId) return;
+      document.querySelectorAll(".prefs-preset-btn").forEach((btn) => {
+        btn.style.borderColor = "transparent";
+        btn.style.boxShadow = "none";
+        if (
+          btn.title === currentSelectedPresetId ||
+          btn.title === currentSelectedPresetId
+        ) {
+          btn.style.borderColor = "#f1c40f";
+          btn.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
+        }
+      });
+    }, 120);
+  }
+
+  // --- ADICIONA BOTÃO NO LOBBY E CARREGA PREFERÊNCIAS ---
+  try {
+    const welcomeMsgEl = document.getElementById("lobby-welcome-message");
+    if (welcomeMsgEl && !document.getElementById("customize-visual-open-btn")) {
+      const btn = document.createElement("button");
+      btn.id = "customize-visual-open-btn";
+      btn.textContent = "Personalizar Visual";
+      btn.style.marginLeft = "8px";
+      btn.style.padding = "6px 8px";
+      btn.style.borderRadius = "6px";
+      btn.style.border = "none";
+      btn.style.cursor = "pointer";
+      btn.addEventListener("click", openVisualPrefs);
+      welcomeMsgEl.parentNode.appendChild(btn);
+    }
+    loadAndApplyPreferences();
+  } catch (e) {}
 
   // --- FUNÇÃO DE CONTAGEM REGRESSIVA TORNEIO ---
   function startTournamentTimer() {
@@ -225,6 +436,66 @@ window.initLobby = function (socket, UI) {
       return;
     }
   });
+
+  function openVisualPrefs() {
+    createVisualPrefsUI();
+    const overlay = document.getElementById("visual-prefs-overlay");
+    if (!overlay) return;
+    const defaults = window.userPreferences || {};
+    // determina preset inicial (por presetId salvo, ou primeiro preset disponível)
+    const presets = window.BOARD_PRESETS || [];
+    if (defaults.presetId) currentSelectedPresetId = defaults.presetId;
+    else if (!currentSelectedPresetId && presets.length > 0)
+      currentSelectedPresetId = presets[0].id;
+    overlay.classList.remove("hidden");
+
+    // Atualiza destaque do preset selecionado
+    try {
+      document.querySelectorAll(".prefs-preset-btn").forEach((btn) => {
+        btn.style.borderColor = "transparent";
+        btn.style.boxShadow = "none";
+        const title = btn.title || "";
+        const presets = window.BOARD_PRESETS || [];
+        const p = presets.find(
+          (x) =>
+            x.id === currentSelectedPresetId ||
+            x.name === title ||
+            x.id === title
+        );
+        if (p && p.id === currentSelectedPresetId) {
+          btn.style.borderColor = "#f1c40f";
+          btn.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
+        }
+      });
+    } catch (e) {}
+
+    // Atualiza preview imediatamente
+    try {
+      const previewBoard = document.getElementById("prefs-preview-board");
+      const size = 8;
+      const sample = makeEmptyBoard(size);
+      if (defaults.boardLight)
+        previewBoard.style.setProperty("--light-square", defaults.boardLight);
+      if (defaults.boardDark)
+        previewBoard.style.setProperty("--dark-square", defaults.boardDark);
+      if (defaults.pieceWhite)
+        previewBoard.style.setProperty(
+          "--white-piece-color-1",
+          defaults.pieceWhite
+        );
+      if (defaults.pieceBlack)
+        previewBoard.style.setProperty(
+          "--black-piece-color-1",
+          defaults.pieceBlack
+        );
+      if (window.UI && window.UI.renderBoardInto) {
+        window.UI.renderBoardInto(previewBoard, sample, size);
+        previewBoard
+          .querySelectorAll(".light, .dark")
+          .forEach((sq) => (sq.style.backgroundImage = "none"));
+      }
+    } catch (e) {}
+  }
 
   const refreshLobbyBtn = document.getElementById("refresh-lobby-btn");
   if (refreshLobbyBtn) {
@@ -822,4 +1093,10 @@ window.initLobby = function (socket, UI) {
     closeHistBtn.addEventListener("click", () =>
       document.getElementById("history-overlay").classList.add("hidden")
     );
+
+  // Adicionando a função createVisualPrefsUI para evitar erros de referência
+  function createVisualPrefsUI() {
+    console.log("createVisualPrefsUI foi chamada.");
+    // Aqui você pode adicionar a lógica para criar a interface de preferências visuais
+  }
 };

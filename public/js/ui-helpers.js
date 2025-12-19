@@ -242,8 +242,39 @@ window.UI = {
 
     board.appendChild(fragment);
 
+    // Aplica preferências do usuário (se houver) imediatamente após criar o tabuleiro
+    try {
+      if (window.userPreferences && this.applyPreferences) {
+        this.applyPreferences(window.userPreferences);
+      }
+    } catch (e) {}
+
     board.removeEventListener("click", clickHandler);
     board.addEventListener("click", clickHandler);
+  },
+
+  // Renderiza um tabuleiro dentro de um elemento arbitrário usando a mesma lógica
+  // sem sobrescrever permanentemente o tabuleiro principal.
+  renderBoardInto: function (element, boardState, boardSize) {
+    if (!element) return;
+    // Salva referências originais
+    const origBoard = this.elements.board;
+    const origCache = this.boardCache;
+
+    try {
+      // Temporariamente aponta o UI para o elemento de preview
+      this.elements.board = element;
+      this.boardCache = [];
+      // cria e renderiza usando as funções já existentes
+      this.createBoard(boardSize, function () {});
+      this.renderPieces(boardState, boardSize);
+    } catch (e) {
+      console.error("renderBoardInto error:", e);
+    } finally {
+      // Restaura referencias originais
+      this.elements.board = origBoard;
+      this.boardCache = origCache;
+    }
   },
 
   resetLobbyUI: function () {
@@ -256,6 +287,36 @@ window.UI = {
     if (el.timerSelectionContainer)
       el.timerSelectionContainer.style.display = "flex";
     if (el.lobbyErrorMessage) el.lobbyErrorMessage.textContent = "";
+  },
+
+  applyPreferences: function (prefs) {
+    try {
+      const board = this.elements.board;
+      if (!board) return;
+      if (!prefs) prefs = {};
+      if (prefs.boardLight)
+        board.style.setProperty("--light-square", prefs.boardLight);
+      if (prefs.boardDark)
+        board.style.setProperty("--dark-square", prefs.boardDark);
+      if (prefs.pieceWhite) {
+        board.style.setProperty("--white-piece-color-1", prefs.pieceWhite);
+        // derivado levemente mais escuro para segundo stop
+        board.style.setProperty("--white-piece-color-2", prefs.pieceWhite);
+      }
+      if (prefs.pieceBlack) {
+        board.style.setProperty("--black-piece-color-1", prefs.pieceBlack);
+        board.style.setProperty("--black-piece-color-2", prefs.pieceBlack);
+      }
+      // Remove textura (background-image) das casas para que a cor personalizada seja visível
+      try {
+        const squares = board.querySelectorAll(".light, .dark");
+        squares.forEach((sq) => {
+          sq.style.backgroundImage = "none";
+        });
+      } catch (e) {}
+    } catch (e) {
+      // silencioso
+    }
   },
 
   renderOpenRooms: function (rooms) {
@@ -368,12 +429,12 @@ window.UI = {
         { val: 7, label: "7 segundos" },
         { val: 10, label: "10 segundos" },
         { val: 30, label: "30 segundos" },
-        { val: 40, label: "40 segundos" },
       ];
     } else {
       options = [
-        { val: 40, label: "40 segundos" },
         { val: 60, label: "1 minuto" },
+        { val: 120, label: "2 minutos" },
+        { val: 300, label: "5 minutos" },
       ];
     }
 
@@ -381,33 +442,40 @@ window.UI = {
       const option = document.createElement("option");
       option.value = opt.val;
       option.textContent = opt.label;
-      if (opt.val === 40 || opt.val === 60) option.selected = true;
       select.appendChild(option);
     });
   },
 
-  highlightLastMove: function (lastMove) {
+  markLastMove: function (lastMove) {
     document
       .querySelectorAll(".last-move")
       .forEach((el) => el.classList.remove("last-move"));
+    if (!lastMove) return;
 
-    if (lastMove) {
-      const fromSq =
-        (this.boardCache[lastMove.from.row] &&
-          this.boardCache[lastMove.from.row][lastMove.from.col]) ||
-        document.querySelector(
-          `.square[data-row="${lastMove.from.row}"][data-col="${lastMove.from.col}"]`
-        );
+    const fromSq =
+      (this.boardCache[lastMove.from.row] &&
+        this.boardCache[lastMove.from.row][lastMove.from.col]) ||
+      document.querySelector(
+        `.square[data-row="${lastMove.from.row}"][data-col="${lastMove.from.col}"]`
+      );
 
-      const toSq =
-        (this.boardCache[lastMove.to.row] &&
-          this.boardCache[lastMove.to.row][lastMove.to.col]) ||
-        document.querySelector(
-          `.square[data-row="${lastMove.to.row}"][data-col="${lastMove.to.col}"]`
-        );
+    const toSq =
+      (this.boardCache[lastMove.to.row] &&
+        this.boardCache[lastMove.to.row][lastMove.to.col]) ||
+      document.querySelector(
+        `.square[data-row="${lastMove.to.row}"][data-col="${lastMove.to.col}"]`
+      );
 
-      if (fromSq) fromSq.classList.add("last-move");
-      if (toSq) toSq.classList.add("last-move");
+    if (fromSq) fromSq.classList.add("last-move");
+    if (toSq) toSq.classList.add("last-move");
+  },
+
+  // Compatibilidade: alias para função esperada por gameCore
+  highlightLastMove: function (lastMove) {
+    try {
+      return this.markLastMove(lastMove);
+    } catch (e) {
+      console.warn("highlightLastMove fallback failed", e);
     }
   },
 
@@ -563,6 +631,11 @@ window.UI = {
         this.elements.drawBtn.textContent = "Empate";
       }
     }
+    // Aplica preferências visuais do usuário (se existirem)
+    try {
+      if (window.userPreferences && this.applyPreferences)
+        this.applyPreferences(window.userPreferences);
+    } catch (e) {}
   },
 
   returnToLobbyScreen: function () {

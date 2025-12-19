@@ -1,0 +1,51 @@
+// Lista global de presets de tabuleiro (6 opções)
+window.BOARD_PRESETS = [
+  {
+    id: "classic-wood",
+    name: "Madeira Clássica",
+    boardLight: "#f0d9b5",
+    boardDark: "#b58863",
+    pieceWhite: "#ffffff",
+    pieceBlack: "#222222",
+  },
+  {
+    id: "green-field",
+    name: "Campo Verde",
+    boardLight: "#c9f7d6",
+    boardDark: "#6fbf73",
+    pieceWhite: "#ffffff",
+    pieceBlack: "#0b3b17",
+  },
+  {
+    id: "midnight",
+    name: "Meia-Noite",
+    boardLight: "#2b2f3a",
+    boardDark: "#111216",
+    pieceWhite: "#dfe6ee",
+    pieceBlack: "#0a0a0a",
+  },
+  {
+    id: "sand-sea",
+    name: "Areia & Mar",
+    boardLight: "#f6e9d7",
+    boardDark: "#2b7f88",
+    pieceWhite: "#fff9f0",
+    pieceBlack: "#10343b",
+  },
+  {
+    id: "pastel",
+    name: "Pastel Suave",
+    boardLight: "#ffe3f1",
+    boardDark: "#b28fa6",
+    pieceWhite: "#ffffff",
+    pieceBlack: "#4a2f3a",
+  },
+  {
+    id: "mono-gray",
+    name: "Cinza Minimal",
+    boardLight: "#e6e6e6",
+    boardDark: "#8f8f8f",
+    pieceWhite: "#ffffff",
+    pieceBlack: "#333333",
+  },
+];

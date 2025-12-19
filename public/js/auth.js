@@ -122,6 +122,13 @@ window.initAuth = function (socket, UI) {
         const data = await response.json();
         if (response.ok) {
           window.currentUser = data.user;
+          window.userPreferences = data.user.preferences || {};
+          try {
+            if (window.UI && window.UI.applyPreferences)
+              window.UI.applyPreferences(window.userPreferences);
+          } catch (e) {
+            console.error("applyPreferences failed on login:", e);
+          }
           localStorage.setItem("checkersUserEmail", window.currentUser.email);
 
           document.getElementById("auth-container").style.display = "none";
@@ -247,6 +254,13 @@ window.initAuth = function (socket, UI) {
         const data = await response.json();
         if (response.ok) {
           window.currentUser = data.user;
+          window.userPreferences = data.user.preferences || {};
+          try {
+            if (window.UI && window.UI.applyPreferences)
+              window.UI.applyPreferences(window.userPreferences);
+          } catch (e) {
+            console.error("applyPreferences failed on re-authenticate:", e);
+          }
           document.getElementById("auth-container").style.display = "none";
           document.getElementById("lobby-container").classList.remove("hidden");
 

@@ -53,6 +53,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
+// Evita 404 no favicon solicitando explicitamente um 204 (placeholder)
+app.get("/favicon.ico", (req, res) => res.sendStatus(204));
+
 mongoose
   .connect(MONGO_URI)
   .then(() => console.log("Conectado ao MongoDB Atlas com sucesso!"))
@@ -114,6 +117,7 @@ app.post("/api/login", async (req, res) => {
         username: user.username,
         avatar: user.avatar,
         referralEarnings: user.referralEarnings,
+        preferences: user.preferences || {},
       },
     });
   } catch (error) {
@@ -189,6 +193,7 @@ app.post("/api/user/re-authenticate", async (req, res) => {
         username: user.username,
         avatar: user.avatar,
         referralEarnings: user.referralEarnings,
+        preferences: user.preferences || {},
       },
     });
   } catch (error) {
@@ -222,6 +227,45 @@ app.post("/api/user/history", async (req, res) => {
     res.json(history);
   } catch (err) {
     res.status(500).json({ message: "Erro." });
+  }
+});
+
+// --- ROTAS DE PREFERÊNCIAS DO USUÁRIO ---
+app.get("/api/user/preferences", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ message: "Email obrigatório." });
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user)
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    res.json({ preferences: user.preferences || {} });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Erro." });
+  }
+});
+
+app.put("/api/user/preferences", async (req, res) => {
+  try {
+    const { email, preferences } = req.body;
+    if (!email) return res.status(400).json({ message: "Email obrigatório." });
+    if (!preferences || typeof preferences !== "object")
+      return res.status(400).json({ message: "Preferences inválido." });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user)
+      return res.status(404).json({ message: "Usuário não encontrado." });
+
+    user.preferences = Object.assign(user.preferences || {}, preferences);
+    await user.save();
+
+    res.json({
+      message: "Preferências salvas.",
+      preferences: user.preferences,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Erro ao salvar preferências." });
   }
 });
 
