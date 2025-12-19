@@ -489,17 +489,32 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("timerUpdate", (data) => {
     GameCore.state.lastPacketTime = Date.now();
     GameCore.startWatchdog();
+    // Suporta duas formas de payload: { timerActive, whiteTime, ... } (servidor)
+    // ou { gameState: { timerActive, currentPlayer } , whiteTime, ... } (outras partes)
+    const timerActive =
+      data.timerActive !== undefined
+        ? data.timerActive
+        : data.gameState && data.gameState.timerActive;
+    const currentPlayer =
+      data.currentPlayer !== undefined
+        ? data.currentPlayer
+        : data.gameState && data.gameState.currentPlayer;
+
     GameCore.handleTimerState({
-      timerActive: data.gameState && data.gameState.timerActive,
+      timerActive,
       whiteTime: data.whiteTime,
       blackTime: data.blackTime,
       timeLeft: data.timeLeft,
-      currentPlayer: data.gameState && data.gameState.currentPlayer,
+      currentPlayer,
     });
   });
 
   socket.on("timerPaused", () => {
     GameCore.state.lastPacketTime = Date.now();
+    // Atualiza estado do timer no GameCore para garantir que o timer local pare
+    try {
+      GameCore.handleTimerState({ timerActive: false });
+    } catch (e) {}
     if (UI.elements.timerDisplay)
       UI.elements.timerDisplay.textContent = "Pausado";
   });

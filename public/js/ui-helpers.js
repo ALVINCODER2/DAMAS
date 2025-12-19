@@ -480,11 +480,15 @@ window.UI = {
   },
 
   highlightMandatoryPieces: function (piecesToHighlight) {
+    // Remove marcas anteriores
     document
       .querySelectorAll(".mandatory-capture")
       .forEach((p) => p.classList.remove("mandatory-capture"));
 
-    if (piecesToHighlight && piecesToHighlight.length > 0) {
+    if (!piecesToHighlight || piecesToHighlight.length === 0) return;
+
+    // Aguarda o próximo frame para dar tempo ao renderPieces criar os elementos
+    requestAnimationFrame(() => {
       piecesToHighlight.forEach((pos) => {
         const square =
           (this.boardCache[pos.row] && this.boardCache[pos.row][pos.col]) ||
@@ -492,11 +496,29 @@ window.UI = {
             `.square[data-row="${pos.row}"][data-col="${pos.col}"]`
           );
 
-        if (square && square.firstElementChild) {
-          square.firstElementChild.classList.add("mandatory-capture");
+        if (!square) return;
+
+        // Se a peça já existe, aplica a classe imediatamente
+        const existing = square.querySelector(".piece");
+        if (existing) {
+          existing.classList.add("mandatory-capture");
+          return;
         }
+
+        // Retry curto caso a peça ainda não tenha sido adicionada ao DOM
+        let attempts = 0;
+        const tryAttach = () => {
+          attempts++;
+          const p = square.querySelector(".piece");
+          if (p) {
+            p.classList.add("mandatory-capture");
+          } else if (attempts < 4) {
+            setTimeout(tryAttach, 40);
+          }
+        };
+        tryAttach();
       });
-    }
+    });
   },
 
   highlightValidMoves: function (moves) {
