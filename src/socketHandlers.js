@@ -120,7 +120,7 @@ function scheduleTurnInactivity(roomCode) {
         // Emite estado atualizado do jogo
         const bestCaptures = findBestCaptureMoves(r.game.currentPlayer, r.game);
         const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
-        io.to(r.roomCode).emit("gameStateUpdate", {
+        sendGameState(r.roomCode, {
           ...r.game,
           mandatoryPieces,
         });
@@ -192,7 +192,7 @@ function scheduleTurnInactivity(roomCode) {
             rr.game
           );
           const mandatoryPieces2 = bestCaptures2.map((seq) => seq[0]);
-          io.to(rr.roomCode).emit("gameStateUpdate", {
+          sendGameState(rr.roomCode, {
             ...rr.game,
             mandatoryPieces: mandatoryPieces2,
           });
@@ -236,6 +236,54 @@ function cleanupPreviousRooms(userEmail) {
 
   if (roomsToRemove.length > 0 && io) {
     io.emit("updateLobby", getLobbyInfo());
+  }
+}
+
+// Helper: envia estado completo para jogadores e versão reduzida/throttled para espectadores
+function sendGameState(roomCode, fullState, opts = {}) {
+  try {
+    const room = gameRooms[roomCode];
+    if (!room) return;
+
+    // Envia sempre o estado completo para os jogadores (por socketId)
+    if (room.players && room.players.length > 0) {
+      for (const p of room.players) {
+        try {
+          if (p && p.socketId)
+            io.to(p.socketId).emit("gameStateUpdate", fullState);
+        } catch (e) {}
+      }
+    }
+
+    // Throttle para espectadores: no máximo uma emissão a cada INTERVAL ms
+    const INTERVAL =
+      typeof opts.spectatorInterval === "number" ? opts.spectatorInterval : 350;
+    const now = Date.now();
+    if (!room._lastSpectatorUpdate) room._lastSpectatorUpdate = 0;
+    if (now - room._lastSpectatorUpdate < INTERVAL && !opts.forceSpectator)
+      return;
+    room._lastSpectatorUpdate = now;
+
+    if (room.spectators && room.spectators.size > 0) {
+      // Payload reduzido para espectadores (menos campos pesados)
+      const reduced = {
+        boardState: fullState.boardState,
+        boardSize: fullState.boardSize,
+        currentPlayer: fullState.currentPlayer,
+        lastMove: fullState.lastMove || null,
+        roomCode: roomCode,
+        timerActive: !!fullState.timerActive,
+      };
+      try {
+        for (const specId of Array.from(room.spectators)) {
+          try {
+            io.to(specId).emit("gameStateUpdate", reduced);
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error("sendGameState error:", e);
   }
 }
 
@@ -744,7 +792,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       ? [{ row: to.row, col: to.col }]
       : bestCaptures.map((seq) => seq[0]);
 
-    io.to(roomCode).emit("gameStateUpdate", { ...game, mandatoryPieces });
+    sendGameState(roomCode, { ...game, mandatoryPieces });
 
     // Auto-move se for único E for sequência de captura
     if (canCaptureAgain) {
