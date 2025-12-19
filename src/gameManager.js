@@ -244,16 +244,9 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
             winnerSocket.emit("updateSaldo", { newSaldo: updatedWinner.saldo });
           }
 
-          // Forçar retorno ao lobby do perdedor (se conectado)
-          const loserData = room.players.find(
-            (p) => p.socketId !== winnerData.socketId
-          );
-          if (loserData && loserData.socketId) {
-            try {
-              const s = io.sockets.sockets.get(loserData.socketId);
-              if (s) s.emit("forceReturnToLobby");
-            } catch (e) {}
-          }
+          // NÃO forçar retorno ao lobby do perdedor em partidas clássicas.
+          // Permitimos que o cliente mostre o modal de revanche e aguarde
+          // a decisão dos jogadores antes de redirecionar.
 
           await saveMatchHistory(room, winnerData.user.email, reason);
         } catch (err) {
