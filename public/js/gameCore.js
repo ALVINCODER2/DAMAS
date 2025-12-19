@@ -101,19 +101,19 @@ window.GameCore = (function () {
   function init(socketInstance, uiInstance) {
     state.socket = socketInstance;
     state.UI = uiInstance;
-    
+
     // --- NOVO: Handler para revanche aceita ---
     state.socket.on("rematchAccepted", (data) => {
       const { newRoomCode } = data;
-      
+
       console.log(`[Revanche] Nova sala recebida: ${newRoomCode}`);
-      
+
       // Atualiza o estado local
       state.currentRoom = newRoomCode;
-      
+
       // Atualiza no localStorage
       localStorage.setItem("checkersCurrentRoom", newRoomCode);
-      
+
       // Limpa estado do jogo anterior
       state.boardState = [];
       state.selectedPiece = null;
@@ -125,31 +125,35 @@ window.GameCore = (function () {
       state.pendingBoardSnapshot = null;
       state.drawMovesCounter = 0;
       state.isProcessingRevanche = false;
-      
+
       // Cancela timeout de revanche se existir
       cancelRevancheTimeout();
-      
+
       // Força limpeza de highlights
       if (state.UI.clearHighlights) {
         state.UI.clearHighlights();
       }
-      
+
       // Mostra mensagem de carregamento
       if (state.UI.showMessage) {
-        state.UI.showMessage(`Revanche iniciada! Nova sala: ${newRoomCode}`, "info", 2000);
+        state.UI.showMessage(
+          `Revanche iniciada! Nova sala: ${newRoomCode}`,
+          "info",
+          2000
+        );
       }
-      
+
       // Atualiza display da sala se a função existir
       if (state.UI.updateRoomCodeDisplay) {
         state.UI.updateRoomCodeDisplay(newRoomCode);
       }
     });
-    
+
     // Listener para limpeza de revanche
     state.socket.on("revancheDeclined", (data) => {
       state.isProcessingRevanche = false;
       cancelRevancheTimeout();
-      
+
       if (data && data.message) {
         if (state.UI.showMessage) {
           state.UI.showMessage(data.message, "error", 3000);
@@ -559,7 +563,7 @@ window.GameCore = (function () {
         if (btn) btn.disabled = true;
       });
 
-    let seconds = 5;
+    let seconds = 5; // Mantido 5s conforme solicitado
     const updateStatus = () => {
       document.querySelectorAll(".revanche-status").forEach((el) => {
         if (el) el.textContent = `Aguardando... (${seconds}s)`;
@@ -569,30 +573,12 @@ window.GameCore = (function () {
 
     // Cancela qualquer intervalo anterior
     if (state.revancheInterval) clearInterval(state.revancheInterval);
-    
+
     state.revancheInterval = setInterval(() => {
       seconds--;
       if (seconds <= 0) {
         clearInterval(state.revancheInterval);
         state.revancheInterval = null;
-        state.isProcessingRevanche = false;
-        
-        // Reabilita botões
-        document
-          .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
-          .forEach((btn) => {
-            if (btn) btn.disabled = false;
-          });
-          
-        // Limpa status
-        document.querySelectorAll(".revanche-status").forEach((el) => {
-          if (el) el.textContent = "";
-        });
-        
-        // Garante que o servidor saiba que saímos, evitando início tardio
-        state.socket.emit("leaveEndGameScreen", {
-          roomCode: state.currentRoom,
-        });
         returnToLobbyLogic();
       } else {
         updateStatus();
@@ -606,14 +592,14 @@ window.GameCore = (function () {
       state.revancheInterval = null;
     }
     state.isProcessingRevanche = false;
-    
+
     // Reabilita botões
     document
       .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
       .forEach((btn) => {
         if (btn) btn.disabled = false;
       });
-      
+
     // Limpa status
     document.querySelectorAll(".revanche-status").forEach((el) => {
       if (el) el.textContent = "";
