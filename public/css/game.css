@@ -93,7 +93,7 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(calc(-50% - 6px), -50%);
   width: 118%;
   height: 118%;
   z-index: 1;
@@ -184,21 +184,28 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -52%);
-  font-size: 26px;
+  transform: translate(-50%, -50%);
+  font-size: 34px;
   line-height: 1;
   z-index: 6;
   pointer-events: none;
-  color: #d4af37; /* gold */
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.35);
+  color: #ffd966; /* ouro claro */
+  /* contorno preto forte para contraste em peças escuras */
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000,
+    1px 1px 0 #000, 0 6px 12px rgba(220, 180, 60, 0.35);
 }
 
-/* Ajustes de cor específicos por peça, se necessário */
+/* Ajustes de cor específicos por peça */
 .white-piece.king::after {
-  color: #c99f3a;
+  color: #e0b44e;
+  text-shadow: -1px -1px 0 rgba(0, 0, 0, 0.65), 1px -1px 0 rgba(0, 0, 0, 0.65),
+    -1px 1px 0 rgba(0, 0, 0, 0.65), 1px 1px 0 rgba(0, 0, 0, 0.65),
+    0 6px 10px rgba(220, 180, 60, 0.25);
 }
 .black-piece.king::after {
-  color: #f0f0f0;
+  color: #ffd966;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000,
+    1px 1px 0 #000, 0 6px 12px rgba(220, 180, 60, 0.35);
 }
 
 .piece.mandatory-capture {
