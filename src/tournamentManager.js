@@ -6,8 +6,8 @@ const MatchHistory = require("../models/MatchHistory"); // <--- IMPORTANTE: Adic
 const MIN_PLAYERS = 4;
 const MAX_PLAYERS = 4; // Limite máximo de inscritos
 const ENTRY_FEE = 2.0;
-const TOURNAMENT_HOUR = 0;
-const TOURNAMENT_MINUTE = 18;
+const TOURNAMENT_HOUR = 21;
+const TOURNAMENT_MINUTE = 0;
 
 let io; // Referência ao Socket.IO
 let gameRooms; // Referência aos quartos de jogo (Injeção de Dependência)
