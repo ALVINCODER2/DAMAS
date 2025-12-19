@@ -791,8 +791,8 @@ async function startNextTablitaGame(roomCode) {
 function initializeSocket(ioInstance) {
   io = ioInstance;
 
-  // Feature flag: disable spectating temporarily
-  const SPECTATING_ENABLED = false;
+  // Feature flag: enable spectating for all users (spectators isolated)
+  const SPECTATING_ENABLED = true;
 
   // Inicializa o GameManager com io e gameRooms para evitar erros de dependência circular
   initializeManager(io, gameRooms);
@@ -893,8 +893,11 @@ function initializeSocket(ioInstance) {
       // Defer emissions to next tick to avoid blocking the main flow
       setImmediate(() => {
         try {
-          // If there was a pending revanche request, treat spectating as a decline
-          // AND immediately remove the room and force requester(s) back to lobby.
+          // If there was a pending revanche request, notify requesters that
+          // their request was declined because someone chose to spectate.
+          // IMPORTANT: do NOT delete the room or clear critical timers here;
+          // spectators must never interfere with the players' connection or
+          // lifecycle. We simply inform requesters and clear the request list.
           if (room.revancheRequests && room.revancheRequests.size > 0) {
             try {
               for (const email of Array.from(room.revancheRequests)) {
@@ -902,53 +905,21 @@ function initializeSocket(ioInstance) {
                 if (p && p.socketId) {
                   io.to(p.socketId).emit("revancheDeclined", {
                     message:
-                      "Seu oponente optou por assistir a partida em vez de aceitar a revanche.",
+                      "Seu pedido de revanche foi recusado porque houve um espectador na sala.",
                   });
-                  io.to(p.socketId).emit("forceReturnToLobby");
                 }
               }
             } catch (innerErr) {
               console.error("Error notifying revanche requesters:", innerErr);
             }
 
-            // Clear any timers on the room to avoid leaks
+            // Clear the revanche requests set to avoid further conflicts
             try {
-              if (room.timerInterval) clearInterval(room.timerInterval);
-              if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
-              if (room.disconnectTimeout) clearTimeout(room.disconnectTimeout);
-              if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
-            } catch (tErr) {
-              console.warn("Error clearing room timers before deletion:", tErr);
+              room.revancheRequests = new Set();
+            } catch (sErr) {
+              console.warn("Error clearing revancheRequests set:", sErr);
             }
-
-            // Remove the room immediately and notify lobby
-            try {
-              try {
-                console.log(
-                  `[${new Date().toISOString()}] [SpectatorJoin] Removendo room ${roomCode} (revanche conflict) totalBefore=${
-                    Object.keys(gameRooms).length
-                  }`
-                );
-              } catch (e) {}
-              delete gameRooms[roomCode];
-              if (io) io.emit("updateLobby", getLobbyInfo());
-            } catch (delErr) {
-              console.error(
-                "Error deleting room after spectate/revanche:",
-                delErr
-              );
-            }
-
-            // Notify the spectator that the room was closed
-            try {
-              socket.emit("joinError", {
-                message:
-                  "A partida foi encerrada porque um jogador solicitou revanche e o outro optou por assistir.",
-              });
-            } catch (emitErr) {}
-
-            // Do not proceed with spectator join since room was removed
-            return;
+            // Continue with spectator join; do not alter room timers or delete room.
           }
 
           socket.emit("spectatorJoined", {
@@ -1372,26 +1343,35 @@ function initializeSocket(ioInstance) {
 
     socket.on("disconnect", (reason) => {
       const WAIT_TIME = 60;
+
+      // First, check if this socket was a spectator in any room. Prioritize
+      // spectator removal to avoid mis-classifying spectator disconnects
+      // as player disconnects (which would notify opponents).
+      const specRoomCode = Object.keys(gameRooms).find(
+        (rc) =>
+          gameRooms[rc].spectators && gameRooms[rc].spectators.has(socket.id)
+      );
+      if (specRoomCode) {
+        const room = gameRooms[specRoomCode];
+        try {
+          room.spectators.delete(socket.id);
+          io.to(specRoomCode).emit("spectatorCount", {
+            count: room.spectators ? room.spectators.size : 0,
+          });
+        } catch (e) {
+          console.warn("Error removing spectator on disconnect:", e);
+        }
+        try {
+          socket.leave(specRoomCode);
+        } catch (e) {}
+        // Spectator removal complete — do not proceed to player disconnect logic
+        return;
+      }
+
+      // If not a spectator, try to find if it's a player socket.
       let roomCode = Object.keys(gameRooms).find((rc) =>
         gameRooms[rc].players.some((p) => p.socketId === socket.id)
       );
-
-      // If not a player, check if it's a spectator in any room
-      if (!roomCode) {
-        roomCode = Object.keys(gameRooms).find(
-          (rc) =>
-            gameRooms[rc].spectators && gameRooms[rc].spectators.has(socket.id)
-        );
-        if (roomCode) {
-          const room = gameRooms[roomCode];
-          // remove spectator and notify count
-          room.spectators.delete(socket.id);
-          io.to(roomCode).emit("spectatorCount", {
-            count: room.spectators ? room.spectators.size : 0,
-          });
-          socket.leave(roomCode);
-        }
-      }
 
       if (!roomCode) {
         console.log(

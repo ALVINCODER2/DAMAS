@@ -209,7 +209,19 @@ window.initLobby = function (socket, UI) {
       }
     }
     if (e.target.classList.contains("watch-game-btn")) {
-      alert("Assistir partidas está temporariamente desativado.");
+      const roomCode = e.target.dataset.roomCode;
+      if (!window.currentUser) return alert("Faça login para assistir.");
+      if (!window.currentUser.username) {
+        if (window.enforceUsernameRequirement)
+          window.enforceUsernameRequirement();
+        return;
+      }
+      try {
+        localStorage.setItem("spectateRoom", roomCode);
+        localStorage.setItem("spectatePending", "1");
+      } catch (e) {}
+      // Emit request to server to join as spectator; server will emit spectatorJoined or joinError
+      socket.emit("joinAsSpectator", { roomCode });
       return;
     }
   });
