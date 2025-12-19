@@ -46,9 +46,16 @@
   transform: rotate(180deg) scale(1.05);
 }
 
-#board.board-flipped .king::after {
-  transform: rotate(180deg);
-  display: inline-block;
+#board.board-flipped .piece.king::after {
+  transform: translate(calc(-50% - 6px), -50%) rotate(180deg);
+}
+
+#board.board-flipped .white-piece.king::after {
+  transform: translate(calc(-50% + 2px), -50%) rotate(180deg);
+}
+
+#board.board-flipped .black-piece.king::after {
+  transform: translate(calc(-50% - 6px), -50%) rotate(180deg);
 }
 
 .light {
@@ -193,6 +200,8 @@
   /* contorno preto forte para contraste em peças escuras */
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000,
     1px 1px 0 #000, 0 6px 12px rgba(220, 180, 60, 0.35);
+  /* ajuste fino para centralização visual em peças escuras */
+  transform: translate(calc(-50% - 6px), -50%);
 }
 
 /* Ajustes de cor específicos por peça */
@@ -201,6 +210,8 @@
   text-shadow: -1px -1px 0 rgba(0, 0, 0, 0.65), 1px -1px 0 rgba(0, 0, 0, 0.65),
     -1px 1px 0 rgba(0, 0, 0, 0.65), 1px 1px 0 rgba(0, 0, 0, 0.65),
     0 6px 10px rgba(220, 180, 60, 0.25);
+  /* ajuste fino para centralização visual em peças claras */
+  transform: translate(calc(-50% + 2px), -50%);
 }
 .black-piece.king::after {
   color: #ffd966;
