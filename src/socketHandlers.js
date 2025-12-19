@@ -82,9 +82,40 @@ function scheduleTurnInactivity(roomCode) {
   // limpa qualquer timeout anterior
   if (room.turnInactivityTimeout) clearTimeout(room.turnInactivityTimeout);
 
-  // duração fixa de 10s conforme solicitado
-  const DURATION = 10 * 1000;
+  // calcula duração do timeout de inatividade com base no modo de tempo da sala
+  function getDurationForRoom(r) {
+    if (!r) return 10 * 1000;
+    try {
+      // Prioriza timeControl configurado
+      if (r.timeControl === "match") {
+        // Usa tempo restante do jogador atual (whiteTime / blackTime)
+        const cp = r.game && r.game.currentPlayer;
+        const rem = cp === "b" ? r.whiteTime : r.blackTime;
+        return Math.max(1, typeof rem === "number" ? rem : 10) * 1000;
+      }
+      if (r.timeControl === "move") {
+        // Usa timerDuration (segundos por jogada) caso exista
+        const dur =
+          typeof r.timerDuration === "number"
+            ? r.timerDuration
+            : r.timeLeft || 10;
+        return Math.max(1, dur) * 1000;
+      }
 
+      // Se existir timerActive no game, tentamos usar timeLeft / whiteTime/blackTime
+      if (r.game && r.game.timerActive) {
+        if (typeof r.timeLeft === "number")
+          return Math.max(1, r.timeLeft) * 1000;
+        const cp2 = r.game.currentPlayer;
+        const rem2 = cp2 === "b" ? r.whiteTime : r.blackTime;
+        if (typeof rem2 === "number") return Math.max(1, rem2) * 1000;
+      }
+    } catch (e) {}
+    // fallback padrão 10s
+    return 10 * 1000;
+  }
+
+  const initialDuration = getDurationForRoom(room);
   room.turnInactivityTimeout = setTimeout(() => {
     try {
       const r = gameRooms[roomCode];
@@ -105,8 +136,31 @@ function scheduleTurnInactivity(roomCode) {
         : null;
       const isPresent = !!(sock && sock.connected);
 
-      // Se ausente ou inativo por 10s, passa a vez para o oponente
+      // Se ausente ou inativo por 10s, tratamos de acordo com o modo de tempo
       if (!isPresent) {
+        // Se o jogo tem timer ativo (modo com limite por jogada/partida),
+        // a inatividade deve resultar em perda por tempo — não apenas passar a vez.
+        if (
+          (r.game && r.game.timerActive) ||
+          r.timeControl === "move" ||
+          r.timeControl === "match"
+        ) {
+          try {
+            const loserColor = r.game.currentPlayer;
+            const winnerColor = loserColor === "b" ? "p" : "b";
+            processEndOfGame(
+              winnerColor,
+              loserColor,
+              r,
+              "Tempo esgotado por inatividade"
+            );
+          } catch (e) {
+            console.error("Erro processando perda por tempo (inatividade):", e);
+          }
+          return;
+        }
+
+        // Caso não haja timer ativo, passa a vez ao oponente (auto-pass)
         // Passa a vez
         r.game.currentPlayer = r.game.currentPlayer === "b" ? "p" : "b";
         r.turnInactivityTimeoutReason = "auto-pass";
@@ -157,12 +211,38 @@ function scheduleTurnInactivity(roomCode) {
         scheduleTurnInactivity(roomCode);
       } else {
         // jogador presente; se não jogar dentro de mais 10s, também passamos a vez
-        // Reagenda uma checagem final
+        // Reagenda uma checagem final (usa duração recalculada)
+        const rrDuration = getDurationForRoom(room);
         room.turnInactivityTimeout = setTimeout(() => {
           const rr = gameRooms[roomCode];
           if (!rr || rr.isGameConcluded || !rr.game) return;
-          // Se ainda for o mesmo jogador e não houver movimento (moveHistory não cresceu), passa a vez
-          // Simples heurística: se o último move foi anterior à criação deste timer
+          // Se ainda for o mesmo jogador e não houver movimento (moveHistory não cresceu),
+          // tratamos conforme o modo de tempo: se houver timer ativo, encerramos por perda de tempo;
+          // caso contrário, passa-se a vez.
+          if (
+            (rr.game && rr.game.timerActive) ||
+            rr.timeControl === "move" ||
+            rr.timeControl === "match"
+          ) {
+            try {
+              const loserColor = rr.game.currentPlayer;
+              const winnerColor = loserColor === "b" ? "p" : "b";
+              processEndOfGame(
+                winnerColor,
+                loserColor,
+                rr,
+                "Tempo esgotado por inatividade"
+              );
+            } catch (e) {
+              console.error(
+                "Erro processando perda por tempo (inatividade):",
+                e
+              );
+            }
+            return;
+          }
+
+          // Sem timer ativo: passa a vez
           rr.game.currentPlayer = rr.game.currentPlayer === "b" ? "p" : "b";
           io.to(rr.roomCode).emit("turnPassedDueToInactivity", {
             roomCode: rr.roomCode,
@@ -198,12 +278,12 @@ function scheduleTurnInactivity(roomCode) {
           });
           if (rr.game && rr.game.timerActive) startTimer(rr.roomCode);
           scheduleTurnInactivity(roomCode);
-        }, DURATION);
+        }, rrDuration);
       }
     } catch (err) {
       console.error("Error in scheduleTurnInactivity:", err);
     }
-  }, DURATION);
+  }, initialDuration);
 }
 
 function cleanupPreviousRooms(userEmail) {

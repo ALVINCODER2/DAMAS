@@ -12,17 +12,18 @@
 /* --- TABULEIRO --- */
 #board {
   display: grid;
-  border: 12px solid #382d21;
-  border-radius: 5px;
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+  border: 10px solid var(--board-border, #2b4f3b); /* borda usando variável */
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
 
-  /* Variáveis de cor para personalização (podem ser sobrescritas via JS) */
-  --light-square: #f0d9b5;
-  --dark-square: #b58863;
+  /* Paleta inspirada na referência (bege / marrom profissional) */
+  --light-square: #f4d9b1; /* bege claro (ajustado para referência) */
+  --dark-square: #7a3f1b; /* marrom médio escuro */
+  --board-border: #6b3a20; /* marrom escuro para borda */
   --white-piece-color-1: #ffffff;
-  --white-piece-color-2: #dcdcdc;
-  --black-piece-color-1: #555555;
-  --black-piece-color-2: #1a1a1a;
+  --white-piece-color-2: #e6e6e6;
+  --black-piece-color-1: #2e2e2e;
+  --black-piece-color-2: #0f0f0f;
 
   /* OTIMIZAÇÃO CRÍTICA PARA MOBILE: */
   backface-visibility: hidden;
@@ -52,8 +53,7 @@
 
 .light {
   background-color: var(--light-square);
-  background-image: url("/textures/light-wood.jpg");
-  background-size: cover;
+  background-image: none;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -62,8 +62,7 @@
 
 .dark {
   background-color: var(--dark-square);
-  background-image: url("/textures/dark-wood.jpg");
-  background-size: cover;
+  background-image: none;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -76,8 +75,8 @@
   height: 85%;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 2px 3px 4px rgba(0, 0, 0, 0.4);
-  transition: transform 0.15s linear;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.36), inset 0 4px 10px rgba(255,255,255,0.04);
+  transition: transform 0.12s cubic-bezier(.2,.9,.3,1), box-shadow 0.12s;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -98,7 +97,7 @@
   height: 118%;
   z-index: 1;
   background-color: transparent;
-  border-radius: 10%;
+  border-radius: 50%;
 }
 
 .piece:active {
@@ -111,9 +110,9 @@
 }
 
 .piece.selected {
-  border: 4px solid #2ecc71;
-  box-shadow: 0 0 10px #2ecc71;
-  transform: scale(1.1);
+  border: 3px solid rgba(0,0,0,0.28);
+  box-shadow: 0 12px 26px rgba(0,0,0,0.32);
+  transform: scale(1.06);
   z-index: 10;
 }
 
@@ -126,22 +125,27 @@
   border: 4px solid rgba(224, 224, 224, 0.9);
 }
 
-.black-piece {
-  background: radial-gradient(
-    circle at 30% 30%,
-    var(--black-piece-color-1),
-    var(--black-piece-color-2)
-  );
-  border: 4px solid rgba(0, 0, 0, 0.6);
+.white-piece {
+  /* Peça branca: anéis mais visíveis (repeating-radial) e relevo suave */
+  background-color: var(--white-piece-color-1);
+  background-image:
+    repeating-radial-gradient(circle at 50% 50%, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 2px, transparent 2px, transparent 6px),
+    radial-gradient(circle at 50% 45%, rgba(255,255,255,0.98) 0%, rgba(245,245,245,0.95) 36%, rgba(230,230,230,0.95) 48%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.06) 60%, rgba(0,0,0,0.02) 100%);
+  border: 4px solid rgba(80,60,45,0.14);
+  box-shadow: inset 0 8px 18px rgba(0,0,0,0.08), 0 12px 26px rgba(0,0,0,0.36);
 }
 
-.king::after {
-  content: "♕";
-  font-size: 24px;
-  font-weight: bold;
-  color: gold;
-  text-shadow: 1px 1px 0 #000;
-  position: relative;
+.black-piece {
+  /* Peça preta: anéis sutis mais visíveis e relevo escuro */
+  background-color: var(--black-piece-color-1);
+  background-image:
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 2px, transparent 2px, transparent 6px),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.03) 55%, transparent 56%),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 60%);
+  border: 4px solid rgba(0,0,0,0.45);
+  box-shadow: inset 0 8px 18px rgba(0,0,0,0.5), 0 12px 26px rgba(0,0,0,0.5);
+}
   z-index: 5;
 }
 
@@ -151,8 +155,9 @@
 }
 
 .piece.mandatory-capture {
-  animation: pulse-mandatory 1.5s infinite;
-  box-shadow: 0 0 10px #ff9800;
+  animation: pulse-mandatory 1.2s infinite;
+  /* Mudança: destaque em vermelho (tom profissional) */
+  box-shadow: 0 0 14px rgba(231, 76, 60, 0.95), 0 0 30px rgba(231,76,60,0.18);
 }
 
 @keyframes pulse-mandatory {
@@ -160,7 +165,7 @@
     transform: scale(1);
   }
   50% {
-    transform: scale(1.05);
+    transform: scale(1.06);
   }
   100% {
     transform: scale(1);
@@ -178,7 +183,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(241, 196, 15, 0.4);
+  background-color: rgba(241, 196, 15, 0.22); /* destaque suave */
   z-index: 1;
   pointer-events: none;
 }
@@ -197,7 +202,7 @@
   position: absolute;
   width: 25%;
   height: 25%;
-  background-color: rgba(46, 204, 113, 0.8);
+  background-color: rgba(30, 120, 80, 0.7); /* verde sutil */
   border-radius: 50%;
   pointer-events: none;
 }
