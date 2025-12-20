@@ -4,6 +4,50 @@
 document.addEventListener("DOMContentLoaded", () => {
   UI.init();
 
+  // Se o usuário ainda não ativou som, mostra botão visível para ativar (ajuda em abas em background)
+  try {
+    const soundPref = localStorage.getItem("soundEnabled");
+    if (!soundPref) {
+      const existing = document.getElementById("enable-sound-btn");
+      if (!existing) {
+        const btn = document.createElement("button");
+        btn.id = "enable-sound-btn";
+        btn.textContent = "Ativar Som";
+        btn.title = "Clique para ativar alertas sonoros deste site";
+        btn.style.cssText =
+          "position:fixed;right:18px;bottom:18px;padding:10px 14px;background:#f1c40f;color:#042; border:none;border-radius:8px;z-index:2147483647;box-shadow:0 6px 20px rgba(0,0,0,0.4);cursor:pointer;font-weight:700;";
+        btn.addEventListener("click", async () => {
+          try {
+            // enable sound via UI helper
+            if (window.UI && window.UI.enableSound)
+              await window.UI.enableSound();
+            try {
+              localStorage.setItem("soundEnabled", "true");
+            } catch (e) {}
+
+            // solicitar permissão de Notificação para complementar o alerta sonoro
+            try {
+              if (
+                "Notification" in window &&
+                Notification.permission !== "granted"
+              ) {
+                Notification.requestPermission().then(() => {});
+              }
+            } catch (e) {}
+
+            btn.remove();
+          } catch (e) {
+            try {
+              localStorage.setItem("soundEnabled", "true");
+            } catch (e) {}
+            btn.remove();
+          }
+        });
+        document.body.appendChild(btn);
+      }
+    }
+  } catch (e) {}
+
   const socket = io({ autoConnect: false });
   // --- DEBUG: registrar eventos importantes para envio ao suporte ---
   window.__CLIENT_DEBUG = true; // defina false se quiser silenciar
@@ -46,17 +90,108 @@ document.addEventListener("DOMContentLoaded", () => {
       if (window.currentUser && data && data.opponent) {
         // Segurança: não tocar se o opponent for o próprio usuário
         if (data.opponent === window.currentUser.email) return;
-        if (window.UI && window.UI.playAudio) {
-          window.UI.playAudio("join");
-        } else {
-          // Fallback simples
+        // Tenta tocar via player (pode retornar Promise)
+        try {
+          if (window.UI && window.UI.playAudio) window.UI.playAudio("join");
+        } catch (e) {
           try {
             const a = new Audio("/sounds/join.mp3");
-            a.volume = 0.8;
+            a.volume = 0.95;
             a.play().catch(() => {});
           } catch (e) {}
         }
+
+        // Flash no título da aba para chamar atenção quando em background
+        try {
+          const orig = document.title;
+          let flashes = 0;
+          const maxFlashes = 8;
+          const iv = setInterval(() => {
+            try {
+              document.title = flashes % 2 === 0 ? "⚠️ Jogo iniciando!" : orig;
+              flashes++;
+              if (flashes > maxFlashes) {
+                clearInterval(iv);
+                document.title = orig;
+              }
+            } catch (e) {}
+          }, 500);
+        } catch (e) {}
+
+        // Notificação de desktop (se permitida)
+        try {
+          if (
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
+            const n = new Notification("Oponente entrou — partida iniciando", {
+              body: `Oponente: ${data.opponent.split("@")[0]}`,
+              icon: "/favicon-32x32.png",
+            });
+            try {
+              n.onclick = () => window.focus();
+            } catch (e) {}
+          }
+        } catch (e) {}
       }
+    } catch (e) {}
+  });
+
+  // Alerta imediato quando o entrante clicar em 'Aceitar' (mais reativo)
+  socket.on("opponentClickedAccept", (data) => {
+    try {
+      if (!data) return;
+      if (window.currentUser && data.email === window.currentUser.email) return;
+      // Tocar som e notificar (sem aguardar processamento do servidor)
+      try {
+        if (window.UI && window.UI.playAudio) window.UI.playAudio("join");
+      } catch (e) {
+        try {
+          const a = new Audio("/sounds/join.mp3");
+          a.volume = 0.95;
+          a.play().catch(() => {});
+        } catch (e) {}
+      }
+
+      // Notificação opcional
+      try {
+        if ("Notification" in window && Notification.permission === "granted") {
+          const n = new Notification("Alerta: jogador aceitou a partida", {
+            body: `Oponente: ${data.email.split("@")[0]}`,
+            icon: "/favicon-32x32.png",
+          });
+          try {
+            n.onclick = () => window.focus();
+          } catch (e) {}
+        }
+      } catch (e) {}
+
+      // Flash no título para chamar atenção
+      try {
+        const orig = document.title;
+        let flashes = 0;
+        const iv = setInterval(() => {
+          try {
+            document.title = flashes % 2 === 0 ? "🔔 Jogador aceitou!" : orig;
+            flashes++;
+            if (flashes > 6) {
+              clearInterval(iv);
+              document.title = orig;
+            }
+          } catch (e) {}
+        }, 400);
+      } catch (e) {}
+    } catch (e) {}
+  });
+
+  // Notifica criador se a aceitação do entrante falhar (ex: saldo insuficiente)
+  socket.on("opponentAcceptFailed", (data) => {
+    try {
+      if (!data) return;
+      const who = data.email ? data.email.split("@")[0] : "Oponente";
+      try {
+        alert(`${who} tentou aceitar, mas falhou: ${data.reason || "Erro"}`);
+      } catch (e) {}
     } catch (e) {}
   });
   const isGamePage = window.location.pathname.includes("jogo.html");
@@ -138,6 +273,24 @@ document.addEventListener("DOMContentLoaded", () => {
   window.currentUser = null;
   window.isSpectator = false;
 
+  // Ao retornar ao foco ou aba visível, tenta retomar AudioContext se som ativado
+  try {
+    const tryResumeAudio = async () => {
+      try {
+        const soundPref = localStorage.getItem("soundEnabled");
+        if (soundPref && window.UI && window.UI.enableSound) {
+          await window.UI.enableSound();
+          if (window.__CLIENT_DEBUG)
+            console.log("[AUDIO] attempted resume on visibility/focus");
+        }
+      } catch (e) {}
+    };
+    window.addEventListener("focus", tryResumeAudio);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") tryResumeAudio();
+    });
+  } catch (e) {}
+
   // Toast removido em limpeza de produção
 
   // --- RESTAURAÇÃO DE SESSÃO (Apenas na página de jogo) ---
@@ -200,6 +353,10 @@ document.addEventListener("DOMContentLoaded", () => {
     socket.emit("leaveEndGameScreen", {
       roomCode: GameCore.state.currentRoom,
     });
+    try {
+      localStorage.removeItem("spectateRoom");
+      localStorage.removeItem("spectatePending");
+    } catch (e) {}
     GameCore.returnToLobbyLogic();
   });
 
@@ -245,10 +402,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Prioritize pending spectate requests to avoid rejoining as player
     try {
       const spectateRoom = localStorage.getItem("spectateRoom");
-      const spectatePending = localStorage.getItem("spectatePending");
-      if (spectateRoom && spectatePending === "1") {
+      // If we have a spectateRoom saved, always try to rejoin as spectator.
+      // This prevents accidental rejoin as player when the user was spectating
+      // and refreshes the page.
+      if (spectateRoom) {
         socket.emit("joinAsSpectator", { roomCode: spectateRoom });
-        localStorage.removeItem("spectatePending");
+        try {
+          localStorage.removeItem("spectatePending");
+        } catch (e) {}
         // Do not attempt to rejoin as player when spectating
         return;
       }
@@ -269,14 +430,15 @@ document.addEventListener("DOMContentLoaded", () => {
         UI.elements.gameContainer.classList.remove("hidden");
       }
     }
-    // Fallback: reemitir pedido de espectador caso haja um pedido pendente salvo
+    // Fallback: if a spectateRoom is saved (e.g. after refresh), ensure we
+    // request spectator join so the client is correctly put into spectator mode.
     try {
       const spectateRoom = localStorage.getItem("spectateRoom");
-      const spectatePending = localStorage.getItem("spectatePending");
-      if (spectateRoom && spectatePending === "1") {
+      if (spectateRoom) {
         socket.emit("joinAsSpectator", { roomCode: spectateRoom });
-        // limpa flag para não repetir
-        localStorage.removeItem("spectatePending");
+        try {
+          localStorage.removeItem("spectatePending");
+        } catch (e) {}
       }
     } catch (e) {}
   });

@@ -109,6 +109,68 @@ window.UI = {
     this._minIntervalMs = { join: 1000, move: 200, capture: 200 };
   },
 
+  // Força o desbloqueio de áudio via interação do usuário.
+  enableSound: async function () {
+    try {
+      // Marca local para evitar pedir sempre
+      try {
+        localStorage.setItem("soundEnabled", "true");
+      } catch (e) {}
+
+      if (!this.audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) this.audioCtx = new Ctx();
+      }
+      if (this.audioCtx && this.audioCtx.state === "suspended") {
+        try {
+          await this.audioCtx.resume();
+        } catch (e) {}
+      }
+
+      // Tenta tocar um som de confirmação: primeiro elemento, depois WebAudio buzzer
+      try {
+        if (this.elements && this.elements.joinSound) {
+          try {
+            this.elements.joinSound.currentTime = 0;
+            await this.elements.joinSound.play();
+            this.elements.joinSound.pause();
+            this.elements.joinSound.currentTime = 0;
+            return true;
+          } catch (e) {}
+        }
+      } catch (e) {}
+
+      // Fallback: tocar breve tom via WebAudio (curto beep)
+      try {
+        if (this.audioCtx) {
+          const ctx = this.audioCtx;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = "sine";
+          o.frequency.setValueAtTime(880, ctx.currentTime);
+          g.gain.setValueAtTime(0.001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start();
+          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+          setTimeout(() => {
+            try {
+              o.stop();
+              o.disconnect();
+              g.disconnect();
+            } catch (e) {}
+          }, 300);
+          return true;
+        }
+      } catch (e) {}
+
+      return false;
+    } catch (e) {
+      return false;
+    }
+  },
+
   // --- FEEDBACK TÁTIL (VIBRAÇÃO) ---
   triggerHaptic: function () {
     if ("vibrate" in navigator) {
@@ -642,11 +704,17 @@ window.UI = {
       if (!el) return false;
       try {
         el.muted = false;
-        el.volume = el.volume || 0.8;
+        // Garantia: para join desejar volume alto; evita caso volume tenha sido zerado
+        if (el.id === "join-sound") el.volume = 0.95;
+        else el.volume = el.volume || 0.8;
         el.currentTime = 0;
         await el.play();
+        if (window.__CLIENT_DEBUG)
+          console.log("[AUDIO] played element:", el.id);
         return true;
       } catch (e) {
+        if (window.__CLIENT_DEBUG)
+          console.warn("[AUDIO] tryPlayElement failed for", el && el.id, e);
         return false;
       }
     };
@@ -687,7 +755,7 @@ window.UI = {
       }
     };
 
-    (async () => {
+    return (async () => {
       // 1) Tenta diretamente no elemento (rápido)
       if (await tryPlayElement(soundEl)) return;
 
@@ -700,6 +768,36 @@ window.UI = {
 
       // 3) Fallback: WebAudio (decodificado) se disponível
       if (await playViaAudioContext(soundEl)) return;
+
+      // 4) Fallback final: gerar beep curto via WebAudio para garantir um alerta
+      try {
+        if (self.audioCtx) {
+          if (window.__CLIENT_DEBUG)
+            console.log("[AUDIO] playing final beep fallback");
+          const ctx = self.audioCtx;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = "sine";
+          o.frequency.setValueAtTime(880, ctx.currentTime);
+          g.gain.setValueAtTime(0.001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start();
+          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+          setTimeout(() => {
+            try {
+              o.stop();
+              o.disconnect();
+              g.disconnect();
+            } catch (e) {}
+          }, 300);
+          return;
+        }
+      } catch (e) {
+        if (window.__CLIENT_DEBUG)
+          console.warn("[AUDIO] final beep fallback failed", e);
+      }
     })();
   },
 

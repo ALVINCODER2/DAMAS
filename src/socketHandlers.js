@@ -138,6 +138,16 @@ function scheduleTurnInactivity(roomCode) {
 
       // Se ausente ou inativo por 10s, tratamos de acordo com o modo de tempo
       if (!isPresent) {
+        console.log(
+          `[DEBUG scheduleTurnInactivity] player absent check: room=${roomCode} currentPlayer=${currentPlayerColor} currentSocketId=${currentSocketId} playersMapping=${JSON.stringify(
+            r.game.players
+          )} roomPlayers=${JSON.stringify(
+            r.players.map((p) => ({
+              email: p.user.email,
+              socketId: p.socketId,
+            }))
+          )}`
+        );
         // Se o jogo tem timer ativo (modo com limite por jogada/partida),
         // a inatividade deve resultar em perda por tempo — não apenas passar a vez.
         if (
@@ -1197,6 +1207,19 @@ function initializeSocket(ioInstance) {
         return;
       }
 
+      // Notifica imediatamente o criador que o entrante clicou em 'Aceitar'
+      try {
+        const creatorSocket = room.players[0] && room.players[0].socketId;
+        if (creatorSocket && creatorSocket !== socket.id) {
+          io.to(creatorSocket).emit("opponentClickedAccept", {
+            email: data.user.email,
+            roomCode,
+          });
+        }
+      } catch (e) {
+        console.error("Erro emitindo opponentClickedAccept:", e);
+      }
+
       const creatorEmail = room.players[0].user.email;
       const joinerEmail = socket.userData.email;
       const bet = room.bet;
@@ -1237,6 +1260,16 @@ function initializeSocket(ioInstance) {
           { $set: { saldo: { $round: [{ $add: ["$saldo", bet] }, 2] } } },
         ]);
         socket.emit("joinError", { message: "Saldo insuficiente." });
+        // Notifica o criador que a aceitação falhou
+        try {
+          const creatorSocket = room.players[0] && room.players[0].socketId;
+          if (creatorSocket && creatorSocket !== socket.id) {
+            io.to(creatorSocket).emit("opponentAcceptFailed", {
+              email: joinerEmail,
+              reason: "Saldo insuficiente",
+            });
+          }
+        } catch (e) {}
         return;
       }
 
@@ -1450,6 +1483,20 @@ function initializeSocket(ioInstance) {
         }
         socket.join(roomCode);
 
+        // Se houver um timeout de inatividade de turno pendente (possivelmente
+        // criado antes da reconexão), limpe-o para evitar que seja disparado
+        // contra um socketId antigo. Em seguida, reagendamos a verificação
+        // de inatividade com os dados atualizados.
+        try {
+          if (room.turnInactivityTimeout) {
+            clearTimeout(room.turnInactivityTimeout);
+            room.turnInactivityTimeout = null;
+            console.log(
+              `[Socket] rejoinActiveGame: cleared stale turnInactivityTimeout for room=${roomCode} socket=${socket.id}`
+            );
+          }
+        } catch (e) {}
+
         let timeData = {};
         if (room.timeControl === "match") {
           timeData = { whiteTime: room.whiteTime, blackTime: room.blackTime };
@@ -1488,6 +1535,10 @@ function initializeSocket(ioInstance) {
               timerActive: room.game ? !!room.game.timerActive : false,
             });
           }
+          // Reagenda verificação de inatividade com os dados atualizados
+          try {
+            scheduleTurnInactivity(roomCode);
+          } catch (e) {}
         }
       }
     });
