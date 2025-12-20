@@ -86,6 +86,12 @@ function scheduleTurnInactivity(roomCode) {
   function getDurationForRoom(r) {
     if (!r) return 10 * 1000;
     try {
+      // Se o jogo acabou de iniciar (primeiro lance ainda não ocorreu),
+      // damos uma janela de graça maior para evitar encerramentos
+      // instantâneos causados por timeouts padrão curtos.
+      if (r.game && r.game.isFirstMove) {
+        return Math.max(10 * 1000, 60 * 1000); // 60s de graça no primeiro lance
+      }
       // Prioriza timeControl configurado
       if (r.timeControl === "match") {
         // Usa tempo restante do jogador atual (whiteTime / blackTime)
