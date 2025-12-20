@@ -685,7 +685,7 @@ async function startGameLogic(room) {
     } catch (e) {}
   }
 
-  // If no move is made within 30 seconds from game start, refund both players and remove the room
+  // If no move is made within 20 seconds from game start, refund both players and remove the room
   try {
     if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
     room.firstMoveTimeout = setTimeout(async () => {
@@ -696,53 +696,18 @@ async function startGameLogic(room) {
         if (!g) return;
         // If no moves were made yet
         if (!g.moveHistory || g.moveHistory.length === 0) {
-          // Se for partida de torneio, NÃO reembolsar automaticamente.
-          // Em vez disso, aplicamos regra de inatividade/auto-pass.
+          // Se for partida de torneio, NÃO reembolsar automaticamente;
+          // aplicamos regras de inatividade específicas.
           if (currentRoom.isTournament) {
             console.log(
-              `[GameWatchdog] Torneio: sem movimento em 30s na sala ${room.roomCode}. Aplicando regras de inatividade (auto-pass).`
+              `[GameWatchdog] Torneio: sem movimento em 20s na sala ${room.roomCode}. Aplicando regras de inatividade (auto-pass).`
             );
-            // Inicia verificação de inatividade por turno (10s)
             scheduleTurnInactivity(currentRoom.roomCode);
             return;
           }
 
-          // Antes de reembolsar/remover, verifique se ao menos um jogador está conectado.
-          const connectedPlayers = currentRoom.players.filter((p) => {
-            try {
-              return (
-                p.socketId &&
-                io.sockets.sockets.get(p.socketId) &&
-                io.sockets.sockets.get(p.socketId).connected
-              );
-            } catch (e) {
-              return false;
-            }
-          }).length;
-
-          if (connectedPlayers > 0) {
-            // Há jogadores presentes — adie a ação para evitar fechar sala enquanto jogadores estão presentes.
-            console.log(
-              `[GameWatchdog] Sala ${room.roomCode} sem movimento em 30s, porém ${connectedPlayers} jogador(es) conectados. Adiando verificação.`
-            );
-            // Reagende outra verificação em 30s (apenas uma tentativa adicional para evitar loops infinitos)
-            try {
-              if (currentRoom.firstMoveTimeout)
-                clearTimeout(currentRoom.firstMoveTimeout);
-              currentRoom.firstMoveTimeout = setTimeout(() => {
-                // reusar o mesmo handler: chama a função anônima novamente
-                // para simplicidade, apenas logamos e deixamos a próxima execução
-                // do timeout decidir (poderia implementar um contador de tentativas)
-                console.log(
-                  `[GameWatchdog] Re-checking first-move for room ${room.roomCode}`
-                );
-              }, 30 * 1000);
-            } catch (e) {}
-            return;
-          }
-
           console.log(
-            `[GameWatchdog] No moves in 30s for room ${room.roomCode}. Refunding and removing room.`
+            `[GameWatchdog] No moves in 20s for room ${room.roomCode}. Refunding and removing room.`
           );
 
           // Refund each player and emit balance + redirect event
@@ -802,7 +767,7 @@ async function startGameLogic(room) {
       } catch (err) {
         console.error("Error in firstMove timeout handler:", err);
       }
-    }, 30 * 1000);
+    }, 20 * 1000);
   } catch (err) {
     console.error("Error scheduling firstMove timeout:", err);
   }
