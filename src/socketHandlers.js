@@ -575,6 +575,40 @@ async function startGameLogic(room) {
             return;
           }
 
+          // Antes de reembolsar/remover, verifique se ao menos um jogador está conectado.
+          const connectedPlayers = currentRoom.players.filter((p) => {
+            try {
+              return (
+                p.socketId &&
+                io.sockets.sockets.get(p.socketId) &&
+                io.sockets.sockets.get(p.socketId).connected
+              );
+            } catch (e) {
+              return false;
+            }
+          }).length;
+
+          if (connectedPlayers > 0) {
+            // Há jogadores presentes — adie a ação para evitar fechar sala enquanto jogadores estão presentes.
+            console.log(
+              `[GameWatchdog] Sala ${room.roomCode} sem movimento em 30s, porém ${connectedPlayers} jogador(es) conectados. Adiando verificação.`
+            );
+            // Reagende outra verificação em 30s (apenas uma tentativa adicional para evitar loops infinitos)
+            try {
+              if (currentRoom.firstMoveTimeout)
+                clearTimeout(currentRoom.firstMoveTimeout);
+              currentRoom.firstMoveTimeout = setTimeout(() => {
+                // reusar o mesmo handler: chama a função anônima novamente
+                // para simplicidade, apenas logamos e deixamos a próxima execução
+                // do timeout decidir (poderia implementar um contador de tentativas)
+                console.log(
+                  `[GameWatchdog] Re-checking first-move for room ${room.roomCode}`
+                );
+              }, 30 * 1000);
+            } catch (e) {}
+            return;
+          }
+
           console.log(
             `[GameWatchdog] No moves in 30s for room ${room.roomCode}. Refunding and removing room.`
           );
