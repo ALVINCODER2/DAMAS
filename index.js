@@ -36,6 +36,10 @@ const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 const io = socketIo(server, {
   pingInterval: 25000,
   pingTimeout: 60000,
+  // Forçar uso de WebSocket para reduzir latência (evita polling)
+  transports: ["websocket"],
+  // Habilita compressão de mensagens do Engine.IO/WS
+  perMessageDeflate: true,
   cors: {
     origin: "*",
     methods: ["GET", "POST"],

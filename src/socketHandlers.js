@@ -650,6 +650,11 @@ async function startGameLogic(room) {
     roomCode: room.roomCode,
     mandatoryPieces,
   };
+  // Inicializa/garante sequência da sala para detecção de dessincronização
+  try {
+    room.seq = room.seq || 0;
+    gameState.seq = room.seq;
+  } catch (e) {}
   console.log(
     `[DEBUG startGameLogic] room=${room.roomCode} players=${room.players
       .map((p) => p.user.email)
@@ -820,6 +825,22 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
   // Validação agora considera peças capturadas (fantasmas)
   const isValid = isMoveValid(from, to, playerColor, game);
+
+  // Validação extra de captura obrigatória no servidor:
+  try {
+    const bestCaps = findBestCaptureMoves(game.currentPlayer, game);
+    if (bestCaps && bestCaps.length > 0 && !isValid.isCapture) {
+      // Jogada inválida: existe captura obrigatória
+      if (socketId) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket)
+          socket.emit("invalidMove", { message: "Captura obrigatória." });
+      }
+      return;
+    }
+  } catch (e) {
+    console.error("Erro validando captura obrigatória:", e);
+  }
 
   if (isValid.valid) {
     const pieceBeforeMove = game.boardState[from.row][from.col];
@@ -1032,6 +1053,29 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       ? [{ row: to.row, col: to.col }]
       : bestCaptures.map((seq) => seq[0]);
 
+    // Incrementa um número de sequência simples para detectar dessincronizações
+    try {
+      room.seq = (room.seq || 0) + 1;
+      game.seq = room.seq;
+    } catch (e) {}
+
+    // Emite apenas o delta do movimento para reduzir payloads (clientes podem animar localmente)
+    try {
+      const pieceMovedPayload = {
+        lastMove: game.lastMove,
+        captured: game.turnCapturedPieces ? [...game.turnCapturedPieces] : [],
+        currentPlayer: game.currentPlayer,
+        mandatoryPieces,
+        seq: game.seq,
+        boardSize: game.boardSize,
+      };
+      io.to(roomCode).emit("pieceMoved", pieceMovedPayload);
+    } catch (e) {
+      console.error("Erro emitindo pieceMoved:", e);
+    }
+
+    // Ainda emitimos o estado completo para jogadores conectados por compatibilidade,
+    // mas a camada cliente pode optar por ignorar esse payload quando receber o delta.
     sendGameState(roomCode, { ...game, mandatoryPieces });
 
     // Auto-move se for único E for sequência de captura
@@ -1642,10 +1686,20 @@ function initializeSocket(ioInstance) {
         timeData = { timeLeft: room.timeLeft };
       }
 
-      socket.emit("gameResumed", {
-        gameState: room.game,
-        ...timeData,
-      });
+      try {
+        room.seq = room.seq || 0;
+        // assegura que o game enviado contenha a sequência atual
+        const gameCopy = Object.assign({}, room.game, { seq: room.seq });
+        socket.emit("gameResumed", {
+          gameState: gameCopy,
+          ...timeData,
+        });
+      } catch (e) {
+        socket.emit("gameResumed", {
+          gameState: room.game,
+          ...timeData,
+        });
+      }
     });
 
     socket.on("cancelRoom", (data) => {

@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   } catch (e) {}
 
-  const socket = io({ autoConnect: false });
+  const socket = io({ autoConnect: false, transports: ["websocket"] });
   // --- DEBUG: registrar eventos importantes para envio ao suporte ---
   window.__CLIENT_DEBUG = true; // defina false se quiser silenciar
   window.setClientDebug = function (v) {
@@ -496,6 +496,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       GameCore.state.currentRoom = gameState.roomCode;
 
+      // Atualiza sequência local inicial (se fornecida pelo servidor)
+      try {
+        GameCore.state.lastAppliedSeq =
+          typeof gameState.seq === "number" ? gameState.seq : 0;
+      } catch (e) {}
+
       if (!window.isSpectator) {
         localStorage.setItem("checkersCurrentRoom", GameCore.state.currentRoom);
         GameCore.state.myColor =
@@ -734,6 +740,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     GameCore.state.currentBoardSize = data.gameState.boardSize;
     GameCore.state.boardState = data.gameState.boardState;
+    try {
+      GameCore.state.lastAppliedSeq =
+        typeof data.gameState.seq === "number"
+          ? data.gameState.seq
+          : GameCore.state.lastAppliedSeq || 0;
+    } catch (e) {}
     UI.createBoard(GameCore.state.currentBoardSize, GameCore.handleBoardClick);
     UI.renderPieces(GameCore.state.boardState, GameCore.state.currentBoardSize);
 

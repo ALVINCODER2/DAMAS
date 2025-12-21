@@ -100,6 +100,128 @@ window.GameCore = (function () {
   function init(socketInstance, uiInstance) {
     state.socket = socketInstance;
     state.UI = uiInstance;
+    // Sequência local para detectar dessincronizações
+    state.lastAppliedSeq = state.lastAppliedSeq || 0;
+
+    // Handler para receber apenas o delta do movimento (optimizado)
+    try {
+      state.socket.on("pieceMoved", async (payload) => {
+        try {
+          if (!payload) return;
+          // Se não estivermos na mesma sala, ignorar
+          if (!state.currentRoom) return;
+
+          // Seq check: se houver gap, solicita sync completo
+          if (
+            typeof payload.seq === "number" &&
+            payload.seq !== state.lastAppliedSeq + 1
+          ) {
+            // Solicita estado completo ao servidor
+            try {
+              state.socket.emit("requestGameSync", {
+                roomCode: state.currentRoom,
+              });
+            } catch (e) {}
+            return;
+          }
+
+          // Aplica delta: move peça localmente
+          if (payload.lastMove) {
+            const from = payload.lastMove.from;
+            const to = payload.lastMove.to;
+
+            // Atualiza lastAppliedSeq antes da animação para evitar races
+            if (typeof payload.seq === "number")
+              state.lastAppliedSeq = payload.seq;
+
+            // Se tivermos um optimistic move igual, marca como meu movimento
+            const isMyMove =
+              state.lastOptimisticMove &&
+              payload.lastMove.moveId === state.lastOptimisticMove.moveId;
+
+            // Atualiza state.boardState de forma defensiva
+            try {
+              if (
+                !Array.isArray(state.boardState) ||
+                state.boardState.length === 0
+              ) {
+                // nothing to update, request full sync
+                state.socket.emit("requestGameSync", {
+                  roomCode: state.currentRoom,
+                });
+                return;
+              }
+
+              const movingPiece = state.boardState[from.row][from.col];
+              state.boardState[to.row][to.col] = movingPiece;
+              state.boardState[from.row][from.col] = 0;
+
+              // Remove capturadas (se houver)
+              if (
+                Array.isArray(payload.captured) &&
+                payload.captured.length > 0
+              ) {
+                payload.captured.forEach((pos) => {
+                  if (
+                    state.boardState[pos.row] &&
+                    typeof state.boardState[pos.row][pos.col] !== "undefined"
+                  ) {
+                    state.boardState[pos.row][pos.col] = 0;
+                  }
+                });
+              }
+            } catch (e) {
+              console.error("Erro aplicando delta localmente:", e);
+              state.socket.emit("requestGameSync", {
+                roomCode: state.currentRoom,
+              });
+              return;
+            }
+
+            // Animação e render
+            try {
+              if (state.UI && state.UI.animatePieceMove) {
+                await state.UI.animatePieceMove(
+                  from,
+                  to,
+                  payload.boardSize || state.currentBoardSize
+                );
+              }
+            } catch (e) {}
+
+            // Renderiza e destaca peças obrigatórias
+            state.UI.renderPieces(
+              state.boardState,
+              payload.boardSize || state.currentBoardSize
+            );
+            if (state.UI && state.UI.highlightMandatoryPieces)
+              state.UI.highlightMandatoryPieces(payload.mandatoryPieces || []);
+
+            // Atualiza turno
+            if (payload.currentPlayer)
+              state.lastServerCurrentPlayer = payload.currentPlayer;
+
+            // Tocar áudio correspondente
+            try {
+              if (
+                Array.isArray(payload.captured) &&
+                payload.captured.length > 0
+              )
+                state.UI.playAudio("capture");
+              else state.UI.playAudio("move");
+            } catch (e) {}
+
+            // Se era nosso optimistic move, limpa estado otimista
+            if (isMyMove) {
+              state.lastOptimisticMove = null;
+              state.pendingBoardSnapshot = null;
+            }
+          }
+        } catch (err) {
+          console.error("pieceMoved handler error:", err);
+        }
+      });
+    } catch (e) {}
   }
 
   // --- WATCHDOG (Sincronização) ---
