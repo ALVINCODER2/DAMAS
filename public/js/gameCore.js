@@ -178,24 +178,29 @@ window.GameCore = (function () {
               return;
             }
 
-            // Animação e render
-            try {
-              if (state.UI && state.UI.animatePieceMove) {
-                await state.UI.animatePieceMove(
-                  from,
-                  to,
-                  payload.boardSize || state.currentBoardSize
-                );
-              }
-            } catch (e) {}
+            // Se for o mesmo movimento otimista do cliente, evitar
+            // re-executar animação e render completo (economiza CPU em dispositivos fracos)
+            if (!isMyMove) {
+              try {
+                if (state.UI && state.UI.animatePieceMove) {
+                  await state.UI.animatePieceMove(
+                    from,
+                    to,
+                    payload.boardSize || state.currentBoardSize
+                  );
+                }
+              } catch (e) {}
 
-            // Renderiza e destaca peças obrigatórias
-            state.UI.renderPieces(
-              state.boardState,
-              payload.boardSize || state.currentBoardSize
-            );
-            if (state.UI && state.UI.highlightMandatoryPieces)
-              state.UI.highlightMandatoryPieces(payload.mandatoryPieces || []);
+              // Renderiza e destaca peças obrigatórias apenas para movimentos não-otimistas
+              state.UI.renderPieces(
+                state.boardState,
+                payload.boardSize || state.currentBoardSize
+              );
+              if (state.UI && state.UI.highlightMandatoryPieces)
+                state.UI.highlightMandatoryPieces(
+                  payload.mandatoryPieces || []
+                );
+            }
 
             // Atualiza turno
             if (payload.currentPlayer)
