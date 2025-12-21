@@ -1045,6 +1045,14 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       } catch (e) {}
     } else {
       game.mustCaptureWith = { row: to.row, col: to.col };
+      // Reinicia o cronômetro para cada tomada sequencial (auto-move),
+      // garantindo que o jogador tenha tempo suficiente para executar
+      // múltiplas capturas em salas com timers curtos (ex: 5s por jogada).
+      try {
+        resetTimer(roomCode);
+      } catch (e) {
+        console.error("resetTimer failed on sequential capture:", e);
+      }
     }
 
     // Calcula próximas jogadas obrigatórias
