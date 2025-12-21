@@ -376,6 +376,12 @@ window.GameCore = (function () {
   function handleBoardClick(e) {
     if (window.isSpectator || state.isReplaying) return;
     if (!state.myColor) return;
+    // Bloqueia interação caso não seja o turno do jogador local
+    if (
+      state.lastServerCurrentPlayer &&
+      state.lastServerCurrentPlayer !== state.myColor
+    )
+      return;
     if (state.isProcessingQueue) return;
 
     const square = e.target.closest(".square");
@@ -698,7 +704,19 @@ window.GameCore = (function () {
 
     if (!suppressSound && !isMyMove) {
       if (gameState.lastMove) {
-        if (moveDist > 1) state.UI.playAudio("capture");
+        // Preferir checar o array explícito de peças capturadas quando disponível.
+        let hadCapture = false;
+        try {
+          if (Array.isArray(gameState.turnCapturedPieces)) {
+            hadCapture = gameState.turnCapturedPieces.length > 0;
+          } else {
+            hadCapture = moveDist > 1;
+          }
+        } catch (e) {
+          hadCapture = moveDist > 1;
+        }
+
+        if (hadCapture) state.UI.playAudio("capture");
         else state.UI.playAudio("move");
       }
     }

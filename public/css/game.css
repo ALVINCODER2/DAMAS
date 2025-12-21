@@ -219,6 +219,20 @@
     1px 1px 0 #000, 0 6px 12px rgba(220, 180, 60, 0.35);
 }
 
+/* Mobile: reduz a coroa para tabuleiros pequenos */
+@media (max-width: 480px) {
+  .piece.king::after {
+    font-size: 18px !important;
+    transform: translate(-50%, -50%) !important;
+  }
+  .white-piece.king::after {
+    transform: translate(-50%, -50%) !important;
+  }
+  .black-piece.king::after {
+    transform: translate(-50%, -50%) !important;
+  }
+}
+
 .piece.mandatory-capture {
   animation: pulse-mandatory 1.2s infinite;
   /* Mudança: destaque em vermelho (tom profissional) */
