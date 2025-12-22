@@ -202,7 +202,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const d = document.createElement("div");
     d.id = "ping-indicator";
     d.style.cssText =
-      "position:fixed;right:16px;bottom:16px;padding:10px 14px;background:rgba(10,24,40,0.85);color:#fff;border-radius:10px;font-size:14px;font-weight:600;min-width:96px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:2px solid rgba(255,255,255,0.06);z-index:2147483647;cursor:default;";
+      "position:fixed;left:16px;bottom:16px;padding:10px 14px;background:rgba(10,24,40,0.85);color:#fff;border-radius:10px;font-size:14px;font-weight:600;min-width:96px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:2px solid rgba(255,255,255,0.06);z-index:2147483647;cursor:default;";
     d.textContent = "Ping: —";
     document.body.appendChild(d);
   }
