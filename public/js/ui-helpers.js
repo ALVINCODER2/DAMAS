@@ -184,8 +184,130 @@ window.UI = {
 
   // --- ANIMAÇÃO DE MOVIMENTO ---
   animatePieceMove: function (from, to, boardSize) {
-    // Animação desativada -- resolver imediatamente para movimento instantâneo
-    return Promise.resolve();
+    return new Promise((resolve) => {
+      try {
+        const boardEl =
+          this.elements && this.elements.board
+            ? this.elements.board
+            : document.querySelector(".board");
+        const fromSquare = document.querySelector(
+          `.square[data-row="${from.row}"][data-col="${from.col}"]`
+        );
+        const toSquare = document.querySelector(
+          `.square[data-row="${to.row}"][data-col="${to.col}"]`
+        );
+
+        // Se não houver elementos DOM, resolve imediatamente
+        if (!boardEl || !fromSquare || !toSquare) return resolve();
+
+        const pieceEl = fromSquare.querySelector(".piece");
+
+        // Create a visual clone to animate
+        let clone = null;
+        if (pieceEl) {
+          clone = pieceEl.cloneNode(true);
+        } else {
+          // fallback: create a simple circle element
+          clone = document.createElement("div");
+          clone.className = "piece temp-clone";
+          clone.style.background =
+            window.getComputedStyle(fromSquare).background || "#fff";
+        }
+
+        // Get bounding rects
+        const fromRect = fromSquare.getBoundingClientRect();
+        const toRect = toSquare.getBoundingClientRect();
+
+        // Style clone for absolute positioning
+        clone.style.position = "fixed";
+        clone.style.left = `${fromRect.left}px`;
+        clone.style.top = `${fromRect.top}px`;
+        clone.style.width = `${fromRect.width}px`;
+        clone.style.height = `${fromRect.height}px`;
+        clone.style.margin = "0";
+        clone.style.zIndex = 2147483650;
+        clone.style.transition =
+          "transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms linear";
+        clone.style.pointerEvents = "none";
+
+        document.body.appendChild(clone);
+
+        // Preserve original piece class for fallback creation later
+        let originalPieceClass = null;
+        if (pieceEl) {
+          originalPieceClass = pieceEl.className;
+          // Hide original piece during animation to avoid visual duplicate
+          pieceEl.style.visibility = "hidden";
+        }
+
+        // Calculate delta
+        const deltaX = toRect.left - fromRect.left;
+        const deltaY = toRect.top - fromRect.top;
+
+        // Force reflow before starting transition
+        // eslint-disable-next-line no-unused-expressions
+        clone.getBoundingClientRect();
+
+        // Start animation
+        requestAnimationFrame(() => {
+          try {
+            clone.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+          } catch (e) {}
+        });
+
+        let finished = false;
+        const cleanUp = () => {
+          if (finished) return;
+          finished = true;
+          try {
+            if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+          } catch (e) {}
+          // restore original piece visibility if it still exists in DOM
+          try {
+            if (pieceEl && pieceEl.parentNode) pieceEl.style.visibility = "";
+          } catch (e) {}
+
+          // Fallback: ensure the destination square has a visible `.piece` element.
+          // Emitted deltas / full state updates sometimes race with the animation
+          // and can leave the destination without a piece for a short time. To
+          // make the UI robust, create a minimal piece element if missing.
+          try {
+            const destHasPiece =
+              toSquare &&
+              toSquare.querySelector &&
+              toSquare.querySelector(".piece");
+            if (!destHasPiece && toSquare) {
+              const fallback = document.createElement("div");
+              fallback.className = originalPieceClass || "piece black-piece";
+              // ensure visible
+              fallback.style.opacity = "1";
+              fallback.style.visibility = "";
+              toSquare.appendChild(fallback);
+            }
+          } catch (e) {}
+          resolve();
+        };
+
+        // Transition end listener with timeout fallback
+        const tEnd = (e) => {
+          if (e && e.target !== clone) return;
+          cleanUp();
+        };
+        clone.addEventListener("transitionend", tEnd);
+        // Fallback timeout
+        setTimeout(() => {
+          try {
+            clone.removeEventListener("transitionend", tEnd);
+          } catch (e) {}
+          cleanUp();
+        }, 500);
+      } catch (err) {
+        try {
+          console.error("animatePieceMove error", err);
+        } catch (e) {}
+        resolve();
+      }
+    });
   },
 
   // --- RENDERIZAÇÃO ROBUSTA (CORREÇÃO DE PEÇAS INVISÍVEIS) ---
@@ -252,22 +374,10 @@ window.UI = {
             }
           } else {
             if (existingPiece) {
-              // aplica animação de captura e remove após terminar
+              // Remoção imediata da peça capturada sem animação
               try {
-                // evita reanimar se já estiver em processo
-                if (!existingPiece.classList.contains("capturada")) {
-                  existingPiece.classList.add("capturada");
-                  // garante pintura final antes do setTimeout
-                  requestAnimationFrame(() => {
-                    // remove o elemento após a duração da animação
-                    setTimeout(() => {
-                      try {
-                        if (existingPiece && existingPiece.parentNode)
-                          existingPiece.parentNode.removeChild(existingPiece);
-                      } catch (e) {}
-                    }, 340);
-                  });
-                }
+                if (existingPiece && existingPiece.parentNode)
+                  existingPiece.parentNode.removeChild(existingPiece);
               } catch (e) {
                 try {
                   existingPiece.remove();
@@ -644,11 +754,24 @@ window.UI = {
       const last = (this._lastPlayed && this._lastPlayed[key]) || 0;
       const now = Date.now();
       if (now - last < min) return; // muito cedo para tocar novamente
+      // Se um som de capture foi tocado recentemente, suprimir sons de 'move'
+      // para evitar tocar dois sons (capture + move) na mesma ação.
+      if (
+        key === "move" &&
+        this._lastCapturePlayed &&
+        now - this._lastCapturePlayed < (this._captureSuppressMs || 700)
+      )
+        return;
       this._lastPlayed = this._lastPlayed || {};
       this._lastPlayed[key] = now;
     } catch (e) {}
-    if (type === "capture") soundEl = this.elements.captureSound;
-    else if (type === "join") soundEl = this.elements.joinSound;
+    // Marca tempo de último capture quando apropriado (feito depois do rate-limit)
+    if (type === "capture") {
+      soundEl = this.elements.captureSound;
+      try {
+        this._lastCapturePlayed = Date.now();
+      } catch (e) {}
+    } else if (type === "join") soundEl = this.elements.joinSound;
     else soundEl = this.elements.moveSound;
 
     this.triggerHaptic();

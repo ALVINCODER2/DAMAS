@@ -869,13 +869,17 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     let canCaptureAgain = false;
     let wasPromotion = false;
 
+    // Guarda localmente as posições capturadas neste movimento (se houver)
+    let capturedThisMove = [];
     if (isValid.isCapture) {
       // CORREÇÃO CRÍTICA: NÃO removemos a peça do tabuleiro imediatamente
       // Apenas adicionamos à lista de 'mortos-vivos' que servem de obstáculo
       if (Array.isArray(isValid.capturedPos)) {
         isValid.capturedPos.forEach((p) => game.turnCapturedPieces.push(p));
-      } else {
+        capturedThisMove = [...isValid.capturedPos];
+      } else if (isValid.capturedPos) {
         game.turnCapturedPieces.push(isValid.capturedPos);
+        capturedThisMove = [isValid.capturedPos];
       }
 
       // Verifica se pode capturar mais
@@ -909,13 +913,14 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       game.damaMovesWithoutCaptureOrPawnMove = 0;
     }
 
-    // Salva histórico
+    // Salva histórico (inclui as capturas deste movimento)
     game.moveHistory.push({
       from,
       to,
       boardState: JSON.parse(JSON.stringify(game.boardState)),
       turn: playerColor,
-      turnCapturedPieces: [...game.turnCapturedPieces], // Salva o estado das capturadas para replay fiel
+      turnCapturedPieces:
+        capturedThisMove.length > 0 ? [...capturedThisMove] : [],
       moveId, // Salva também no histórico para debug
     });
 
@@ -1073,9 +1078,12 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
     // Emite apenas o delta do movimento para reduzir payloads (clientes podem animar localmente)
     try {
+      // Garante que o payload do delta contenha as posições capturadas
+      // ocorridas neste movimento (mesmo que o servidor já tenha removido
+      // as peças do tabuleiro ao terminar o turno).
       const pieceMovedPayload = {
         lastMove: game.lastMove,
-        captured: game.turnCapturedPieces ? [...game.turnCapturedPieces] : [],
+        captured: capturedThisMove.length > 0 ? [...capturedThisMove] : [],
         currentPlayer: game.currentPlayer,
         mandatoryPieces,
         seq: game.seq,

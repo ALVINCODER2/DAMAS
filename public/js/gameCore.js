@@ -210,12 +210,21 @@ window.GameCore = (function () {
             try {
               // Não reproduz se já reproduzimos durante o movimento otimista
               if (!isMyMove) {
-                if (
-                  Array.isArray(payload.captured) &&
-                  payload.captured.length > 0
-                )
-                  state.UI.playAudio("capture");
-                else state.UI.playAudio("move");
+                // Dedupe por moveId para evitar tocar duas vezes (delta + full update)
+                const moveId = payload.lastMove && payload.lastMove.moveId;
+                if (moveId && state._lastSoundMoveId === moveId) {
+                  // já tocamos o som para esse movimento
+                } else {
+                  if (
+                    Array.isArray(payload.captured) &&
+                    payload.captured.length > 0
+                  )
+                    state.UI.playAudio("capture");
+                  else state.UI.playAudio("move");
+                  try {
+                    if (moveId) state._lastSoundMoveId = moveId;
+                  } catch (e) {}
+                }
               }
             } catch (e) {}
 
@@ -435,8 +444,14 @@ window.GameCore = (function () {
         if (capturedPieceEl) capturedPieceEl.style.opacity = "0.5";
       }
       state.UI.playAudio("capture");
+      try {
+        if (moveId) state._lastSoundMoveId = moveId;
+      } catch (e) {}
     } else {
       state.UI.playAudio("move");
+      try {
+        if (moveId) state._lastSoundMoveId = moveId;
+      } catch (e) {}
     }
 
     // RASTREAMENTO DE PROGRESSO (Regra das 20 Jogadas)
@@ -846,8 +861,20 @@ window.GameCore = (function () {
           hadCapture = moveDist > 1;
         }
 
-        if (hadCapture) state.UI.playAudio("capture");
-        else state.UI.playAudio("move");
+        // Evita duplicar sons: se já tocamos som para este moveId, pule
+        try {
+          const moveId = gameState.lastMove && gameState.lastMove.moveId;
+          if (moveId && state._lastSoundMoveId === moveId) {
+            // já tocamos
+          } else {
+            if (hadCapture) state.UI.playAudio("capture");
+            else state.UI.playAudio("move");
+            if (moveId) state._lastSoundMoveId = moveId;
+          }
+        } catch (e) {
+          if (hadCapture) state.UI.playAudio("capture");
+          else state.UI.playAudio("move");
+        }
       }
     }
 

@@ -201,10 +201,44 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("ping-indicator")) return;
     const d = document.createElement("div");
     d.id = "ping-indicator";
+    // Estilos base (serão ajustados por applyResponsivePingStyle)
     d.style.cssText =
-      "position:fixed;left:16px;top:16px;padding:10px 14px;background:rgba(10,24,40,0.85);color:#fff;border-radius:10px;font-size:14px;font-weight:600;min-width:96px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:2px solid rgba(255,255,255,0.06);z-index:2147483647;cursor:default;";
+      "position:fixed;top:16px;right:16px;padding:10px 14px;background:rgba(10,24,40,0.85);color:#fff;border-radius:10px;font-size:14px;font-weight:600;min-width:96px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:2px solid rgba(255,255,255,0.06);z-index:2147483647;cursor:default;";
     d.textContent = "Ping: —";
     document.body.appendChild(d);
+
+    // Aplica estilo responsivo e atualiza em resize
+    function applyResponsivePingStyle() {
+      try {
+        const el = document.getElementById("ping-indicator");
+        if (!el) return;
+        const isSmall =
+          window.innerWidth <= 600 ||
+          /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+        if (isSmall) {
+          el.style.right = "10px";
+          el.style.left = "auto";
+          el.style.top = "8px";
+          el.style.padding = "6px 8px";
+          el.style.fontSize = "12px";
+          el.style.minWidth = "64px";
+          el.style.borderRadius = "8px";
+          el.style.boxShadow = "0 6px 16px rgba(0,0,0,0.5)";
+        } else {
+          el.style.right = "16px";
+          el.style.left = "auto";
+          el.style.top = "16px";
+          el.style.padding = "10px 14px";
+          el.style.fontSize = "14px";
+          el.style.minWidth = "96px";
+          el.style.borderRadius = "10px";
+          el.style.boxShadow = "0 8px 24px rgba(0,0,0,0.6)";
+        }
+      } catch (e) {}
+    }
+
+    applyResponsivePingStyle();
+    window.addEventListener("resize", applyResponsivePingStyle);
   }
 
   function updatePingIndicator(rtt) {
