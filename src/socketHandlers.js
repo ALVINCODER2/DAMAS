@@ -1590,6 +1590,25 @@ function initializeSocket(ioInstance) {
       const joinerEmail = socket.userData.email;
       const bet = room.bet;
 
+      // Segurança adicional: garante que o criador ainda esteja conectado
+      try {
+        const creatorSocketId = room.players[0] && room.players[0].socketId;
+        const creatorSockObj = creatorSocketId
+          ? io.sockets.sockets.get(creatorSocketId)
+          : null;
+        if (!creatorSockObj || !creatorSockObj.connected) {
+          // Criador ausente - remove a sala imediatamente para evitar cobranças indevidas
+          try {
+            delete gameRooms[roomCode];
+          } catch (e) {}
+          if (io) io.emit("updateLobby", getLobbyInfo());
+          socket.emit("joinError", {
+            message: "Criador ausente. Sala removida.",
+          });
+          return;
+        }
+      } catch (e) {}
+
       // 1. Cobrança Atômica do Criador
       const creatorUpdate = await User.findOneAndUpdate(
         { email: creatorEmail, saldo: { $gte: bet } },
