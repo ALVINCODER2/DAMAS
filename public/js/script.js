@@ -50,7 +50,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const socket = io({ autoConnect: false, transports: ["websocket"] });
   // --- DEBUG: registrar eventos importantes para envio ao suporte ---
-  window.__CLIENT_DEBUG = true; // defina false se quiser silenciar
+  // Desativado por padrão em produção
+  window.__CLIENT_DEBUG = false; // defina true localmente para depuração
   window.setClientDebug = function (v) {
     window.__CLIENT_DEBUG = !!v;
     console.info("Client debug:", window.__CLIENT_DEBUG);

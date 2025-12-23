@@ -108,40 +108,9 @@ window.UI = {
     this._lastPlayed = {};
     this._minIntervalMs = { join: 1000, move: 200, capture: 200 };
 
-    // Instala botão de debug para facilitar ativação sem colar no console
-    try {
-      // instala após breve timeout para garantir body disponível
-      setTimeout(() => {
-        try {
-          if (document && document.body) this._installDebugButton();
-        } catch (e) {}
-      }, 50);
-    } catch (e) {}
+    // debug button removed for production
   },
-
-  // Botão de debug flutuante (ativa/desativa window.__CLIENT_DEBUG)
-  _installDebugButton: function () {
-    try {
-      if (document.getElementById("debug-toggle-btn")) return;
-      const btn = document.createElement("button");
-      btn.id = "debug-toggle-btn";
-      btn.textContent = window.__CLIENT_DEBUG ? "Debug: ON" : "Debug: OFF";
-      btn.title = "Alterna logs de debug do cliente";
-      btn.style.cssText =
-        "position:fixed;right:12px;bottom:12px;z-index:2147483650;padding:6px 8px;border-radius:6px;background:#111;color:#fff;font-size:12px;opacity:0.85;border:1px solid rgba(255,255,255,0.08);cursor:pointer;";
-      btn.addEventListener("click", () => {
-        try {
-          window.__CLIENT_DEBUG = !window.__CLIENT_DEBUG;
-          btn.textContent = window.__CLIENT_DEBUG ? "Debug: ON" : "Debug: OFF";
-          console.log("[UI] __CLIENT_DEBUG =", window.__CLIENT_DEBUG);
-          // pulso visual breve
-          btn.style.opacity = "1";
-          setTimeout(() => (btn.style.opacity = "0.85"), 300);
-        } catch (e) {}
-      });
-      document.body.appendChild(btn);
-    } catch (e) {}
-  },
+  
 
   // Força o desbloqueio de áudio via interação do usuário.
   enableSound: async function () {
@@ -584,10 +553,20 @@ window.UI = {
 
           // Defensive: remove all existing .piece elements in this square
           try {
-            const existingPieces = Array.from(square.querySelectorAll('.piece'));
+            const existingPieces = Array.from(
+              square.querySelectorAll(".piece")
+            );
             if (existingPieces.length > 0) {
               existingPieces.forEach((el) => {
-                try { el.remove(); } catch (e) { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (er) { el.style.display = 'none'; } }
+                try {
+                  el.remove();
+                } catch (e) {
+                  try {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                  } catch (er) {
+                    el.style.display = "none";
+                  }
+                }
               });
             }
           } catch (e) {}
