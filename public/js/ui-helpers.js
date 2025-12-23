@@ -208,42 +208,76 @@ window.UI = {
         const isCapture = Math.max(distRow, distCol) > 1;
         if (isCapture) {
           try {
-            // Remove visual da(s) peça(s) capturada(s) imediatamente
+            // DEBUG: log minimal quando em modo debug do cliente
+            if (window.__CLIENT_DEBUG) {
+              try {
+                console.log(
+                  "[ANIM] capture move from",
+                  from,
+                  "to",
+                  to,
+                  "capturedPos",
+                  capturedPos
+                );
+              } catch (e) {}
+            }
+
+            // Remove visual da(s) peça(s) capturada(s) imediatamente de forma robusta
             if (capturedPos) {
-              // pode ser objeto único ou array
-              const list = Array.isArray(capturedPos)
-                ? capturedPos
-                : [capturedPos];
+              const list = Array.isArray(capturedPos) ? capturedPos : [capturedPos];
               list.forEach((p) => {
                 try {
                   const sq = document.querySelector(
                     `.square[data-row="${p.row}"][data-col="${p.col}"]`
                   );
                   if (sq) {
-                    const el = sq.querySelector(".piece");
-                    if (el) {
+                    // Remove todas as peças que possam existir nesta casa
+                    const pieces = sq.querySelectorAll(".piece");
+                    pieces.forEach((el) => {
                       try {
-                        el.parentNode.removeChild(el);
+                        el.remove();
                       } catch (e) {
-                        el.style.display = "none";
+                        try {
+                          if (el.parentNode) el.parentNode.removeChild(el);
+                        } catch (er) {
+                          el.style.display = "none";
+                        }
                       }
-                    }
+                    });
+                    // Limpa qualquer conteúdo remanescente (fallback seguro)
+                    try {
+                      if (sq.children.length === 0) sq.innerHTML = "";
+                    } catch (e) {}
                   }
                 } catch (e) {}
               });
             }
-            // Move elemento diretamente no DOM sem animação
+
+            // Move elemento diretamente no DOM sem animação. Se não existir
+            // element original, cria fallback minimal.
             if (pieceEl && toSquare) {
               try {
-                fromSquare.removeChild(pieceEl);
+                // Proteção: se pieceEl está realmente dentro de fromSquare
+                if (pieceEl.parentNode === fromSquare) fromSquare.removeChild(pieceEl);
               } catch (e) {}
-              toSquare.appendChild(pieceEl);
-              pieceEl.style.visibility = "";
+              try {
+                toSquare.appendChild(pieceEl);
+                pieceEl.style.visibility = "";
+              } catch (e) {
+                // fallback: cria peça no destino
+                try {
+                  const fallback = document.createElement("div");
+                  const cls = (pieceEl && pieceEl.className) || "piece black-piece";
+                  fallback.className = cls;
+                  toSquare.appendChild(fallback);
+                } catch (er) {}
+              }
             } else if (!pieceEl) {
-              // fallback: cria peça no destino
-              const fallback = document.createElement("div");
-              fallback.className = "piece black-piece";
-              toSquare.appendChild(fallback);
+              try {
+                const fallback = document.createElement("div");
+                fallback.className = "piece black-piece";
+                toSquare.appendChild(fallback);
+              } catch (e) {}
             }
           } catch (e) {}
           return resolve();
