@@ -202,6 +202,30 @@ window.UI = {
 
         const pieceEl = fromSquare.querySelector(".piece");
 
+        // Se for captura (salto maior que 1), não anima: realiza troca instantânea
+        const distRow = Math.abs(to.row - from.row);
+        const distCol = Math.abs(to.col - from.col);
+        const isCapture = Math.max(distRow, distCol) > 1;
+        if (isCapture) {
+          try {
+            // Move elemento diretamente no DOM sem animação
+            if (pieceEl && toSquare) {
+              // remove peça da origem e anexa no destino
+              try {
+                fromSquare.removeChild(pieceEl);
+              } catch (e) {}
+              toSquare.appendChild(pieceEl);
+              pieceEl.style.visibility = "";
+            } else if (!pieceEl) {
+              // fallback: cria peça no destino
+              const fallback = document.createElement("div");
+              fallback.className = "piece black-piece";
+              toSquare.appendChild(fallback);
+            }
+          } catch (e) {}
+          return resolve();
+        }
+
         // Create a visual clone to animate
         let clone = null;
         if (pieceEl) {
