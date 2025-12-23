@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for jogo-damas on 2025-10-11T14:19:44-03:00
+# fly.toml app configuration file generated for damasarena on 2025-12-23T22:22:38Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'jogo-damas'
+app = 'damasarena'
 primary_region = 'gru'
 
 [build]
@@ -13,21 +13,11 @@ primary_region = 'gru'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1 # MODIFICADO de 0 para 1
+  min_machines_running = 0
   processes = ['app']
-
-  # --- ADICIONADO: Bloco de Verificação de Saúde ---
-  # Isto diz ao Fly.io como verificar se a sua aplicação está "viva"
-  # antes de lhe enviar tráfego.
-  [[http_service.checks]]
-    interval = "10s" # Verifica a cada 10 segundos
-    timeout = "2s" # Espera no máximo 2 segundos por uma resposta
-    method = "GET" # Faz um pedido GET
-    path = "/" # Para a página inicial (index.html)
-    protocol = "http"
-  # --- FIM DA ADIÇÃO ---
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 1024
