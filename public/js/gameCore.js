@@ -430,6 +430,15 @@ window.GameCore = (function () {
       while (r !== to.row && c !== to.col) {
         if (state.boardState[r][c] !== 0) {
           capturedPos = { row: r, col: c };
+          // Atualiza estado local removendo a peça capturada imediatamente
+          try {
+            if (
+              state.boardState[r] &&
+              typeof state.boardState[r][c] !== "undefined"
+            ) {
+              state.boardState[r][c] = 0;
+            }
+          } catch (e) {}
           break;
         }
         r += dr;
@@ -471,7 +480,12 @@ window.GameCore = (function () {
       }
     }
 
-    await state.UI.animatePieceMove(from, to, state.currentBoardSize, capturedPos);
+    await state.UI.animatePieceMove(
+      from,
+      to,
+      state.currentBoardSize,
+      capturedPos
+    );
 
     state.UI.renderPieces(state.boardState, state.currentBoardSize);
     state.UI.clearHighlights();
