@@ -56,13 +56,46 @@ window.GameCore = (function () {
       ) {
         if (state.lastServerCurrentPlayer === "b") {
           state.displayedWhiteTime = Math.max(0, state.displayedWhiteTime - 1);
-        } else {
-          state.displayedBlackTime = Math.max(0, state.displayedBlackTime - 1);
+      // Remove DOM elements das peças capturadas imediatamente (proteção extra)
+      try {
+        const toRemove =
+          capturedForAnim && capturedForAnim.length > 0
+            ? capturedForAnim
+            : state.currentTurnCapturedPieces && state.currentTurnCapturedPieces.length > 0
+            ? state.currentTurnCapturedPieces
+            : undefined;
+
+        if (toRemove && Array.isArray(toRemove) && toRemove.length > 0) {
+          toRemove.forEach((p) => {
+            try {
+              const sq = document.querySelector(
+                `.square[data-row="${p.row}"][data-col="${p.col}"]`
+              );
+              if (sq) {
+                const pieces = sq.querySelectorAll(".piece");
+                pieces.forEach((el) => {
+                  try {
+                    el.remove();
+                  } catch (e) {
+                    try {
+                      if (el.parentNode) el.parentNode.removeChild(el);
+                    } catch (er) {
+                      el.style.display = "none";
+                    }
+                  }
+                });
+              }
+            } catch (e) {}
+          });
         }
-        UI.updateTimer({
-          whiteTime: state.displayedWhiteTime,
-          blackTime: state.displayedBlackTime,
-        });
+      } catch (e) {}
+
+      await state.UI.animatePieceMove(
+        gameState.lastMove.from,
+        gameState.lastMove.to,
+        gameState.boardSize,
+        capturedForAnim
+      );
       } else if (state.displayedTimeLeft !== null) {
         state.displayedTimeLeft = Math.max(0, state.displayedTimeLeft - 1);
         UI.updateTimer({ timeLeft: state.displayedTimeLeft });
