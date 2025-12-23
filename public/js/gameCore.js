@@ -992,10 +992,46 @@ window.GameCore = (function () {
 
     // 3. ANIMAÇÃO
     if (gameState.lastMove && !suppressSound && !skipAnimation) {
+      // Determine captured positions to pass to the animator so it can
+      // remove captured DOM nodes before moving the attacker (avoids overlap)
+      let capturedForAnim = undefined;
+      try {
+        if (
+          Array.isArray(gameState.turnCapturedPieces) &&
+          gameState.turnCapturedPieces.length > 0
+        ) {
+          capturedForAnim = gameState.turnCapturedPieces;
+        } else if (moveDist > 1) {
+          // Compute positions between from -> to (inclusive-exlusive) that were captured
+          const from = gameState.lastMove.from;
+          const to = gameState.lastMove.to;
+          const dr = Math.sign(to.row - from.row);
+          const dc = Math.sign(to.col - from.col);
+          const list = [];
+          let r = from.row + dr;
+          let c = from.col + dc;
+          while (r !== to.row && c !== to.col) {
+            list.push({ row: r, col: c });
+            r += dr;
+            c += dc;
+          }
+          if (list.length > 0) capturedForAnim = list;
+        }
+      } catch (e) {}
+
+      try {
+        if (window.__CLIENT_DEBUG)
+          console.log(
+            "[PROCESS] animatePieceMove with capturedForAnim",
+            capturedForAnim
+          );
+      } catch (e) {}
+
       await state.UI.animatePieceMove(
         gameState.lastMove.from,
         gameState.lastMove.to,
-        gameState.boardSize
+        gameState.boardSize,
+        capturedForAnim
       );
     }
 
