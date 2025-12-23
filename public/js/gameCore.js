@@ -430,6 +430,18 @@ window.GameCore = (function () {
       while (r !== to.row && c !== to.col) {
         if (state.boardState[r][c] !== 0) {
           capturedPos = { row: r, col: c };
+          // DEBUG: log quando em modo debug
+          try {
+            if (window.__CLIENT_DEBUG)
+              console.log(
+                "[OPTIMISTIC] detected capturedPos",
+                capturedPos,
+                "from",
+                from,
+                "to",
+                to
+              );
+          } catch (e) {}
           // Atualiza estado local removendo a peça capturada imediatamente
           try {
             if (
@@ -437,6 +449,13 @@ window.GameCore = (function () {
               typeof state.boardState[r][c] !== "undefined"
             ) {
               state.boardState[r][c] = 0;
+              if (window.__CLIENT_DEBUG)
+                console.log(
+                  "[OPTIMISTIC] cleared boardState at",
+                  capturedPos,
+                  "newVal",
+                  state.boardState[r][c]
+                );
             }
           } catch (e) {}
           break;
@@ -486,6 +505,19 @@ window.GameCore = (function () {
       state.currentBoardSize,
       capturedPos
     );
+
+    try {
+      if (window.__CLIENT_DEBUG) {
+        console.log(
+          "[OPTIMISTIC] after animate, boardState snapshot:",
+          JSON.parse(JSON.stringify(state.boardState))
+        );
+        console.log(
+          "[OPTIMISTIC] currentTurnCapturedPieces:",
+          JSON.parse(JSON.stringify(state.currentTurnCapturedPieces))
+        );
+      }
+    } catch (e) {}
 
     state.UI.renderPieces(state.boardState, state.currentBoardSize);
     state.UI.clearHighlights();
@@ -663,6 +695,15 @@ window.GameCore = (function () {
         if (capturesForPiece.length > 0) {
           capturesForPiece.sort((a, b) => b.length - a.length);
           const chosenSeq = capturesForPiece[0];
+          try {
+            if (window.__CLIENT_DEBUG)
+              console.log(
+                "[SELECT] auto-executing capture sequence for",
+                { row, col },
+                "seq",
+                chosenSeq
+              );
+          } catch (e) {}
 
           // Executa cada salto da sequência, aguardando confirmação do servidor
           let curFrom = { row: chosenSeq[0].row, col: chosenSeq[0].col };
@@ -681,6 +722,19 @@ window.GameCore = (function () {
             });
 
             const ok = await waitForMoveAck(moveId, 5000);
+            try {
+              if (window.__CLIENT_DEBUG)
+                console.log(
+                  "[SELECT] moveId",
+                  moveId,
+                  "ack",
+                  ok,
+                  "curFrom",
+                  curFrom,
+                  "dest",
+                  dest
+                );
+            } catch (e) {}
             if (!ok) break;
             // pequeno delay visual
             await new Promise((r) => setTimeout(r, 150));
