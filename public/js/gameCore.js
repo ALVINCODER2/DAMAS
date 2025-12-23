@@ -235,8 +235,8 @@ window.GameCore = (function () {
                     }
                   } catch (e) {}
 
-                  if (isCaptureMove) state.UI.playAudio("capture");
-                  else state.UI.playAudio("move");
+                  if (isCaptureMove) state.UI.playAudio("capture", { moveId });
+                  else state.UI.playAudio("move", { moveId });
                   try {
                     if (moveId) state._lastSoundMoveId = moveId;
                   } catch (e) {}
@@ -483,12 +483,12 @@ window.GameCore = (function () {
         const capturedPieceEl = capturedSquare.querySelector(".piece");
         if (capturedPieceEl) capturedPieceEl.style.opacity = "0.5";
       }
-      state.UI.playAudio("capture");
+      state.UI.playAudio("capture", { moveId });
       try {
         if (moveId) state._lastSoundMoveId = moveId;
       } catch (e) {}
     } else {
-      state.UI.playAudio("move");
+      state.UI.playAudio("move", { moveId });
       try {
         if (moveId) state._lastSoundMoveId = moveId;
       } catch (e) {}
@@ -1200,8 +1200,8 @@ window.GameCore = (function () {
           if (moveId && state._lastSoundMoveId === moveId) {
             // já tocamos
           } else {
-            if (hadCapture) state.UI.playAudio("capture");
-            else state.UI.playAudio("move");
+            if (hadCapture) state.UI.playAudio("capture", { moveId });
+            else state.UI.playAudio("move", { moveId });
             if (moveId) state._lastSoundMoveId = moveId;
           }
         } catch (e) {

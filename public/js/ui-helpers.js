@@ -107,6 +107,7 @@ window.UI = {
     // Controle de taxa para evitar reproduções muito rápidas
     this._lastPlayed = {};
     this._minIntervalMs = { join: 1000, move: 200, capture: 200 };
+    this._lastPlayedMoveId = null;
 
     // debug button removed for production
   },
@@ -1009,8 +1010,15 @@ window.UI = {
     }
   },
 
-  playAudio: function (type) {
+  playAudio: function (type, opts) {
+    opts = opts || {};
     const self = this;
+    // se foi passado um moveId, evita tocar som duplicado para o mesmo move
+    try {
+      const moveId = opts.moveId;
+      if (moveId && this._lastPlayedMoveId === moveId) return;
+      if (moveId) this._lastPlayedMoveId = moveId;
+    } catch (e) {}
     let soundEl;
     // Rate-limit: evita tocar o mesmo som repetidamente em curto espaço
     try {
