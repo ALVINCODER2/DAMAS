@@ -501,6 +501,30 @@ window.UI = {
               toSquare.appendChild(fallback);
             }
           } catch (e) {}
+          try {
+            if (window.__CLIENT_DEBUG) {
+              const toPieces = toSquare
+                ? Array.from(toSquare.querySelectorAll(".piece")).map(
+                    (p) => p.outerHTML
+                  )
+                : [];
+              const fromPieces = fromSquare
+                ? Array.from(fromSquare.querySelectorAll(".piece")).map(
+                    (p) => p.outerHTML
+                  )
+                : [];
+              console.log(
+                "[ANIM DEBUG] cleanUp final - toPieces count",
+                toPieces.length,
+                toPieces
+              );
+              console.log(
+                "[ANIM DEBUG] cleanUp final - fromPieces count",
+                fromPieces.length,
+                fromPieces
+              );
+            }
+          } catch (e) {}
           resolve();
         };
 
