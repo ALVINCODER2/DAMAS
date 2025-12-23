@@ -78,7 +78,6 @@ document.addEventListener("DOMContentLoaded", () => {
       alert("Erro ao carregar lista de saques.");
     }
   }
-
   function renderWithdrawalsTable(withdrawals) {
     withdrawalsTableBody.innerHTML = "";
     if (withdrawals.length === 0) {
@@ -718,6 +717,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     }
 
+    // Expor para o escopo global para chamadas assíncronas/externas
+    try {
+      window.applyMoveObj = applyMoveObj;
+    } catch (e) {
+      // ignore
+    }
+
     if (execNextBtn) {
       execNextBtn.addEventListener("click", async () => {
         if (movesQueue.length === 0) {
@@ -1049,6 +1055,92 @@ document.addEventListener("DOMContentLoaded", () => {
     unselectPiece();
     pieceElement.classList.add("selected");
     selectedPiece = { element: pieceElement, row, col };
+
+    // Tenta executar captura automaticamente quando existe captura obrigatória
+    try {
+      if (
+        window.gameLogic &&
+        typeof window.gameLogic.findBestCaptureMoves === "function"
+      ) {
+        const bestCaptures = window.gameLogic.findBestCaptureMoves(
+          testGame.currentPlayer,
+          testGame
+        );
+
+        // Filtra sequências que começam nesta peça
+        const capturesForPiece = bestCaptures.filter(
+          (seq) => seq[0] && seq[0].row === row && seq[0].col === col
+        );
+
+        if (capturesForPiece.length > 0) {
+          // Escolhe a sequência mais longa (maior número de capturas)
+          capturesForPiece.sort((a, b) => b.length - a.length);
+          const chosenSeq = capturesForPiece[0];
+
+          (async () => {
+            let curFrom = { row: chosenSeq[0].row, col: chosenSeq[0].col };
+
+            for (let i = 1; i < chosenSeq.length; i++) {
+              const dest = chosenSeq[i];
+              const mv = {
+                from: { row: curFrom.row, col: curFrom.col },
+                to: dest,
+              };
+
+              // Ao executar uma sequência pré-calculada, ignoramos a "lei da maioria"
+              // porque a sequência foi escolhida como uma das ótimas no estado inicial.
+              const ok = await applyMoveObj(mv, true);
+              if (!ok) return;
+
+              curFrom = { row: dest.row, col: dest.col };
+              // pequeno delay para render/visual
+              await new Promise((r) => setTimeout(r, 150));
+
+              // verifica opções futuras;
+              // se houver mais de uma opção, só interrompe se NÃO houver uma
+              // próxima etapa já definida na `chosenSeq` que corresponda a essa opção.
+              if (
+                window.gameLogic &&
+                typeof window.gameLogic.getAllPossibleCapturesForPiece ===
+                  "function"
+              ) {
+                const nextCaptures =
+                  window.gameLogic.getAllPossibleCapturesForPiece(
+                    curFrom.row,
+                    curFrom.col,
+                    testGame
+                  );
+
+                if (nextCaptures.length > 1) {
+                  // se houver uma próxima etapa prevista na chosenSeq, verifique se ela
+                  // corresponde a uma das opções retornadas. Se corresponder, continue;
+                  // caso contrário, interrompa e aguarde escolha do usuário.
+                  const nextIdx = i + 1;
+                  if (chosenSeq && nextIdx < chosenSeq.length) {
+                    const planned = chosenSeq[nextIdx];
+                    const matchesPlanned = nextCaptures.some((seq) => {
+                      if (!seq[1]) return false;
+                      return (
+                        seq[1].row === planned.row && seq[1].col === planned.col
+                      );
+                    });
+                    if (!matchesPlanned) return;
+                  } else {
+                    return;
+                  }
+                }
+              }
+            }
+          })().catch(() => {});
+
+          return;
+        }
+      }
+    } catch (e) {
+      // silently ignore auto-capture check errors
+    }
+
+    // comportamento padrão: mostra movimentos válidos
     showValidMoves(row, col);
   }
 
