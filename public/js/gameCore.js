@@ -374,7 +374,7 @@ window.GameCore = (function () {
       const cp =
         (gameState && (gameState.currentPlayer || gameState.turn)) || null;
       if (state.UI.elements.turnDisplay) {
-        const turnText = cp === "b" ? "Brancas" : cp === "p" ? "Pretas" : "";
+        const turnText = cp === "b" ? "Brancas" : cp === "p" ? "Vermelhas" : "";
         state.UI.elements.turnDisplay.textContent =
           turnText || state.UI.elements.turnDisplay.textContent;
       }
@@ -1296,7 +1296,7 @@ window.GameCore = (function () {
             gameState.turn ||
             gameState.newCurrentPlayer)) ||
         null;
-      let turnText = cp === "b" ? "Brancas" : cp === "p" ? "Pretas" : "";
+      let turnText = cp === "b" ? "Brancas" : cp === "p" ? "Vermelhas" : "";
       if (state.drawMovesCounter >= 10 && turnText)
         turnText += ` (${state.drawMovesCounter}/20)`;
       if (turnText) state.UI.elements.turnDisplay.textContent = turnText;

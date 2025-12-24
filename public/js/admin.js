@@ -770,7 +770,7 @@ document.addEventListener("DOMContentLoaded", () => {
           testGame.currentPlayer = val;
           updateTestGameUI();
           testStatus.textContent = `Vez definida: ${
-            val === "b" ? "Brancas" : "Pretas"
+            val === "b" ? "Brancas" : "Vermelhas"
           }`;
         }
       });
@@ -867,14 +867,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateTestGameUI() {
     testTurnSpan.textContent =
-      testGame.currentPlayer === "b" ? "Brancas" : "Pretas";
+      testGame.currentPlayer === "b" ? "Brancas" : "Vermelhas";
     // testStatus.textContent = ""; // Não limpa para manter o nome do sorteio visível
 
     highlightMandatoryPieces([]);
     unselectPiece();
 
     if (!window.gameLogic.hasValidMoves(testGame.currentPlayer, testGame)) {
-      const winner = testGame.currentPlayer === "b" ? "Pretas" : "Brancas";
+      const winner = testGame.currentPlayer === "b" ? "Vermelhas" : "Brancas";
       testStatus.textContent += ` - FIM DE JOGO! ${winner} venceu por bloqueio!`;
       return;
     }

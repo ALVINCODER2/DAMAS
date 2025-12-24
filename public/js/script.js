@@ -517,7 +517,7 @@ document.addEventListener("DOMContentLoaded", () => {
           socket.id === gameState.players.white ? "b" : "p";
 
         let statusText = `Você joga com as ${
-          GameCore.state.myColor === "b" ? "Brancas" : "Pretas"
+          GameCore.state.myColor === "b" ? "Brancas" : "Vermelhas"
         }.`;
         if (gameState.openingName)
           statusText += `<br><small>Sorteio: ${gameState.openingName}</small>`;
@@ -809,7 +809,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document
         .getElementById("spectator-end-screen")
         .classList.remove("hidden");
-      const wText = data.winner === "b" ? "Brancas" : "Pretas";
+      const wText = data.winner === "b" ? "Brancas" : "Vermelhas";
       document.getElementById(
         "spectator-end-message"
       ).textContent = `${wText} venceram! ${data.reason}`;

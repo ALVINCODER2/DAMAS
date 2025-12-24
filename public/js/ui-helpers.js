@@ -1150,7 +1150,8 @@ window.UI = {
     const whiteName =
       users.whiteName || (users.white ? users.white.split("@")[0] : "Brancas");
     const blackName =
-      users.blackName || (users.black ? users.black.split("@")[0] : "Pretas");
+      users.blackName ||
+      (users.black ? users.black.split("@")[0] : "Vermelhas");
 
     if (this.elements.whitePlayerName)
       this.elements.whitePlayerName.textContent = whiteName;
