@@ -29,7 +29,7 @@
   --dark-square: #16a34a;
   /* borda tipo madeira (opcional, melhora o contraste) */
   --board-border: #8b5a34;
-  /* peças pretas agora em tom vinho */
-  --black-piece-color-1: #5b0f1a; /* vinho escuro */
-  --black-piece-color-2: #a71d2a; /* vinho mais claro para gradiente */
+  /* peças pretas agora em tom vermelho (somente vermelho) */
+  --black-piece-color-1: #c0392b; /* vermelho principal */
+  --black-piece-color-2: #e74c3c; /* vermelho de destaque */
 }
