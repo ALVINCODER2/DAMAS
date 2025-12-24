@@ -176,13 +176,7 @@ window.UI = {
 
   // --- FEEDBACK TÁTIL (VIBRAÇÃO) ---
   triggerHaptic: function () {
-    if ("vibrate" in navigator) {
-      setTimeout(() => {
-        try {
-          navigator.vibrate(15);
-        } catch (e) {}
-      }, 0);
-    }
+    // Vibrations removed per user request — no-op
   },
 
   // --- ANIMAÇÃO DE MOVIMENTO ---

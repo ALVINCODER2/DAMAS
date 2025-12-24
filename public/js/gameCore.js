@@ -369,6 +369,17 @@ window.GameCore = (function () {
 
     state.UI.updateTurnIndicator(false);
 
+    // Atualiza imediatamente o indicador de vez para espectadores (fallbacks aceitos)
+    try {
+      const cp =
+        (gameState && (gameState.currentPlayer || gameState.turn)) || null;
+      if (state.UI.elements.turnDisplay) {
+        const turnText = cp === "b" ? "Brancas" : cp === "p" ? "Pretas" : "";
+        state.UI.elements.turnDisplay.textContent =
+          turnText || state.UI.elements.turnDisplay.textContent;
+      }
+    } catch (e) {}
+
     // Cria o tabuleiro antes de desenhar as peças (evita falha quando o DOM não existe)
     if (state.UI && state.UI.createBoard) {
       // Garantia extra: se não houver boardState no payload, inicializa um vazio
@@ -1279,10 +1290,16 @@ window.GameCore = (function () {
     }
 
     if (state.UI.elements.turnDisplay) {
-      let turnText = gameState.currentPlayer === "b" ? "Brancas" : "Pretas";
-      if (state.drawMovesCounter >= 10)
+      const cp =
+        (gameState &&
+          (gameState.currentPlayer ||
+            gameState.turn ||
+            gameState.newCurrentPlayer)) ||
+        null;
+      let turnText = cp === "b" ? "Brancas" : cp === "p" ? "Pretas" : "";
+      if (state.drawMovesCounter >= 10 && turnText)
         turnText += ` (${state.drawMovesCounter}/20)`;
-      state.UI.elements.turnDisplay.textContent = turnText;
+      if (turnText) state.UI.elements.turnDisplay.textContent = turnText;
     }
 
     state.UI.highlightLastMove(gameState.lastMove);
@@ -1303,11 +1320,7 @@ window.GameCore = (function () {
       const isMyTurn =
         normalizedCurrent && myCanonical && normalizedCurrent === myCanonical;
       state.UI.updateTurnIndicator(!!isMyTurn);
-      if (isMyTurn && !suppressSound && navigator.vibrate) {
-        try {
-          navigator.vibrate(200);
-        } catch (e) {}
-      }
+      // Vibration removed per user request
     }
 
     // Atualiza estado do timer conforme enviado pelo servidor (se disponível)

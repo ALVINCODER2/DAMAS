@@ -20,3 +20,13 @@
     transform: translate(-50%, -50%) !important;
   }
 }
+
+/* Sobrescreve a paleta do tabuleiro para combinar com o print fornecido */
+#board {
+  /* claro: creme / bege da imagem */
+  --light-square: #f2e4b4;
+  /* escuro: verde vivo usado nas casas escuras */
+  --dark-square: #16a34a;
+  /* borda tipo madeira (opcional, melhora o contraste) */
+  --board-border: #8b5a34;
+}

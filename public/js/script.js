@@ -561,6 +561,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("gameStateUpdate", (gs) => {
+    try {
+      if (window.isSpectator) {
+        console.log("[spectator] received gameStateUpdate:", gs);
+      }
+    } catch (e) {}
     GameCore.state.updateQueue.push(gs);
     GameCore.processUpdateQueue();
   });
@@ -576,10 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
       GameCore.state.pendingBoardSnapshot = null;
       GameCore.state.lastOptimisticMove = null;
     }
-    if (navigator.vibrate)
-      try {
-        navigator.vibrate([100, 50, 100]);
-      } catch (e) {}
+    // vibration removed per user request
 
     const gs = UI.elements.gameStatus;
     const originalText = gs.innerHTML;

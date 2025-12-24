@@ -402,8 +402,10 @@ function sendGameState(roomCode, fullState, opts = {}) {
       const reduced = {
         boardState: fullState.boardState,
         boardSize: fullState.boardSize,
-        currentPlayer: fullState.currentPlayer,
-        lastMove: fullState.lastMove || null,
+        // Alguns lugares do código vestigial usam 'turn' em vez de
+        // 'currentPlayer'. Garantir compatibilidade para espectadores.
+        currentPlayer: fullState.currentPlayer || fullState.turn || null,
+        lastMove: fullState.lastMove || fullState.lastMove || null,
         roomCode: roomCode,
         timerActive: !!fullState.timerActive,
       };

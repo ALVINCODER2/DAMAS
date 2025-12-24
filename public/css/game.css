@@ -166,10 +166,11 @@
   position: absolute;
   width: 30%;
   height: 30%;
+  /* alterado: indicar movimento com tom vermelho */
   background: radial-gradient(
     circle at 50% 40%,
-    rgba(46, 204, 113, 0.95),
-    rgba(46, 204, 113, 0.6)
+    rgba(231, 76, 60, 0.95),
+    rgba(231, 76, 60, 0.6)
   );
   border-radius: 50%;
   pointer-events: none;
@@ -378,7 +379,7 @@
   position: absolute;
   width: 25%;
   height: 25%;
-  background-color: rgba(30, 120, 80, 0.7); /* verde sutil */
+  background-color: rgba(231, 76, 60, 0.7); /* vermelho sutil */
   border-radius: 50%;
   pointer-events: none;
 }
