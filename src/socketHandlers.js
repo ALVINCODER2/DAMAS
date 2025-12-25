@@ -1028,19 +1028,33 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
     // LÓGICA DE APLICAÇÃO DOS LIMITES
     if (gameRoom.gameMode !== "international" && !canCaptureAgain) {
-      // Regra de 5 Lances (Finais Específicos)
+      // Regras para finais específicos
+      // - 2 Damas vs 1 Dama e 2 Damas vs 2 Damas: Regra de 5 lances (10 meio-lances)
+      // - 3 Damas vs 1 Dama: aplicar regra de 20 lances (20 lances de cada jogador = 40 meio-lances)
       if (is2v1 || is2v2 || is3v1) {
-        // Se entrou nesse cenário, o contador deve ser curto.
-        // Nota: Você precisaria resetar um contador específico quando essa configuração de peças começa,
-        // mas usar o 'movesSinceCapture' é uma aproximação aceitável se ele for zerado na captura que gerou essa posição.
-        if (game.movesSinceCapture >= 10) {
+        // Nota: idealmente deveríamos iniciar/resetar um contador específico quando a
+        // configuração material aparece pela primeira vez; usamos 'movesSinceCapture'
+        // como aproximação desde que ele seja zerado nas capturas que geram a posição.
+        if (is3v1) {
+          // 20 lances de CADA jogador = 40 movimentos totais no histórico
+          if (game.movesSinceCapture >= 40) {
+            return safeProcessEndOfGame(
+              null,
+              null,
+              gameRoom,
+              "Empate Técnico (3 Damas vs 1 Dama — 20 lances)."
+            );
+          }
+        } else {
           // 5 lances de CADA jogador = 10 movimentos totais no histórico
-          return safeProcessEndOfGame(
-            null,
-            null,
-            gameRoom,
-            "Empate Técnico (Regra de 5 lances)."
-          );
+          if (game.movesSinceCapture >= 10) {
+            return safeProcessEndOfGame(
+              null,
+              null,
+              gameRoom,
+              "Empate Técnico (Regra de 5 lances)."
+            );
+          }
         }
       }
 
