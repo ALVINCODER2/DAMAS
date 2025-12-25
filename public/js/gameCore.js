@@ -255,6 +255,36 @@ window.GameCore = (function () {
         }
       });
     } catch (e) {}
+
+    // Se detectamos pelo menos uma promoção no `gameState`, força uma
+    // re-renderização do tabuleiro para garantir que o elemento `.piece`
+    // venha corretamente com a classe `king` (corrige casos de espectadores).
+    try {
+      let hasPromotion = false;
+      if (gameState && Array.isArray(gameState.boardState)) {
+        for (let r = 0; r < gameState.boardSize && !hasPromotion; r++) {
+          for (let c = 0; c < gameState.boardSize; c++) {
+            const t = gameState.boardState[r][c];
+            if (t === "P" || t === "B") {
+              hasPromotion = true;
+              break;
+            }
+          }
+        }
+      }
+      if (
+        hasPromotion &&
+        state.UI &&
+        typeof state.UI.renderPieces === "function"
+      ) {
+        // small delay para deixar terminar animações pendentes
+        requestAnimationFrame(() => {
+          try {
+            state.UI.renderPieces(gameState.boardState, gameState.boardSize);
+          } catch (e) {}
+        });
+      }
+    } catch (e) {}
   }
 
   // --- WATCHDOG (Sincronização) ---
@@ -1189,6 +1219,43 @@ window.GameCore = (function () {
         gameState.boardSize,
         capturedForAnim
       );
+
+      // Reconciliar o quadrado destino com o estado do servidor, para evitar
+      // duplicações visuais (ex.: peça adversária aparecendo no mesmo quadrado)
+      try {
+        if (state.UI && typeof state.UI.reconcileSquare === "function") {
+          const dst = gameState.lastMove.to;
+          const expected =
+            gameState.boardState && gameState.boardState[dst.row]
+              ? gameState.boardState[dst.row][dst.col]
+              : null;
+          state.UI.reconcileSquare(dst.row, dst.col, expected);
+        }
+      } catch (e) {}
+
+      // Garantia: se o movimento resultou em promoção (dama), force a
+      // aplicação da classe `king` no elemento DOM destino. Isso corrige
+      // um caso em que espectadores não veem a coroa até recarregar.
+      try {
+        if (gameState && gameState.lastMove && gameState.boardState) {
+          const dst = gameState.lastMove.to;
+          const pieceType =
+            gameState.boardState && gameState.boardState[dst.row]
+              ? gameState.boardState[dst.row][dst.col]
+              : null;
+          if (pieceType === "B" || pieceType === "P") {
+            const sq = document.querySelector(
+              `.square[data-row="${dst.row}"][data-col="${dst.col}"]`
+            );
+            if (sq) {
+              const p = sq.querySelector(".piece");
+              if (p && !p.classList.contains("king")) p.classList.add("king");
+            }
+          }
+        }
+      } catch (e) {
+        /* silencioso */
+      }
     }
 
     if (!suppressSound && !isMyMove) {
@@ -1268,6 +1335,50 @@ window.GameCore = (function () {
     } else {
       state.boardState = gameState.boardState;
     }
+
+    // Garantia extra: alguns caminhos de atualização podem deixar a peça
+    // promovida sem a classe `king` no DOM (especialmente para espectadores
+    // quando não re-renderizamos). Percorremos o boardState e substituímos
+    // o elemento `.piece` nas posições promovidas para garantir a coroa.
+    try {
+      if (gameState && Array.isArray(gameState.boardState)) {
+        for (let r = 0; r < gameState.boardSize; r++) {
+          for (let c = 0; c < gameState.boardSize; c++) {
+            try {
+              const t = gameState.boardState[r][c];
+              if (t === "P" || t === "B") {
+                const sq = document.querySelector(
+                  `.square[data-row="${r}"][data-col="${c}"]`
+                );
+                if (!sq) continue;
+                const existing = sq.querySelector(".piece");
+                const classColor = t === "B" ? "black-piece" : "white-piece";
+
+                if (existing) {
+                  const needsReplace =
+                    !existing.classList.contains("king") ||
+                    !existing.classList.contains(classColor);
+                  if (needsReplace) {
+                    const prevOpacity = existing.style.opacity || "";
+                    try {
+                      existing.remove();
+                    } catch (e) {}
+                    const np = document.createElement("div");
+                    np.className = `piece ${classColor} king`;
+                    if (prevOpacity) np.style.opacity = prevOpacity;
+                    sq.appendChild(np);
+                  }
+                } else {
+                  const np = document.createElement("div");
+                  np.className = `piece ${classColor} king`;
+                  sq.appendChild(np);
+                }
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {}
 
     // 5. RESTAURAÇÃO FANTASMA
     if (state.currentTurnCapturedPieces.length > 0) {

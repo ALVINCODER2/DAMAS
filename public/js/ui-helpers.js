@@ -514,22 +514,62 @@ window.UI = {
             if (pieceEl && pieceEl.parentNode) pieceEl.style.visibility = "";
           } catch (e) {}
 
-          // Fallback: ensure the destination square has a visible `.piece` element.
-          // Emitted deltas / full state updates sometimes race with the animation
-          // and can leave the destination without a piece for a short time. To
-          // make the UI robust, create a minimal piece element if missing.
+          // Normalize destination pieces: remove duplicates and ensure one
+          // visible piece matching the moving piece if possible. This avoids
+          // transient visual overlaps where uma peça adversária aparece
+          // juntamente com a peça em movimento.
           try {
-            const destHasPiece =
-              toSquare &&
-              toSquare.querySelector &&
-              toSquare.querySelector(".piece");
-            if (!destHasPiece && toSquare) {
-              const fallback = document.createElement("div");
-              fallback.className = originalPieceClass || "piece black-piece";
-              // ensure visible
-              fallback.style.opacity = "1";
-              fallback.style.visibility = "";
-              toSquare.appendChild(fallback);
+            if (toSquare && toSquare.querySelector) {
+              const destPieces = Array.from(
+                toSquare.querySelectorAll(".piece")
+              );
+
+              if (destPieces.length > 1) {
+                let keep = null;
+                if (originalPieceClass) {
+                  keep = destPieces.find(
+                    (p) => p.className === originalPieceClass
+                  );
+                }
+                if (!keep) keep = destPieces[destPieces.length - 1];
+                destPieces.forEach((p) => {
+                  if (p !== keep) {
+                    try {
+                      p.remove();
+                    } catch (er) {
+                      try {
+                        if (p.parentNode) p.parentNode.removeChild(p);
+                      } catch (er2) {
+                        p.style.display = "none";
+                      }
+                    }
+                  }
+                });
+              } else if (destPieces.length === 0) {
+                const fallback = document.createElement("div");
+                fallback.className = originalPieceClass || "piece black-piece";
+                fallback.style.opacity = "1";
+                fallback.style.visibility = "";
+                toSquare.appendChild(fallback);
+              } else if (destPieces.length === 1 && originalPieceClass) {
+                const only = destPieces[0];
+                if (only.className !== originalPieceClass) {
+                  try {
+                    only.remove();
+                  } catch (er) {
+                    try {
+                      if (only.parentNode) only.parentNode.removeChild(only);
+                    } catch (er2) {
+                      only.style.display = "none";
+                    }
+                  }
+                  const np = document.createElement("div");
+                  np.className = originalPieceClass;
+                  np.style.opacity = "1";
+                  np.style.visibility = "";
+                  toSquare.appendChild(np);
+                }
+              }
             }
           } catch (e) {}
           try {
@@ -723,6 +763,79 @@ window.UI = {
       this.elements.board = origBoard;
       this.boardCache = origCache;
     }
+  },
+
+  // Reconcila um único quadrado com o estado esperado (pieceType pode ser
+  // 'p','P','b','B' ou 0). Garante que exista no máximo uma `.piece` com as
+  // classes corretas e cria/substitui quando necessário.
+  reconcileSquare: function (row, col, pieceType) {
+    try {
+      const sq = document.querySelector(
+        `.square[data-row="${row}"][data-col="${col}"]`
+      );
+      if (!sq) return;
+
+      const pieces = Array.from(sq.querySelectorAll(".piece"));
+
+      if (!pieceType || pieceType === 0) {
+        // Não deve haver peça aqui
+        pieces.forEach((p) => {
+          try {
+            p.remove();
+          } catch (e) {
+            p.style.display = "none";
+          }
+        });
+        return;
+      }
+
+      const isBlack = String(pieceType).toLowerCase() === "p";
+      const isKing = pieceType === "P" || pieceType === "B";
+      const classColor = isBlack ? "black-piece" : "white-piece";
+
+      // Tenta encontrar peça compatível
+      let matched = pieces.find((p) => {
+        try {
+          return (
+            p.classList.contains(classColor) &&
+            (isKing ? p.classList.contains("king") : true)
+          );
+        } catch (e) {
+          return false;
+        }
+      });
+
+      if (!matched) {
+        // Remove todas e cria a peça correta
+        pieces.forEach((p) => {
+          try {
+            p.remove();
+          } catch (e) {
+            p.style.display = "none";
+          }
+        });
+        const np = document.createElement("div");
+        np.className = `piece ${classColor}`;
+        if (isKing) np.classList.add("king");
+        sq.appendChild(np);
+        return;
+      }
+
+      // Remove extras
+      pieces.forEach((p) => {
+        if (p !== matched)
+          try {
+            p.remove();
+          } catch (e) {
+            p.style.display = "none";
+          }
+      });
+      // Ajusta classe king se necessário
+      if (isKing && !matched.classList.contains("king"))
+        matched.classList.add("king");
+      if (!isKing && matched.classList.contains("king"))
+        matched.classList.remove("king");
+    } catch (e) {}
   },
 
   resetLobbyUI: function () {
