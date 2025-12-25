@@ -1151,8 +1151,30 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     }
 
     // Ainda emitimos o estado completo para jogadores conectados por compatibilidade,
-    // mas a camada cliente pode optar por ignorar esse payload quando receber o delta.
-    sendGameState(roomCode, { ...game, mandatoryPieces });
+    // e forçamos uma atualização imediata para espectadores para que seus
+    // timers (contadores) sejam atualizados imediatamente após a jogada.
+    sendGameState(
+      roomCode,
+      {
+        ...game,
+        mandatoryPieces,
+        // Garantir que campos de tempo venham do room para espectadores
+        whiteTime:
+          typeof gameRoom.whiteTime === "number"
+            ? gameRoom.whiteTime
+            : undefined,
+        blackTime:
+          typeof gameRoom.blackTime === "number"
+            ? gameRoom.blackTime
+            : undefined,
+        timeLeft:
+          typeof gameRoom.timeLeft === "number" ? gameRoom.timeLeft : undefined,
+        timerActive:
+          game.timerActive !== undefined ? !!game.timerActive : undefined,
+        currentPlayer: game.currentPlayer,
+      },
+      { forceSpectator: true }
+    );
 
     // Auto-move se for único E for sequência de captura
     if (canCaptureAgain) {

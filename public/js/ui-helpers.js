@@ -1284,7 +1284,10 @@ window.UI = {
 
   updateTimer: function (data) {
     if (typeof data.timeLeft === "number") {
-      this.elements.timerDisplay.textContent = data.timeLeft + "s";
+      // Unifica formato para timeLeft (ex.: 0:17)
+      this.elements.timerDisplay.textContent = this.formatTime(
+        typeof data.timeLeft === "number" ? data.timeLeft : 0
+      );
     } else if (
       typeof data.whiteTime === "number" &&
       typeof data.blackTime === "number"
