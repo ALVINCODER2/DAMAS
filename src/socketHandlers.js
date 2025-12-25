@@ -410,13 +410,9 @@ function sendGameState(roomCode, fullState, opts = {}) {
         timerActive: !!fullState.timerActive,
       };
       try {
-        for (const specId of Array.from(room.spectators)) {
-          try {
-            // spectral updates are non-critical; use volatile to avoid
-            // building a backlog if client/network is slow
-            io.to(specId).volatile.emit("gameStateUpdate", reduced);
-          } catch (e) {}
-        }
+        // Emit in batch to the spectators room to avoid per-socket loops.
+        const specRoomName = `${roomCode}-spectators`;
+        io.to(specRoomName).volatile.emit("gameStateUpdate", reduced);
       } catch (e) {}
     }
   } catch (e) {
@@ -1403,11 +1399,15 @@ function initializeSocket(ioInstance) {
       }
 
       try {
-        socket.join(roomCode);
+        // Do NOT join the main player room to avoid spectators receiving
+        // every broadcast intended for players. Use a separate spectator room
+        // to isolate their traffic and allow throttling.
+        const specRoom = `${roomCode}-spectators`;
+        socket.join(specRoom);
         console.log(
           `[Socket] joinAsSpectator: socket=${socket.id} user=${
             socket.userData?.email || "unknown"
-          } joined room=${roomCode}`
+          } joined specRoom=${specRoom}`
         );
       } catch (e) {
         console.error(
@@ -1483,8 +1483,13 @@ function initializeSocket(ioInstance) {
             spectatorCount: room.spectators ? room.spectators.size : 0,
           });
 
-          // Notify room about updated spectator count
+          // Notify players (in the main room) about updated spectator count
+          // and also notify spectators room so spectator UIs update consistently.
+          const specRoomName = `${roomCode}-spectators`;
           io.to(roomCode).volatile.emit("spectatorCount", {
+            count: room.spectators ? room.spectators.size : 0,
+          });
+          io.to(specRoomName).volatile.emit("spectatorCount", {
             count: room.spectators ? room.spectators.size : 0,
           });
 
@@ -2005,14 +2010,19 @@ function initializeSocket(ioInstance) {
         const room = gameRooms[specRoomCode];
         try {
           room.spectators.delete(socket.id);
+          // Notify players and remaining spectators
+          const specRoomName = `${specRoomCode}-spectators`;
           io.to(specRoomCode).volatile.emit("spectatorCount", {
+            count: room.spectators ? room.spectators.size : 0,
+          });
+          io.to(specRoomName).volatile.emit("spectatorCount", {
             count: room.spectators ? room.spectators.size : 0,
           });
         } catch (e) {
           console.warn("Error removing spectator on disconnect:", e);
         }
         try {
-          socket.leave(specRoomCode);
+          socket.leave(`${specRoomCode}-spectators`);
         } catch (e) {}
         // Spectator removal complete — do not proceed to player disconnect logic
         return;
@@ -2449,11 +2459,15 @@ function initializeSocket(ioInstance) {
         // If non-player leaving (likely spectator), remove from spectators set
         if (room.spectators && room.spectators.has(socket.id)) {
           room.spectators.delete(socket.id);
+          const specRoomName = `${roomCode}-spectators`;
           io.to(roomCode).volatile.emit("spectatorCount", {
             count: room.spectators ? room.spectators.size : 0,
           });
+          io.to(specRoomName).volatile.emit("spectatorCount", {
+            count: room.spectators ? room.spectators.size : 0,
+          });
         }
-        socket.leave(roomCode);
+        socket.leave(`${roomCode}-spectators`);
       }
 
       // If still not found, try to locate by user email (handles races where socketId changed)
