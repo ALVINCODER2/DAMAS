@@ -1352,7 +1352,8 @@ window.GameCore = (function () {
                 );
                 if (!sq) continue;
                 const existing = sq.querySelector(".piece");
-                const classColor = t === "B" ? "black-piece" : "white-piece";
+                const isBlack = String(t).toLowerCase() === "p";
+                const classColor = isBlack ? "black-piece" : "white-piece";
 
                 if (existing) {
                   const needsReplace =
