@@ -408,6 +408,13 @@ function sendGameState(roomCode, fullState, opts = {}) {
         lastMove: fullState.lastMove || fullState.lastMove || null,
         roomCode: roomCode,
         timerActive: !!fullState.timerActive,
+        // Inclui tempos para espectadores (white/black/timeLeft) para atualizar timers
+        whiteTime:
+          typeof fullState.whiteTime === "number" ? fullState.whiteTime : null,
+        blackTime:
+          typeof fullState.blackTime === "number" ? fullState.blackTime : null,
+        timeLeft:
+          typeof fullState.timeLeft === "number" ? fullState.timeLeft : null,
       };
       try {
         // Emit in batch to the spectators room to avoid per-socket loops.
@@ -520,6 +527,15 @@ async function startGameLogic(room) {
             moveHistory: room.game ? room.game.moveHistory : [],
             initialBoardState: room.game ? room.game.initialBoardState : null,
           });
+          try {
+            const specRoom = `${room.roomCode}-spectators`;
+            io.to(specRoom).emit("gameOver", {
+              winner: winnerColorFinal,
+              reason: finalReason,
+              moveHistory: room.game ? room.game.moveHistory : [],
+              initialBoardState: room.game ? room.game.initialBoardState : null,
+            });
+          } catch (e) {}
           room.isGameConcluded = true;
         }
       }
@@ -1275,6 +1291,17 @@ async function startNextTablitaGame(roomCode) {
               moveHistory: room.game ? room.game.moveHistory : [],
               initialBoardState: room.game ? room.game.initialBoardState : null,
             });
+            try {
+              const specRoom = `${room.roomCode}-spectators`;
+              io.to(specRoom).emit("gameOver", {
+                winner: winnerColorFinal,
+                reason: finalReason,
+                moveHistory: room.game ? room.game.moveHistory : [],
+                initialBoardState: room.game
+                  ? room.game.initialBoardState
+                  : null,
+              });
+            } catch (e) {}
 
             if (updatedWinner && finalWinnerData.socketId) {
               const ws = io.sockets.sockets.get(finalWinnerData.socketId);

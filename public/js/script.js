@@ -813,6 +813,28 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById(
         "spectator-end-message"
       ).textContent = `${wText} venceram! ${data.reason}`;
+      try {
+        const reason = String(data.reason || "").toLowerCase();
+        const autoKeywords = [
+          "ausente",
+          "ausência",
+          "ausentes",
+          "jogador ausente",
+        ];
+        const shouldAutoReturn = autoKeywords.some((k) => reason.includes(k));
+        if (shouldAutoReturn) {
+          // espera alguns segundos para o espectador ver a mensagem, depois retorna ao lobby
+          setTimeout(() => {
+            if (
+              window.isSpectator &&
+              GameCore &&
+              typeof GameCore.returnToLobbyLogic === "function"
+            ) {
+              GameCore.returnToLobbyLogic();
+            }
+          }, 5000);
+        }
+      } catch (e) {}
     } else {
       if (data.isTournament) {
         if (data.winner === GameCore.state.myColor) {

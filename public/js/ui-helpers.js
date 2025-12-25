@@ -1283,14 +1283,19 @@ window.UI = {
   },
 
   updateTimer: function (data) {
-    if (data.timeLeft !== undefined) {
+    if (typeof data.timeLeft === "number") {
       this.elements.timerDisplay.textContent = data.timeLeft + "s";
-    } else if (data.whiteTime !== undefined && data.blackTime !== undefined) {
+    } else if (
+      typeof data.whiteTime === "number" &&
+      typeof data.blackTime === "number"
+    ) {
       const turnColor = this.elements.turnDisplay.textContent;
       let timeToShow = 0;
       if (turnColor === "Brancas") timeToShow = data.whiteTime;
       else timeToShow = data.blackTime;
-      this.elements.timerDisplay.textContent = this.formatTime(timeToShow);
+      this.elements.timerDisplay.textContent = this.formatTime(
+        typeof timeToShow === "number" ? timeToShow : 0
+      );
     }
   },
 

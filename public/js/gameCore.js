@@ -83,9 +83,12 @@ window.GameCore = (function () {
     if (!data) return;
     if (data.timerActive !== undefined)
       state.serverTimerActive = !!data.timerActive;
-    if (data.whiteTime !== undefined) state.displayedWhiteTime = data.whiteTime;
-    if (data.blackTime !== undefined) state.displayedBlackTime = data.blackTime;
-    if (data.timeLeft !== undefined) state.displayedTimeLeft = data.timeLeft;
+    if (typeof data.whiteTime === "number")
+      state.displayedWhiteTime = data.whiteTime;
+    if (typeof data.blackTime === "number")
+      state.displayedBlackTime = data.blackTime;
+    if (typeof data.timeLeft === "number")
+      state.displayedTimeLeft = data.timeLeft;
     if (data.currentPlayer !== undefined)
       state.lastServerCurrentPlayer = data.currentPlayer;
 

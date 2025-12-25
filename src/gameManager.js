@@ -218,6 +218,16 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           moveHistory: room.game.moveHistory,
           initialBoardState: room.game.initialBoardState,
         });
+        try {
+          const specRoom = `${room.roomCode}-spectators`;
+          io.to(specRoom).emit("gameOver", {
+            winner: winnerColor,
+            reason: `Torneio: ${reason} Vencedor avança!`,
+            isTournament: true,
+            moveHistory: room.game.moveHistory,
+            initialBoardState: room.game.initialBoardState,
+          });
+        } catch (e) {}
         // Forçar retorno ao lobby do vencedor (se conectado)
         if (winnerData && winnerData.socketId) {
           try {
@@ -270,6 +280,14 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
             moveHistory: room.game.moveHistory, // Envia histórico
             initialBoardState: room.game.initialBoardState, // Envia estado inicial
           });
+          try {
+            const specRoom = `${room.roomCode}-spectators`;
+            io.to(specRoom).emit("gameDraw", {
+              reason,
+              moveHistory: room.game.moveHistory,
+              initialBoardState: room.game.initialBoardState,
+            });
+          } catch (e) {}
 
           await saveMatchHistory(room, null, reason);
         } catch (err) {
@@ -300,6 +318,15 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
               moveHistory: room.game.moveHistory, // Envia histórico
               initialBoardState: room.game.initialBoardState, // Envia estado inicial
             });
+            try {
+              const specRoom = `${room.roomCode}-spectators`;
+              io.to(specRoom).emit("gameOver", {
+                winner: winnerColor,
+                reason,
+                moveHistory: room.game.moveHistory,
+                initialBoardState: room.game.initialBoardState,
+              });
+            } catch (e) {}
             const winnerSocket = io.sockets.sockets.get(winnerData.socketId);
             if (winnerSocket && updatedWinner) {
               winnerSocket.emit("updateSaldo", {
