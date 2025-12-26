@@ -415,6 +415,41 @@ window.GameCore = (function () {
 
     // Cria o tabuleiro antes de desenhar as peças (evita falha quando o DOM não existe)
     if (state.UI && state.UI.createBoard) {
+      // Carrega preferências do usuário salvas localmente (se houver) antes de criar o tabuleiro
+      try {
+        const tryLoadPrefs = () => {
+          try {
+            const last = localStorage.getItem("prefs_last");
+            if (last) return last;
+            const emailKey =
+              window.currentUser && window.currentUser.email
+                ? `prefs_${window.currentUser.email}`
+                : null;
+            if (emailKey) {
+              const v = localStorage.getItem(emailKey);
+              if (v) return v;
+            }
+            const anon = localStorage.getItem("prefs_anon");
+            if (anon) return anon;
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith("prefs_")) return localStorage.getItem(k);
+            }
+            return null;
+          } catch (e) {
+            return null;
+          }
+        };
+
+        const ls = tryLoadPrefs();
+        if (ls) {
+          try {
+            window.userPreferences = JSON.parse(ls);
+            if (state.UI && state.UI.applyPreferences)
+              state.UI.applyPreferences(window.userPreferences);
+          } catch (e) {}
+        }
+      } catch (e) {}
       // Garantia extra: se não houver boardState no payload, inicializa um vazio
       if (!Array.isArray(state.boardState) || state.boardState.length === 0) {
         const size = state.currentBoardSize || 8;
@@ -1368,13 +1403,40 @@ window.GameCore = (function () {
                       existing.remove();
                     } catch (e) {}
                     const np = document.createElement("div");
-                    np.className = `piece ${classColor} king`;
+                    let styleClass = "";
+                    try {
+                      styleClass =
+                        (window.UI &&
+                          window.UI.elements &&
+                          window.UI.elements.board &&
+                          window.UI.elements.board.dataset &&
+                          window.UI.elements.board.dataset.pieceStyle) ||
+                        (window.userPreferences &&
+                          window.userPreferences.pieceStyle) ||
+                        "";
+                      if (styleClass) styleClass = ` piece-style-${styleClass}`;
+                    } catch (e) {}
+                    np.className = `piece ${classColor} king` + styleClass;
                     if (prevOpacity) np.style.opacity = prevOpacity;
                     sq.appendChild(np);
                   }
                 } else {
                   const np = document.createElement("div");
-                  np.className = `piece ${classColor} king`;
+                  let styleClass2 = "";
+                  try {
+                    styleClass2 =
+                      (window.UI &&
+                        window.UI.elements &&
+                        window.UI.elements.board &&
+                        window.UI.elements.board.dataset &&
+                        window.UI.elements.board.dataset.pieceStyle) ||
+                      (window.userPreferences &&
+                        window.userPreferences.pieceStyle) ||
+                      "";
+                    if (styleClass2)
+                      styleClass2 = ` piece-style-${styleClass2}`;
+                  } catch (e) {}
+                  np.className = `piece ${classColor} king` + styleClass2;
                   sq.appendChild(np);
                 }
               }

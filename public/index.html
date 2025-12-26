@@ -393,6 +393,39 @@
   </div>
 
   <!-- Outros Modais -->
+  <div id="visual-prefs-overlay" class="hidden modal-overlay">
+    <div class="modal-card" style="max-width:520px;">
+      <h3>Preferências Visuais</h3>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <label>Estilo das Peças</label>
+          <select id="prefs-piece-style" class="modern-input">
+            <option value="default">Padrão (Circular)</option>
+            <option value="flat">Flat (Sem sombra)</option>
+            <option value="outlined">Contornado</option>
+            <option value="wood">Madeira</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:140px;">
+          <label>Cor das Peças Claras</label>
+          <input type="color" id="prefs-piece-white" class="modern-input" value="#ffffff">
+        </div>
+        <div style="flex:1;min-width:140px;">
+          <label>Cor das Peças Escuras</label>
+          <input type="color" id="prefs-piece-black" class="modern-input" value="#222222">
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <label>Pré-visualização</label>
+        <div id="prefs-preview-board" data-size="8"
+          style="width:100%;height:180px;border-radius:6px;overflow:hidden;margin-top:8px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button id="prefs-save-btn" class="btn-confirm">Salvar</button>
+        <button id="prefs-cancel-btn" class="btn-close">Fechar</button>
+      </div>
+    </div>
+  </div>
   <div id="referrals-overlay" class="hidden modal-overlay">
     <div class="modal-card">
       <h3>Indicações</h3>

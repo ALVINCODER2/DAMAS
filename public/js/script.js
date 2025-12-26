@@ -4,6 +4,22 @@
 document.addEventListener("DOMContentLoaded", () => {
   UI.init();
 
+  // Aplica preferências visuais salvas globalmente o mais cedo possível
+  try {
+    const loadPrefsEarly = () => {
+      try {
+        const last = localStorage.getItem("prefs_last");
+        if (last) {
+          const p = JSON.parse(last);
+          window.userPreferences = p;
+          if (window.UI && window.UI.applyPreferences)
+            window.UI.applyPreferences(p);
+        }
+      } catch (e) {}
+    };
+    loadPrefsEarly();
+  } catch (e) {}
+
   // Se o usuário ainda não ativou som, mostra botão visível para ativar (ajuda em abas em background)
   try {
     const soundPref = localStorage.getItem("soundEnabled");
@@ -492,6 +508,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
       GameCore.state.currentBoardSize = gameState.boardSize;
       GameCore.state.boardState = gameState.boardState;
+
+      // Carrega preferências do usuário salvas localmente (se houver) antes de criar o tabuleiro
+      try {
+        const tryLoadPrefs = () => {
+          try {
+            // try last-used first
+            const last = localStorage.getItem("prefs_last");
+            if (last) return last;
+            const emailKey =
+              window.currentUser && window.currentUser.email
+                ? `prefs_${window.currentUser.email}`
+                : null;
+            if (emailKey) {
+              const v = localStorage.getItem(emailKey);
+              if (v) return v;
+            }
+            const anon = localStorage.getItem("prefs_anon");
+            if (anon) return anon;
+            // fallback: any key starting with prefs_
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith("prefs_")) return localStorage.getItem(k);
+            }
+            return null;
+          } catch (e) {
+            return null;
+          }
+        };
+
+        const ls = tryLoadPrefs();
+        if (ls) {
+          try {
+            window.userPreferences = JSON.parse(ls);
+            if (window.UI && window.UI.applyPreferences)
+              window.UI.applyPreferences(window.userPreferences);
+          } catch (e) {}
+        }
+      } catch (e) {}
 
       // Passa a função do Core como callback para o clique no tabuleiro
       UI.createBoard(

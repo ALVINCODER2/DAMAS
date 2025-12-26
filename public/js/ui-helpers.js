@@ -677,11 +677,21 @@ window.UI = {
             const isBlack = pieceType.toString().toLowerCase() === "p";
             const isKing = pieceType === "P" || pieceType === "B";
             const classColor = isBlack ? "black-piece" : "white-piece";
+            // aplica estilo customizado se presente (board data ou prefs)
+            let styleClass = "";
+            try {
+              const boardEl = this.elements.board;
+              const ds =
+                (boardEl && boardEl.dataset && boardEl.dataset.pieceStyle) ||
+                (window.userPreferences && window.userPreferences.pieceStyle);
+              if (ds) styleClass = `piece-style-${ds}`;
+            } catch (e) {}
 
             // Cria exatamente uma peça por casa conforme o estado
             try {
               const piece = document.createElement("div");
-              piece.className = `piece ${classColor}`;
+              piece.className =
+                `piece ${classColor}` + (styleClass ? ` ${styleClass}` : "");
               if (isKing) piece.classList.add("king");
               square.appendChild(piece);
             } catch (e) {}
@@ -815,7 +825,15 @@ window.UI = {
           }
         });
         const np = document.createElement("div");
-        np.className = `piece ${classColor}`;
+        let styleClass = "";
+        try {
+          const boardEl = this.elements.board;
+          const ds =
+            (boardEl && boardEl.dataset && boardEl.dataset.pieceStyle) ||
+            (window.userPreferences && window.userPreferences.pieceStyle);
+          if (ds) styleClass = ` piece-style-${ds}`;
+        } catch (e) {}
+        np.className = `piece ${classColor}` + styleClass;
         if (isKing) np.classList.add("king");
         sq.appendChild(np);
         return;
@@ -863,10 +881,57 @@ window.UI = {
         board.style.setProperty("--white-piece-color-1", prefs.pieceWhite);
         // derivado levemente mais escuro para segundo stop
         board.style.setProperty("--white-piece-color-2", prefs.pieceWhite);
+        try {
+          // aplica também no escopo do board para efeito imediato
+          board.style.setProperty("--white-piece-highlight-1", "transparent");
+          board.style.setProperty("--white-piece-highlight-2", "transparent");
+          board.style.setProperty("--white-piece-highlight-3", "transparent");
+          // também define em :root para garantir aplicação imediata mesmo
+          // antes de recriar o tabuleiro (preview / reload timing)
+          document.documentElement.style.setProperty(
+            "--white-piece-color-1",
+            prefs.pieceWhite
+          );
+          document.documentElement.style.setProperty(
+            "--white-piece-color-2",
+            prefs.pieceWhite
+          );
+          // Quando o usuário escolhe uma cor personalizada, removemos os
+          // destaques brancos que estragam a cor escolhida, tornando-os
+          // transparentes. Isso preserva a aparência original quando não
+          // há preferência personalizada.
+          document.documentElement.style.setProperty(
+            "--white-piece-highlight-1",
+            "transparent"
+          );
+          document.documentElement.style.setProperty(
+            "--white-piece-highlight-2",
+            "transparent"
+          );
+          document.documentElement.style.setProperty(
+            "--white-piece-highlight-3",
+            "transparent"
+          );
+        } catch (e) {}
       }
       if (prefs.pieceBlack) {
         board.style.setProperty("--black-piece-color-1", prefs.pieceBlack);
         board.style.setProperty("--black-piece-color-2", prefs.pieceBlack);
+        try {
+          document.documentElement.style.setProperty(
+            "--black-piece-color-1",
+            prefs.pieceBlack
+          );
+          document.documentElement.style.setProperty(
+            "--black-piece-color-2",
+            prefs.pieceBlack
+          );
+        } catch (e) {}
+      }
+      if (prefs.pieceStyle) {
+        try {
+          board.dataset.pieceStyle = prefs.pieceStyle;
+        } catch (e) {}
       }
       // Remove textura (background-image) das casas para que a cor personalizada seja visível
       try {

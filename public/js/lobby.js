@@ -1214,7 +1214,97 @@ window.initLobby = function (socket, UI) {
 
   // Adicionando a função createVisualPrefsUI para evitar erros de referência
   function createVisualPrefsUI() {
-    console.log("createVisualPrefsUI foi chamada.");
-    // Aqui você pode adicionar a lógica para criar a interface de preferências visuais
+    // Cria a UI do modal (apenas uma vez)
+    const overlay = document.getElementById("visual-prefs-overlay");
+    if (!overlay) return;
+    try {
+      const pieceStyleEl = document.getElementById("prefs-piece-style");
+      const whiteEl = document.getElementById("prefs-piece-white");
+      const blackEl = document.getElementById("prefs-piece-black");
+      const preview = document.getElementById("prefs-preview-board");
+      const saveBtn = document.getElementById("prefs-save-btn");
+      const cancelBtn = document.getElementById("prefs-cancel-btn");
+
+      const prefs = window.userPreferences || {};
+      if (pieceStyleEl && prefs.pieceStyle)
+        pieceStyleEl.value = prefs.pieceStyle;
+      if (whiteEl && prefs.pieceWhite) whiteEl.value = prefs.pieceWhite;
+      if (blackEl && prefs.pieceBlack) blackEl.value = prefs.pieceBlack;
+
+      // Atualiza preview sempre que mudar
+      const updatePreview = () => {
+        const now = {
+          pieceWhite: whiteEl ? whiteEl.value : prefs.pieceWhite || "#ffffff",
+          pieceBlack: blackEl ? blackEl.value : prefs.pieceBlack || "#222222",
+          pieceStyle: pieceStyleEl
+            ? pieceStyleEl.value
+            : prefs.pieceStyle || "default",
+        };
+        window.UI.applyPreferences({
+          pieceWhite: now.pieceWhite,
+          pieceBlack: now.pieceBlack,
+        });
+        if (preview && window.UI && window.UI.renderBoardInto) {
+          try {
+            preview.style.setProperty("--white-piece-color-1", now.pieceWhite);
+            preview.style.setProperty("--black-piece-color-1", now.pieceBlack);
+            preview.dataset.pieceStyle = now.pieceStyle;
+            const sample = makeEmptyBoard(
+              parseInt(preview.dataset.size || 8, 10)
+            );
+            window.UI.renderBoardInto(
+              preview,
+              sample,
+              parseInt(preview.dataset.size || 8, 10)
+            );
+            preview
+              .querySelectorAll(".light, .dark")
+              .forEach((sq) => (sq.style.backgroundImage = "none"));
+          } catch (e) {}
+        }
+      };
+
+      if (pieceStyleEl) pieceStyleEl.addEventListener("change", updatePreview);
+      if (whiteEl) whiteEl.addEventListener("input", updatePreview);
+      if (blackEl) blackEl.addEventListener("input", updatePreview);
+
+      if (saveBtn) {
+        saveBtn.onclick = async () => {
+          const newPrefs = Object.assign({}, window.userPreferences || {});
+          if (pieceStyleEl) newPrefs.pieceStyle = pieceStyleEl.value;
+          if (whiteEl) newPrefs.pieceWhite = whiteEl.value;
+          if (blackEl) newPrefs.pieceBlack = blackEl.value;
+          window.userPreferences = newPrefs;
+          try {
+            const key = `prefs_${window.currentUser?.email || "anon"}`;
+            localStorage.setItem(key, JSON.stringify(newPrefs));
+            try {
+              localStorage.setItem("prefs_last", JSON.stringify(newPrefs));
+            } catch (e) {}
+          } catch (e) {}
+          if (window.UI && window.UI.applyPreferences)
+            window.UI.applyPreferences(newPrefs);
+          try {
+            if (newPrefs.pieceWhite)
+              document.documentElement.style.setProperty(
+                "--white-piece-color-1",
+                newPrefs.pieceWhite
+              );
+            if (newPrefs.pieceBlack)
+              document.documentElement.style.setProperty(
+                "--black-piece-color-1",
+                newPrefs.pieceBlack
+              );
+          } catch (e) {}
+          overlay.classList.add("hidden");
+        };
+      }
+      if (cancelBtn) cancelBtn.onclick = () => overlay.classList.add("hidden");
+
+      // Inicial preview
+      setTimeout(updatePreview, 50);
+    } catch (e) {
+      console.error("createVisualPrefsUI error:", e);
+    }
   }
 };
