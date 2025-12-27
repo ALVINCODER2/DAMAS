@@ -814,7 +814,7 @@ window.GameCore = (function () {
   }
 
   // Aguarda confirmação do servidor para um moveId otimista previamente enviado.
-  function waitForMoveAck(moveId, timeoutMs = 5000) {
+  function waitForMoveAck(moveId, timeoutMs = 10000) {
     return new Promise((resolve) => {
       const start = Date.now();
       const iv = setInterval(() => {
@@ -974,7 +974,7 @@ window.GameCore = (function () {
                 moveId: moveId,
               });
 
-              const ok = await waitForMoveAck(moveId, 5000);
+              const ok = await waitForMoveAck(moveId, 10000);
               try {
                 if (window.__CLIENT_DEBUG)
                   console.log(

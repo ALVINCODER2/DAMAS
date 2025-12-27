@@ -256,14 +256,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   let __pingInterval = null;
+  // contador para amostragem de telemetria
+  let __pingSamples = 0;
   function startPingChecks() {
     if (__pingInterval) return;
     createPingIndicator();
+    // reduz para 15s para menos amostragem e menos tráfego
     __pingInterval = setInterval(() => {
       try {
         const t = Date.now();
         socket.emit("pingCheck", t);
-        const timeoutId = setTimeout(() => updatePingIndicator("—"), 2500);
+        const timeoutId = setTimeout(() => updatePingIndicator("—"), 5000);
         socket.once("pongCheck", (ts) => {
           try {
             if (ts !== t) {
@@ -274,13 +277,17 @@ document.addEventListener("DOMContentLoaded", () => {
             clearTimeout(timeoutId);
             updatePingIndicator(rtt);
             try {
-              // send lightweight telemetry to server for diagnostics
-              socket.emit("clientTelemetry", { rtt });
+              // envia telemetria somente quando RTT alto (>200ms)
+              // ou a cada 5 pings para amostragem
+              __pingSamples = (__pingSamples + 1) % 5;
+              if (rtt > 200 || __pingSamples === 0) {
+                socket.emit("clientTelemetry", { rtt });
+              }
             } catch (e) {}
           } catch (e) {}
         });
       } catch (e) {}
-    }, 5000);
+    }, 15000);
   }
 
   // Start ping checks once connected (or when already connected)
