@@ -873,6 +873,36 @@ window.UI = {
       const board = this.elements.board;
       if (!board) return;
       if (!prefs) prefs = {};
+      // Reset to defaults: remove inline CSS variables and dataset flags
+      if (prefs.resetToDefaults) {
+        try {
+          // Remove inline board vars
+          board.style.removeProperty("--light-square");
+          board.style.removeProperty("--dark-square");
+          board.style.removeProperty("--board-border");
+          board.style.removeProperty("--white-piece-color-1");
+          board.style.removeProperty("--white-piece-color-2");
+          board.style.removeProperty("--black-piece-color-1");
+          board.style.removeProperty("--black-piece-color-2");
+          // Remove document-level overrides
+          document.documentElement.style.removeProperty(
+            "--white-piece-color-1"
+          );
+          document.documentElement.style.removeProperty(
+            "--white-piece-color-2"
+          );
+          document.documentElement.style.removeProperty(
+            "--black-piece-color-1"
+          );
+          document.documentElement.style.removeProperty(
+            "--black-piece-color-2"
+          );
+          // Remove piece style dataset
+          try {
+            delete board.dataset.pieceStyle;
+          } catch (e) {}
+        } catch (e) {}
+      }
       if (prefs.boardLight)
         board.style.setProperty("--light-square", prefs.boardLight);
       if (prefs.boardDark)
@@ -933,12 +963,15 @@ window.UI = {
           board.dataset.pieceStyle = prefs.pieceStyle;
         } catch (e) {}
       }
-      // Remove textura (background-image) das casas para que a cor personalizada seja visível
+      // Remove textura (background-image) das casas somente se usuário mudou as cores do tabuleiro
+      // ou explicitamente pediu para remover a textura (forceRemoveTexture).
       try {
-        const squares = board.querySelectorAll(".light, .dark");
-        squares.forEach((sq) => {
-          sq.style.backgroundImage = "none";
-        });
+        if (prefs.boardLight || prefs.boardDark || prefs.forceRemoveTexture) {
+          const squares = board.querySelectorAll(".light, .dark");
+          squares.forEach((sq) => {
+            sq.style.backgroundImage = "none";
+          });
+        }
       } catch (e) {}
     } catch (e) {
       // silencioso

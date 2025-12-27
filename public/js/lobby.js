@@ -1231,6 +1231,8 @@ window.initLobby = function (socket, UI) {
       if (whiteEl && prefs.pieceWhite) whiteEl.value = prefs.pieceWhite;
       if (blackEl && prefs.pieceBlack) blackEl.value = prefs.pieceBlack;
 
+      const resetBtn = document.getElementById("prefs-reset-btn");
+
       // Atualiza preview sempre que mudar
       const updatePreview = () => {
         const now = {
@@ -1270,7 +1272,14 @@ window.initLobby = function (socket, UI) {
 
       if (saveBtn) {
         saveBtn.onclick = async () => {
+          // Build new prefs but avoid carrying over board colors when
+          // user only changed piece visuals (prevents board color flip).
           const newPrefs = Object.assign({}, window.userPreferences || {});
+          // remove board-specific colors so they are not reapplied unintentionally
+          try {
+            delete newPrefs.boardLight;
+            delete newPrefs.boardDark;
+          } catch (e) {}
           if (pieceStyleEl) newPrefs.pieceStyle = pieceStyleEl.value;
           if (whiteEl) newPrefs.pieceWhite = whiteEl.value;
           if (blackEl) newPrefs.pieceBlack = blackEl.value;
@@ -1300,6 +1309,51 @@ window.initLobby = function (socket, UI) {
         };
       }
       if (cancelBtn) cancelBtn.onclick = () => overlay.classList.add("hidden");
+
+      if (resetBtn) {
+        resetBtn.onclick = () => {
+          try {
+            // Clear stored prefs for this user (or anon)
+            const key = `prefs_${window.currentUser?.email || "anon"}`;
+            try {
+              localStorage.removeItem(key);
+            } catch (e) {}
+            try {
+              localStorage.setItem("prefs_last", JSON.stringify({}));
+            } catch (e) {}
+            // Clear runtime prefs
+            window.userPreferences = {};
+            // Apply defaults via UI helper
+            if (window.UI && window.UI.applyPreferences)
+              window.UI.applyPreferences({ resetToDefaults: true });
+            // Reset controls to defaults
+            if (pieceStyleEl) pieceStyleEl.value = "default";
+            if (whiteEl) whiteEl.value = "#ffffff";
+            if (blackEl) blackEl.value = "#2e2e2e";
+            // Update preview
+            setTimeout(() => {
+              try {
+                if (preview && window.UI && window.UI.renderBoardInto) {
+                  preview.dataset.pieceStyle = "default";
+                  preview
+                    .querySelectorAll(".light, .dark")
+                    .forEach((sq) => (sq.style.backgroundImage = ""));
+                  const sample = makeEmptyBoard(
+                    parseInt(preview.dataset.size || 8, 10)
+                  );
+                  window.UI.renderBoardInto(
+                    preview,
+                    sample,
+                    parseInt(preview.dataset.size || 8, 10)
+                  );
+                }
+              } catch (e) {}
+            }, 40);
+          } catch (e) {
+            console.error("reset prefs error:", e);
+          }
+        };
+      }
 
       // Inicial preview
       setTimeout(updatePreview, 50);
