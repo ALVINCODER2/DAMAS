@@ -111,10 +111,13 @@ function scheduleTurnInactivity(roomCode) {
     if (!r) return 10 * 1000;
     try {
       // Se o jogo acabou de iniciar (primeiro lance ainda não ocorreu),
-      // damos uma janela de graça maior para evitar encerramentos
-      // instantâneos causados por timeouts padrão curtos.
+      // aplicamos regra específica para torneios: passagem rápida de vez.
+      // Em torneios, se o jogador não der o primeiro lance em 20s, passa-se a vez.
       if (r.game && r.game.isFirstMove) {
-        return Math.max(10 * 1000, 60 * 1000); // 60s de graça no primeiro lance
+        if (r.isTournament) {
+          return 20 * 1000; // 20s para primeiro lance em torneio
+        }
+        return Math.max(10 * 1000, 60 * 1000); // 60s de graça no primeiro lance para não-torneios
       }
       // Prioriza timeControl configurado
       if (r.timeControl === "match") {
