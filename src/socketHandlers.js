@@ -149,6 +149,10 @@ function scheduleTurnInactivity(roomCode) {
   }
 
   const initialDuration = getDurationForRoom(room);
+  // Pequena tolerância para torneios: suaviza perda por tempo devido a ping.
+  try {
+    if (room && room.isTournament) initialDuration += 500; // +500ms de tolerância
+  } catch (e) {}
   room.turnInactivityTimeout = setTimeout(() => {
     try {
       const r = gameRooms[roomCode];
@@ -383,6 +387,9 @@ function sendGameState(roomCode, fullState, opts = {}) {
 
     // Envia sempre o estado completo para os jogadores (por socketId)
     if (room.players && room.players.length > 0) {
+      // Por padrão enviamos apenas um payload reduzido para economizar banda.
+      // Se o chamador precisar enviar o estado completo aos jogadores, passe
+      // `opts.fullForPlayers = true`.
       for (const p of room.players) {
         try {
           if (p && p.socketId)
@@ -1347,20 +1354,22 @@ async function startNextTablitaGame(roomCode) {
               if (ws) ws.emit("updateSaldo", { newSaldo: updatedWinner.saldo });
             }
 
-            // Salva histórico simplificado do match
+            // Salva histórico simplificado do match via fila para não bloquear o event-loop
             try {
-              await MatchHistory.create({
-                player1: p1Email || "",
-                player2: p2Email || "",
-                winner: finalWinnerData.email,
-                bet: room.bet,
-                gameMode: room.gameMode,
-                reason: finalReason,
-                createdAt: new Date(),
+              enqueue({
+                type: "saveMatchHistory",
+                payload: {
+                  player1: p1Email || "",
+                  player2: p2Email || "",
+                  winner: finalWinnerData.email,
+                  bet: room.bet,
+                  gameMode: room.gameMode,
+                  reason: finalReason,
+                },
               });
             } catch (mhErr) {
               console.error(
-                "Erro salvando MatchHistory ao finalizar match por ausência:",
+                "Erro enfileirando MatchHistory ao finalizar match por ausência:",
                 mhErr
               );
             }

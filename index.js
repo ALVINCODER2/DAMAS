@@ -45,6 +45,8 @@ const io = socketIo(server, {
   pingTimeout: 60000,
   // Forçar uso de WebSocket para reduzir latência (evita polling)
   transports: ["websocket"],
+  // Compatibilidade com clients Engine.IO v3 quando necessário
+  allowEIO3: true,
   // Habilita compressão de mensagens do Engine.IO/WS
   perMessageDeflate: true,
   cors: {

@@ -1,6 +1,7 @@
 const Tournament = require("../models/Tournament");
 const User = require("../models/User");
 const MatchHistory = require("../models/MatchHistory"); // <--- IMPORTANTE: Adicionado para registrar o histórico
+const { enqueue } = require("./jobQueue");
 
 // Configurações
 const MIN_PLAYERS = 4;
@@ -238,18 +239,20 @@ async function cancelTournamentAndRefund(tournament, reason) {
 
       // 2. Salva no Histórico do Usuário
       try {
-        await MatchHistory.create({
-          player1: email,
-          player2: "Sistema (Reembolso)",
-          winner: email, // Define usuário como vencedor para indicar ganho ($)
-          bet: tournament.entryFee,
-          gameMode: "Torneio",
-          reason: `Cancelado: ${reason}`,
-          createdAt: new Date(),
+        enqueue({
+          type: "saveMatchHistory",
+          payload: {
+            player1: email,
+            player2: "Sistema (Reembolso)",
+            winner: email,
+            bet: tournament.entryFee,
+            gameMode: "Torneio",
+            reason: `Cancelado: ${reason}`,
+          },
         });
       } catch (histError) {
         console.error(
-          `Erro ao salvar histórico de reembolso para ${email}:`,
+          `Erro ao enfileirar histórico de reembolso para ${email}:`,
           histError
         );
       }
