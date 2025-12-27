@@ -45,6 +45,30 @@ window.UI = {
       captureSound: document.getElementById("capture-sound"),
       joinSound: document.getElementById("join-sound"),
     };
+    // Garantir elementos de áudio mínimos mesmo se não estiverem declarados no HTML
+    try {
+      if (!this.elements.moveSound) {
+        const a = document.createElement("audio");
+        a.id = "move-sound";
+        a.src = "/sounds/move.mp3";
+        a.preload = "auto";
+        // Não anexavisualmente se estivermos em páginas sem container de jogo
+        try {
+          document.body.appendChild(a);
+        } catch (e) {}
+        this.elements.moveSound = a;
+      }
+      if (!this.elements.captureSound) {
+        const a2 = document.createElement("audio");
+        a2.id = "capture-sound";
+        a2.src = "/sounds/capture.mp3";
+        a2.preload = "auto";
+        try {
+          document.body.appendChild(a2);
+        } catch (e) {}
+        this.elements.captureSound = a2;
+      }
+    } catch (e) {}
     // Estado e buffers para reprodução robusta (AudioContext fallback)
     this.audioCtx = null;
     this._decodedAudioBuffers = {};
@@ -1218,6 +1242,12 @@ window.UI = {
   playAudio: function (type, opts) {
     opts = opts || {};
     const self = this;
+    try {
+      console.debug("[AUDIO DEBUG] playAudio called", {
+        type: type,
+        opts: opts,
+      });
+    } catch (e) {}
     // se foi passado um moveId, evita tocar som duplicado para o mesmo move
     try {
       const moveId = opts.moveId;

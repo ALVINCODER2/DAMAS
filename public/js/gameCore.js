@@ -161,17 +161,25 @@ window.GameCore = (function () {
               state.boardState[from.row][from.col] = 0;
 
               // Remove capturadas (se houver)
+              // Primeiro registra os tipos das peças capturadas ANTES de zerá-las,
+              // para podermos decidir corretamente qual som tocar (ex.: quando
+              // o oponente come as suas peças, queremos tocar o som de capture).
+              let _capturedTypes = [];
               if (
                 Array.isArray(payload.captured) &&
                 payload.captured.length > 0
               ) {
                 payload.captured.forEach((pos) => {
-                  if (
-                    state.boardState[pos.row] &&
-                    typeof state.boardState[pos.row][pos.col] !== "undefined"
-                  ) {
-                    state.boardState[pos.row][pos.col] = 0;
-                  }
+                  try {
+                    if (
+                      state.boardState[pos.row] &&
+                      typeof state.boardState[pos.row][pos.col] !== "undefined"
+                    ) {
+                      // guarda o valor antes de zerar
+                      _capturedTypes.push(state.boardState[pos.row][pos.col]);
+                      state.boardState[pos.row][pos.col] = 0;
+                    }
+                  } catch (e) {}
                 });
               }
             } catch (e) {
@@ -238,8 +246,119 @@ window.GameCore = (function () {
                     }
                   } catch (e) {}
 
-                  if (isCaptureMove) state.UI.playAudio("capture", { moveId });
-                  else state.UI.playAudio("move", { moveId });
+                  try {
+                    // Debug: log decisão de reprodução de som
+                    console.debug(
+                      "[AUDIO DEBUG] pieceMoved -> moveId=",
+                      moveId,
+                      "isCaptureMove=",
+                      isCaptureMove,
+                      "payload.captured=",
+                      payload.captured,
+                      "_capturedTypes=",
+                      _capturedTypes
+                    );
+                  } catch (e) {}
+
+                  // Se registramos os tipos das peças capturadas, verifica se alguma
+                  // delas pertencia ao jogador local (`state.myColor`). Se sim,
+                  // isto significa que o oponente comeu suas peças — tocar som de
+                  // captura é desejável nesse caso.
+                  try {
+                    let forcedCapture = false;
+                    if (
+                      Array.isArray(_capturedTypes) &&
+                      _capturedTypes.length
+                    ) {
+                      try {
+                        forcedCapture = _capturedTypes.some((v) =>
+                          v ? String(v).toLowerCase() === state.myColor : false
+                        );
+                      } catch (e) {}
+                    }
+
+                    if (forcedCapture) {
+                      try {
+                        console.debug &&
+                          console.debug(
+                            "[AUDIO DEBUG] forcing capture (forcedCapture=true)",
+                            {
+                              moveId,
+                              from,
+                              to,
+                              _capturedTypes,
+                              suppressMoveUntil: state._suppressMoveUntil,
+                            }
+                          );
+                      } catch (e) {}
+                      state.UI.playAudio("capture", { moveId });
+                      try {
+                        state._suppressMoveUntil = Date.now() + 1200;
+                      } catch (e) {}
+                    } else {
+                      if (isCaptureMove) {
+                        try {
+                          console.debug &&
+                            console.debug(
+                              "[AUDIO DEBUG] detected capture by distance",
+                              {
+                                moveId,
+                                from,
+                                to,
+                                isCaptureMove,
+                                _capturedTypes,
+                                suppressMoveUntil: state._suppressMoveUntil,
+                              }
+                            );
+                        } catch (e) {}
+                        state.UI.playAudio("capture", { moveId });
+                        try {
+                          state._suppressMoveUntil = Date.now() + 1200;
+                        } catch (e) {}
+                      } else {
+                        try {
+                          if (
+                            !state._suppressMoveUntil ||
+                            Date.now() >= state._suppressMoveUntil
+                          ) {
+                            try {
+                              console.debug &&
+                                console.debug(
+                                  "[AUDIO DEBUG] playing move (no suppression)",
+                                  {
+                                    moveId,
+                                    from,
+                                    to,
+                                    suppressMoveUntil: state._suppressMoveUntil,
+                                  }
+                                );
+                            } catch (e) {}
+                            state.UI.playAudio("move", { moveId });
+                          } else {
+                            try {
+                              console.debug &&
+                                console.debug(
+                                  "[AUDIO DEBUG] suppressed move due to recent capture",
+                                  {
+                                    moveId,
+                                    from,
+                                    to,
+                                    suppressMoveUntil: state._suppressMoveUntil,
+                                  }
+                                );
+                            } catch (e) {}
+                          }
+                        } catch (e) {
+                          state.UI.playAudio("move", { moveId });
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    // fallback para comportamento original caso ocorra erro
+                    if (isCaptureMove)
+                      state.UI.playAudio("capture", { moveId });
+                    else state.UI.playAudio("move", { moveId });
+                  }
                   try {
                     if (moveId) state._lastSoundMoveId = moveId;
                   } catch (e) {}
@@ -352,8 +471,23 @@ window.GameCore = (function () {
         const dc = Math.abs(move.to.col - move.from.col);
         const isCapture =
           (move.captured && move.captured.length > 0) || Math.max(dr, dc) > 1;
-        if (isCapture) state.UI.playAudio("capture");
-        else state.UI.playAudio("move");
+        if (isCapture) {
+          state.UI.playAudio("capture");
+          try {
+            state._suppressMoveUntil = Date.now() + 800;
+          } catch (e) {}
+        } else {
+          try {
+            if (
+              !state._suppressMoveUntil ||
+              Date.now() >= state._suppressMoveUntil
+            ) {
+              state.UI.playAudio("move");
+            }
+          } catch (e) {
+            state.UI.playAudio("move");
+          }
+        }
       } catch (e) {
         state.UI.playAudio("move");
       }
@@ -562,12 +696,46 @@ window.GameCore = (function () {
         const capturedPieceEl = capturedSquare.querySelector(".piece");
         if (capturedPieceEl) capturedPieceEl.style.opacity = "0.5";
       }
+      try {
+        console.debug &&
+          console.debug(
+            "[AUDIO DEBUG] immediate capture (capturedPos present)",
+            { moveId, capturedPos, suppressMoveUntil: state._suppressMoveUntil }
+          );
+      } catch (e) {}
       state.UI.playAudio("capture", { moveId });
+      try {
+        state._suppressMoveUntil = Date.now() + 800;
+      } catch (e) {}
       try {
         if (moveId) state._lastSoundMoveId = moveId;
       } catch (e) {}
     } else {
-      state.UI.playAudio("move", { moveId });
+      try {
+        if (
+          !state._suppressMoveUntil ||
+          Date.now() >= state._suppressMoveUntil
+        ) {
+          try {
+            console.debug &&
+              console.debug(
+                "[AUDIO DEBUG] playing move (no suppression) - immediate path",
+                { moveId, suppressMoveUntil: state._suppressMoveUntil }
+              );
+          } catch (e) {}
+          state.UI.playAudio("move", { moveId });
+        } else {
+          try {
+            console.debug &&
+              console.debug("[AUDIO DEBUG] suppressed move (immediate path)", {
+                moveId,
+                suppressMoveUntil: state._suppressMoveUntil,
+              });
+          } catch (e) {}
+        }
+      } catch (e) {
+        state.UI.playAudio("move", { moveId });
+      }
       try {
         if (moveId) state._lastSoundMoveId = moveId;
       } catch (e) {}
@@ -937,6 +1105,59 @@ window.GameCore = (function () {
         return;
       }
     }
+
+    // Se não houver captura única, verifica se existe exatamente
+    // UMA opção válida (movimento simples ou captura) e executa automaticamente.
+    try {
+      if (
+        window.gameLogic &&
+        typeof window.gameLogic.isMoveValid === "function"
+      ) {
+        const tempGame3 = {
+          boardState: state.boardState,
+          boardSize: state.currentBoardSize,
+          currentPlayer: state.myColor,
+          mustCaptureWith: null,
+          turnCapturedPieces: state.currentTurnCapturedPieces || [],
+        };
+
+        const possible = [];
+        const bs =
+          state.currentBoardSize ||
+          (state.boardState && state.boardState.length) ||
+          8;
+        for (let rr = 0; rr < bs; rr++) {
+          for (let cc = 0; cc < bs; cc++) {
+            const to = { row: rr, col: cc };
+            try {
+              const mv = window.gameLogic.isMoveValid(
+                { row, col },
+                to,
+                state.myColor,
+                tempGame3
+              );
+              if (mv && mv.valid) possible.push(to);
+            } catch (e) {}
+          }
+        }
+
+        if (possible.length === 1) {
+          const dest = possible[0];
+          const moveId =
+            Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+          performOptimisticMove({ row, col }, dest, moveId).catch(
+            console.error
+          );
+          state.socket.emit("playerMove", {
+            from: { row, col },
+            to: dest,
+            room: state.currentRoom,
+            moveId: moveId,
+          });
+          return;
+        }
+      }
+    } catch (e) {}
 
     state.socket.emit("getValidMoves", {
       row,
@@ -1313,16 +1534,78 @@ window.GameCore = (function () {
         // Evita duplicar sons: se já tocamos som para este moveId, pule
         try {
           const moveId = gameState.lastMove && gameState.lastMove.moveId;
-          if (moveId && state._lastSoundMoveId === moveId) {
-            // já tocamos
-          } else {
-            if (hadCapture) state.UI.playAudio("capture", { moveId });
-            else state.UI.playAudio("move", { moveId });
-            if (moveId) state._lastSoundMoveId = moveId;
-          }
+          // Atrasamos levemente a reprodução para evitar condição de corrida
+          // onde o payload completo (`gameState`) chega antes do delta
+          // (`pieceMoved`). O `pieceMoved` define `state._lastSoundMoveId`
+          // corretamente; com este atraso damos chance para ele executar
+          // primeiro e evitar tocar som de "move" quando for realmente
+          // uma captura.
+          setTimeout(() => {
+            try {
+              if (moveId && state._lastSoundMoveId === moveId) return;
+              try {
+                console.debug &&
+                  console.debug(
+                    "[AUDIO DEBUG] delayed gameState sound decision",
+                    {
+                      moveId,
+                      hadCapture,
+                      suppressMoveUntil: state._suppressMoveUntil,
+                    }
+                  );
+              } catch (e) {}
+              if (hadCapture) {
+                try {
+                  console.debug &&
+                    console.debug(
+                      "[AUDIO DEBUG] playing capture (delayed path)",
+                      { moveId }
+                    );
+                } catch (e) {}
+                state.UI.playAudio("capture", { moveId });
+                try {
+                  state._suppressMoveUntil = Date.now() + 800;
+                } catch (e) {}
+              } else {
+                try {
+                  if (
+                    !state._suppressMoveUntil ||
+                    Date.now() >= state._suppressMoveUntil
+                  ) {
+                    try {
+                      console.debug &&
+                        console.debug(
+                          "[AUDIO DEBUG] playing move (delayed path)",
+                          { moveId }
+                        );
+                    } catch (e) {}
+                    state.UI.playAudio("move", { moveId });
+                  } else {
+                    try {
+                      console.debug &&
+                        console.debug(
+                          "[AUDIO DEBUG] suppressed move (delayed path)",
+                          {
+                            moveId,
+                            suppressMoveUntil: state._suppressMoveUntil,
+                          }
+                        );
+                    } catch (e) {}
+                  }
+                } catch (e) {
+                  state.UI.playAudio("move", { moveId });
+                }
+              }
+              if (moveId) state._lastSoundMoveId = moveId;
+            } catch (e) {}
+          }, 400);
         } catch (e) {
-          if (hadCapture) state.UI.playAudio("capture");
-          else state.UI.playAudio("move");
+          if (hadCapture) {
+            state.UI.playAudio("capture");
+            try {
+              state._suppressMoveUntil = Date.now() + 800;
+            } catch (e) {}
+          } else state.UI.playAudio("move");
         }
       }
     }
