@@ -375,6 +375,10 @@ window.GameCore = (function () {
               // Servidor confirmou nosso movimento -> libera trava de clique
               try {
                 state.serverProcessingCapture = false;
+                // Se estávamos em execução automática de captura, limpar flag
+                try {
+                  state._autoExecutingCapture = false;
+                } catch (er) {}
               } catch (e) {}
             }
           }
@@ -1077,9 +1081,14 @@ window.GameCore = (function () {
               return;
             } catch (e) {}
           }
-
           // caso único, executa a sequência padrão
-          await executeSeq(topSeqs[0]);
+          // marca que estamos automatizando a captura para suprimir mensagens
+          state._autoExecutingCapture = true;
+          try {
+            await executeSeq(topSeqs[0]);
+          } finally {
+            state._autoExecutingCapture = false;
+          }
           return;
         }
       }
@@ -1102,16 +1111,22 @@ window.GameCore = (function () {
       if (uniqueMove) {
         const moveId =
           Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-        performOptimisticMove({ row, col }, uniqueMove.to, moveId).catch(
-          console.error
-        );
-        state.serverProcessingCapture = true;
-        state.socket.emit("playerMove", {
-          from: { row, col },
-          to: uniqueMove.to,
-          room: state.currentRoom,
-          moveId: moveId,
-        });
+        // executar capture única automaticamente sem interrupções visuais
+        state._autoExecutingCapture = true;
+        try {
+          performOptimisticMove({ row, col }, uniqueMove.to, moveId).catch(
+            console.error
+          );
+          state.serverProcessingCapture = true;
+          state.socket.emit("playerMove", {
+            from: { row, col },
+            to: uniqueMove.to,
+            room: state.currentRoom,
+            moveId: moveId,
+          });
+        } finally {
+          // manter flag até que o server confirme via pieceMoved/ack; clear em handlers
+        }
         return;
       }
     }
@@ -1155,16 +1170,22 @@ window.GameCore = (function () {
           const dest = possible[0];
           const moveId =
             Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-          performOptimisticMove({ row, col }, dest, moveId).catch(
-            console.error
-          );
-          state.serverProcessingCapture = true;
-          state.socket.emit("playerMove", {
-            from: { row, col },
-            to: dest,
-            room: state.currentRoom,
-            moveId: moveId,
-          });
+          // executar automaticamente sem mostrar mensagem de captura obrigatória
+          state._autoExecutingCapture = true;
+          try {
+            performOptimisticMove({ row, col }, dest, moveId).catch(
+              console.error
+            );
+            state.serverProcessingCapture = true;
+            state.socket.emit("playerMove", {
+              from: { row, col },
+              to: dest,
+              room: state.currentRoom,
+              moveId: moveId,
+            });
+          } finally {
+            // manter flag até confirmação do servidor
+          }
           return;
         }
       }

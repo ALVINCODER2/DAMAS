@@ -651,6 +651,21 @@ document.addEventListener("DOMContentLoaded", () => {
         GameCore.state.serverProcessingCapture = false;
       } catch (e) {}
     }
+    // Se estivermos executando uma captura automática iniciada pelo clique
+    // suprimimos a exibição da mensagem de "Captura obrigatória" para
+    // não interromper a sequência visual/automática.
+    try {
+      if (
+        GameCore.state &&
+        GameCore.state._autoExecutingCapture &&
+        data &&
+        data.message &&
+        data.message.toLowerCase().includes("captura obrigat")
+      ) {
+        // já revertemos o estado otimista acima; apenas silenciosamente retornamos
+        return;
+      }
+    } catch (e) {}
     // vibration removed per user request
 
     const gs = UI.elements.gameStatus;
