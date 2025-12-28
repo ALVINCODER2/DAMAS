@@ -724,6 +724,17 @@ async function startGameLogic(room) {
     io.to(whitePlayer.socketId).emit("gameStart", gameState);
   if (blackPlayer && blackPlayer.socketId)
     io.to(blackPlayer.socketId).emit("gameStart", gameState);
+  try {
+    // Log diagnóstico para Tablita: mostra mandatoryPieces e estado do match
+    const dbgMandatory = mandatoryPieces || [];
+    console.info(
+      `[gameStart Debug] room=${room.roomCode} mode=${
+        room.gameMode
+      } isTablita=${!!room.isTablita} currentGame=${
+        room.match && room.match.currentGame
+      } mandatoryCount=${dbgMandatory.length}`
+    );
+  } catch (e) {}
   // notify current spectator count to all in room
   io.to(room.roomCode).volatile.emit("spectatorCount", {
     count: room.spectators ? room.spectators.size : 0,
@@ -748,6 +759,8 @@ async function startGameLogic(room) {
   // If no move is made within 20 seconds from game start, refund both players and remove the room
   try {
     if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
+    // Ajusta duração do watchdog para o primeiro lance: torneio=20s, não-torneio=60s
+    const firstMoveDuration = room.isTournament ? 20 * 1000 : 60 * 1000;
     room.firstMoveTimeout = setTimeout(async () => {
       try {
         const currentRoom = gameRooms[room.roomCode];
@@ -767,8 +780,28 @@ async function startGameLogic(room) {
           }
 
           console.log(
-            `[GameWatchdog] No moves in 20s for room ${room.roomCode}. Refunding and removing room.`
+            `[GameWatchdog] No moves in firstMoveTimeout for room ${room.roomCode}. duration=${firstMoveDuration}ms moveHistoryLen=${g.moveHistory.length}`
           );
+
+          // Log adicional para diagnóstico do motivo do reembolso
+          try {
+            console.warn(
+              "[GameWatchdog Debug] room=",
+              room.roomCode,
+              "isTablita=",
+              !!currentRoom.isTablita,
+              "match=",
+              currentRoom.match
+            );
+            console.warn(
+              "[GameWatchdog Debug] game.isFirstMove=",
+              g.isFirstMove,
+              "mustCaptureWith=",
+              g.mustCaptureWith,
+              "turnCapturedPieces=",
+              g.turnCapturedPieces
+            );
+          } catch (dbg) {}
 
           // Refund each player and emit balance + redirect event
           const playersEmails = currentRoom.players.map((x) => x.user.email);
@@ -864,8 +897,23 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
   const playerColor = game.currentPlayer;
 
   if (socketId) {
-    const socketPlayerColor = game.players.white === socketId ? "b" : "p";
-    if (socketPlayerColor !== playerColor) return;
+    let socketPlayerColor = null;
+    try {
+      const pl = gameRoom.players.find((p) => p.socketId === socketId);
+      if (pl && game.users) {
+        socketPlayerColor = game.users.white === pl.user.email ? "b" : "p";
+      } else {
+        // Fallback para mapping antigo baseado em game.players
+        socketPlayerColor = game.players.white === socketId ? "b" : "p";
+      }
+    } catch (e) {
+      try {
+        socketPlayerColor = game.players.white === socketId ? "b" : "p";
+      } catch (er) {
+        socketPlayerColor = null;
+      }
+    }
+    if (socketPlayerColor && socketPlayerColor !== playerColor) return;
   }
 
   if (game.isFirstMove) {
@@ -1210,6 +1258,47 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       }
     }
   } else {
+    // Log detalhado para diagnosticar recusas de movimento (Lei da Maioria / Captura obrigatória)
+    try {
+      const reason = isValid.reason || "Movimento inválido.";
+      if (
+        reason.includes("Lei da Maioria") ||
+        reason.includes("Captura obrigat")
+      ) {
+        try {
+          const best = findBestCaptureMoves(game.currentPlayer, game);
+          console.error(
+            "[InvalidMove Debug] room=",
+            roomCode,
+            "socket=",
+            socketId,
+            "from=",
+            from,
+            "to=",
+            to
+          );
+          console.error("[InvalidMove Debug] reason=", reason);
+          console.error(
+            "[InvalidMove Debug] mustCaptureWith=",
+            game.mustCaptureWith
+          );
+          console.error(
+            "[InvalidMove Debug] turnCapturedPieces=",
+            game.turnCapturedPieces
+          );
+          console.error(
+            "[InvalidMove Debug] bestCaptures=",
+            JSON.stringify(best)
+          );
+        } catch (dbgErr) {
+          console.error(
+            "[InvalidMove Debug] failed to compute bestCaptures:",
+            dbgErr
+          );
+        }
+      }
+    } catch (e) {}
+
     if (socketId) {
       const socket = io.sockets.sockets.get(socketId);
       if (socket) {

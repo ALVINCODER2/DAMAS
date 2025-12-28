@@ -1037,6 +1037,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
   });
 
+  // Quando ambos aceitarem revanche, recarrega a página para sincronizar estado
+  socket.on("revancheAccepted", () => {
+    try {
+      // limpa room salvo para evitar rejoin automático inconsistente
+      localStorage.removeItem("checkersCurrentRoom");
+    } catch (e) {}
+    // reload for both players so client fully resets UI/game state
+    window.location.reload();
+  });
+
   // Aggressive handler: ensure user is ejected to lobby immediately
   socket.on("forceReturnToLobby", () => {
     try {
