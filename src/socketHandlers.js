@@ -2456,8 +2456,26 @@ function initializeSocket(ioInstance) {
             } catch (e) {}
 
             // FIX: Reset match state for Tablita to force new opening on rematch
+            // Preserve object shape to avoid races where other code expects
+            // `room.match` to exist right after a revanche is accepted.
             if (room.gameMode === "tablita") {
-              room.match = null;
+              try {
+                const p1 = room.players[0];
+                const p2 = room.players[1];
+                room.match = {
+                  score: {
+                    [p1.user.email]: 0,
+                    [p2.user.email]: 0,
+                  },
+                  currentGame: 1,
+                  opening: null,
+                  openingBoard: null,
+                  player1: { email: p1.user.email, socketId: p1.socketId },
+                  player2: { email: p2.user.email, socketId: p2.socketId },
+                };
+              } catch (e) {
+                room.match = null;
+              }
             }
 
             // Allow starting a new game: clear concluded flag and pending cleanup/timeouts

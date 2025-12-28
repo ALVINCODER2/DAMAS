@@ -15,6 +15,7 @@
   <!-- Estilos do Jogo (para o tabuleiro de teste funcionar visualmente) -->
   <link rel="stylesheet" href="css/style.css?v=10" />
   <link rel="stylesheet" href="css/game.css?v=10" />
+  <link rel="stylesheet" href="css/board-visuals.css?v=10" />
 
   <style>
     :root {
@@ -251,43 +252,7 @@
       }
     }
 
-    /* --- UPGRADE VISUAL TABULEIRO (ADMIN) --- */
-    #board {
-      border: 2px solid #8d6e63 !important;
-      border-radius: 4px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
-    }
-
-    .square.black,
-    .square.dark {
-      background-image: none !important;
-      background: radial-gradient(circle at center, #bcaaa4, #795548) !important;
-      background: radial-gradient(circle at center, #a05d35, #8C4F2A) !important;
-      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.4);
-    }
-
-    .square.white,
-    .square.light {
-      background-image: none !important;
-      background: radial-gradient(circle at center, #fff8e1, #ffecb3) !important;
-      background: radial-gradient(circle at center, #f0d9b5, #E2B47F) !important;
-    }
-
-    .piece {
-      box-shadow: inset 2px 2px 5px rgba(255, 255, 255, 0.3), inset -2px -2px 5px rgba(0, 0, 0, 0.4), 2px 3px 6px rgba(0, 0, 0, 0.5) !important;
-    }
-
-    .piece.white,
-    .piece.light-piece {
-      background: radial-gradient(circle at 30% 30%, #ffffff, #cfd8dc) !important;
-      border: 1px solid #90a4ae !important;
-    }
-
-    .piece.black,
-    .piece.dark-piece {
-      background: radial-gradient(circle at 30% 30%, #616161, #212121) !important;
-      border: 1px solid #000000 !important;
-    }
+    /* Usar os estilos do tabuleiro principal em css/board-visuals.css */
   </style>
 </head>
 
@@ -471,9 +436,13 @@
   </div>
 
   <!-- Scripts -->
+  <!-- Socket.IO + scripts do jogo principal para renderizar tabuleiro/peças -->
+  <script src="/socket.io/socket.io.js"></script>
   <script src="js/gameLogic.js?v=10"></script>
+  <script src="js/ui-helpers.js?v=10"></script>
+  <script src="js/gameCore.js?v=10"></script>
+  <script src="js/script.js?v=10"></script>
   <script src="js/admin.js?v=10"></script>
-  <!-- Personalização visual removida -->
 </body>
 
 </html>
