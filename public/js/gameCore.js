@@ -951,8 +951,8 @@ window.GameCore = (function () {
           capturesForPiece.sort((a, b) => b.length - a.length);
           const maxLen = capturesForPiece[0].length;
           const topSeqs = capturesForPiece.filter((s) => s.length === maxLen);
-          // atraso (ms) entre captures — pode ajustar para feedback visual
-          const CAPTURE_DELAY_MS = 200;
+          // atraso (ms) entre captures — igual ao admin (150ms) para feedback visual
+          const CAPTURE_DELAY_MS = 150;
 
           try {
             if (window.__CLIENT_DEBUG)

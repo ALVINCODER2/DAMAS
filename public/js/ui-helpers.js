@@ -493,10 +493,14 @@ window.UI = {
         clone.style.margin = "0";
         clone.style.zIndex = 2147483650;
         // inicializa sem efeito de flutuar (sem translate/scale)
-        clone.style.transform = "translate(0, 0) scale(1)";
+        clone.style.transform = "translate3d(0, 0, 0) scale(1)";
+        clone.style.transformOrigin = "50% 50%";
+        // começar invisível para evitar 'pulo' quando escondemos o original
+        clone.style.opacity = "0";
         clone.style.boxShadow = "0 24px 48px rgba(0,0,0,0.26)";
+        // Use a 'drag' style animation (simula peça sendo arrastada)
         clone.style.transition =
-          "transform 360ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 220ms linear, box-shadow 320ms ease";
+          "transform 480ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 220ms linear, box-shadow 320ms ease";
         clone.style.pointerEvents = "none";
 
         document.body.appendChild(clone);
@@ -505,8 +509,8 @@ window.UI = {
         let originalPieceClass = null;
         if (pieceEl) {
           originalPieceClass = pieceEl.className;
-          // Hide original piece during animation to avoid visual duplicate
-          pieceEl.style.visibility = "hidden";
+          // não oculta imediatamente; faremos fade-in do clone e só então
+          // esconderemos o original para evitar jump visual
         }
 
         // Calculate delta
@@ -517,12 +521,31 @@ window.UI = {
         // eslint-disable-next-line no-unused-expressions
         clone.getBoundingClientRect();
 
-        // Start animation: move to destination and settle scale/vertical offset
+        // Start animation: fade-in clone, then translate to destination
+        // Simular arrasto: adiciona leve rotação e deslocamento vertical
         requestAnimationFrame(() => {
           try {
-            clone.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1)`;
-            // reduz a sombra ao chegar (animação suave via transition)
-            clone.style.boxShadow = "0 12px 30px rgba(0,0,0,0.18)";
+            // primeiro torna o clone visível
+            clone.style.transition =
+              "transform 480ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 220ms linear, box-shadow 320ms ease";
+            clone.style.opacity = "1";
+
+            const rotateDeg = deltaX > 0 ? -6 : 6;
+            const lift = -6; // pixels levantados durante o arrasto
+            clone.style.transform = `translate3d(${deltaX}px, ${
+              deltaY + lift
+            }px, 0) rotate(${rotateDeg}deg) scale(1)`;
+            // sombra mais pronunciada enquanto 'arrastando'
+            clone.style.boxShadow = "0 18px 40px rgba(0,0,0,0.24)";
+
+            // Após pequeno delay, escondemos a peça original para evitar flicker
+            if (pieceEl) {
+              setTimeout(() => {
+                try {
+                  pieceEl.style.visibility = "hidden";
+                } catch (e) {}
+              }, 60);
+            }
           } catch (e) {}
         });
 
