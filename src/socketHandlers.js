@@ -172,26 +172,14 @@ function scheduleTurnInactivity(roomCode) {
         ? io.sockets.sockets.get(currentSocketId)
         : null;
       const isPresent = !!(sock && sock.connected);
-
-      // Se ausente ou inativo por 10s, tratamos de acordo com o modo de tempo
       if (!isPresent) {
-        console.log(
-          `[DEBUG scheduleTurnInactivity] player absent check: room=${roomCode} currentPlayer=${currentPlayerColor} currentSocketId=${currentSocketId} playersMapping=${JSON.stringify(
-            r.game.players
-          )} roomPlayers=${JSON.stringify(
-            r.players.map((p) => ({
-              email: p.user.email,
-              socketId: p.socketId,
-            }))
-          )}`
-        );
         // Se o jogo tem timer ativo (modo com limite por jogada/partida),
         // a inatividade deve resultar em perda por tempo — não apenas passar a vez.
         if (
-          rr.timeControl === "move" ||
-          (rr.game && rr.game.timerActive && rr.timeControl !== "match")
+          r.timeControl === "move" ||
+          (r.game && r.game.timerActive && r.timeControl !== "match")
         ) {
-          if (rr.timerInterval) {
+          if (r.timerInterval) {
             console.log(
               `[scheduleTurnInactivity] Skipping inactivity-based end; timerInterval active for room=${roomCode}`
             );
@@ -579,15 +567,33 @@ async function startGameLogic(room) {
   let whitePlayer, blackPlayer;
   // Verifica se é uma continuação de partida (Tablita ou Revanche)
   if (room.game && room.game.players) {
-    console.log("[Novo Jogo/Revanche] Invertendo cores.");
-    const previousWhiteSocketId = room.game.players.white;
-
-    if (player1.socketId === previousWhiteSocketId) {
-      whitePlayer = player2;
-      blackPlayer = player1;
-    } else {
-      whitePlayer = player1;
-      blackPlayer = player2;
+    console.log(
+      "[Novo Jogo/Revanche] Invertendo cores (matching by email, not socketId)."
+    );
+    // Usa email dos usuários para detectar quem foi branco anteriormente.
+    try {
+      const previousWhiteEmail = room.game.users && room.game.users.white;
+      const p1Email = player1.user && player1.user.email;
+      if (previousWhiteEmail && p1Email && previousWhiteEmail === p1Email) {
+        // player1 foi branco antes -> invertemos as cores
+        whitePlayer = player2;
+        blackPlayer = player1;
+      } else {
+        whitePlayer = player1;
+        blackPlayer = player2;
+      }
+    } catch (e) {
+      // fallback para comportamento original em caso de erro
+      console.error("Erro determinando cores por email:", e);
+      console.log("[Novo Jogo/Revanche] Invertendo cores.");
+      const previousWhiteSocketId = room.game.players.white;
+      if (player1.socketId === previousWhiteSocketId) {
+        whitePlayer = player2;
+        blackPlayer = player1;
+      } else {
+        whitePlayer = player1;
+        blackPlayer = player2;
+      }
     }
   } else {
     console.log("[Novo Jogo] Atribuindo cores aleatoriamente.");
