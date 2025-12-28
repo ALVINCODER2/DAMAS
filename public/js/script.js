@@ -628,6 +628,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } catch (e) {}
     GameCore.state.updateQueue.push(gs);
+    // fallback: se por algum motivo a trava de captura ficou presa,
+    // liberamos aqui ao receber atualização do servidor
+    try {
+      GameCore.state.serverProcessingCapture = false;
+    } catch (e) {}
     GameCore.processUpdateQueue();
   });
 
@@ -641,6 +646,10 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       GameCore.state.pendingBoardSnapshot = null;
       GameCore.state.lastOptimisticMove = null;
+      // libera trava caso estivesse aguardando confirmação
+      try {
+        GameCore.state.serverProcessingCapture = false;
+      } catch (e) {}
     }
     // vibration removed per user request
 

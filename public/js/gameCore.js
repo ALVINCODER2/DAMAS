@@ -39,6 +39,8 @@ window.GameCore = (function () {
     // Fila
     updateQueue: [],
     isProcessingQueue: false,
+    // Lock para evitar processamento de clicks enquanto o servidor confirma uma captura
+    serverProcessingCapture: false,
     drawMovesCounter: 0,
     lastMoveWasProgress: false,
     revancheInterval: null,
@@ -370,6 +372,10 @@ window.GameCore = (function () {
             if (isMyMove) {
               state.lastOptimisticMove = null;
               state.pendingBoardSnapshot = null;
+              // Servidor confirmou nosso movimento -> libera trava de clique
+              try {
+                state.serverProcessingCapture = false;
+              } catch (e) {}
             }
           }
         } catch (err) {
@@ -845,6 +851,7 @@ window.GameCore = (function () {
   // --- INTERAÇÃO COM TABULEIRO ---
   function handleBoardClick(e) {
     if (window.isSpectator || state.isReplaying) return;
+    if (state.serverProcessingCapture) return; // bloqueia cliques até confirmação do servidor
     if (!state.myColor) return;
     // Bloqueia interação caso não seja o turno do jogador local
     if (
@@ -872,7 +879,8 @@ window.GameCore = (function () {
           Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
         performOptimisticMove(moveFrom, moveTo, moveId).catch(console.error);
-
+        // trava local até receber confirmação do servidor (reduz double-click/desincronias)
+        state.serverProcessingCapture = true;
         state.socket.emit("playerMove", {
           from: moveFrom,
           to: moveTo,
@@ -967,6 +975,8 @@ window.GameCore = (function () {
               try {
                 await performOptimisticMove(curFrom, dest, moveId);
               } catch (e) {}
+              // trava local até confirmação do servidor
+              state.serverProcessingCapture = true;
               state.socket.emit("playerMove", {
                 from: { row: curFrom.row, col: curFrom.col },
                 to: dest,
@@ -1095,7 +1105,7 @@ window.GameCore = (function () {
         performOptimisticMove({ row, col }, uniqueMove.to, moveId).catch(
           console.error
         );
-
+        state.serverProcessingCapture = true;
         state.socket.emit("playerMove", {
           from: { row, col },
           to: uniqueMove.to,
@@ -1148,6 +1158,7 @@ window.GameCore = (function () {
           performOptimisticMove({ row, col }, dest, moveId).catch(
             console.error
           );
+          state.serverProcessingCapture = true;
           state.socket.emit("playerMove", {
             from: { row, col },
             to: dest,

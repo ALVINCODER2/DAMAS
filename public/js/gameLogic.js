@@ -512,6 +512,99 @@
     );
   }
 
+  // Verifica se a peça na posição (row,col) ainda pode capturar mais,
+  // ignorando posições já listadas em `alreadyCaptured` (peças "fantasma").
+  function canCaptureMore(board, row, col, player, alreadyCaptured = []) {
+    const boardSize = board.length || 8;
+    const piece = board[row] && board[row][col];
+    if (!piece || piece === 0) return false;
+    const isDama = piece === piece.toUpperCase();
+    const opponent = piece.toLowerCase() === "b" ? "p" : "b";
+
+    const isAlready = (r, c) =>
+      Array.isArray(alreadyCaptured) &&
+      alreadyCaptured.some((s) => `${s.row},${s.col}` === `${r},${c}`);
+
+    const directions = [
+      { r: -1, c: -1 },
+      { r: -1, c: 1 },
+      { r: 1, c: -1 },
+      { r: 1, c: 1 },
+    ];
+
+    for (const dir of directions) {
+      if (isDama) {
+        for (let i = 1; i < boardSize; i++) {
+          const nr = row + dir.r * i;
+          const nc = col + dir.c * i;
+          const jumpR = nr + dir.r;
+          const jumpC = nc + dir.c;
+          if (!isWithinBounds(jumpR, jumpC, boardSize)) break;
+          const target = board[nr] && board[nr][nc];
+          const landing = board[jumpR] && board[jumpR][jumpC];
+          if (
+            typeof target !== "undefined" &&
+            target !== 0 &&
+            target.toLowerCase() !== player.toLowerCase() &&
+            landing === 0 &&
+            !isAlready(nr, nc)
+          ) {
+            return true;
+          }
+          if (target !== 0) break;
+        }
+      } else {
+        const nr = row + dir.r;
+        const nc = col + dir.c;
+        const jumpR = row + dir.r * 2;
+        const jumpC = col + dir.c * 2;
+        if (!isWithinBounds(jumpR, jumpC, boardSize)) continue;
+        const target = board[nr] && board[nr][nc];
+        const landing = board[jumpR] && board[jumpR][jumpC];
+        if (
+          typeof target !== "undefined" &&
+          target !== 0 &&
+          target.toLowerCase() !== player.toLowerCase() &&
+          landing === 0 &&
+          !isAlready(nr, nc)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Retorna o máximo de capturas possíveis para `player` no tabuleiro `game`.
+  // Reaproveita `findBestCaptureMoves` e extrai o comprimento máximo das sequências.
+  function getBestCaptureCount(boardOrGame, player) {
+    let best = 0;
+    // aceitar tanto o objeto `game` quanto apenas o `board`+`boardSize`
+    try {
+      if (boardOrGame && boardOrGame.boardState) {
+        const seqs = findBestCaptureMoves(player, boardOrGame);
+        seqs.forEach((s) => {
+          const caps = Math.max(0, s.length - 1);
+          if (caps > best) best = caps;
+        });
+      } else if (Array.isArray(boardOrGame)) {
+        // forma fallback: criar um objeto game mínimo
+        const game = { boardState: boardOrGame, boardSize: boardOrGame.length };
+        const seqs = findBestCaptureMoves(player, game);
+        seqs.forEach((s) => {
+          const caps = Math.max(0, s.length - 1);
+          if (caps > best) best = caps;
+        });
+      }
+    } catch (e) {}
+    return best;
+  }
+
+  // Helper para checar limites (usado por canCaptureMore)
+  function isWithinBounds(r, c, size) {
+    return r >= 0 && r < size && c >= 0 && c < size;
+  }
+
   function hasValidMoves(playerColor, game) {
     const boardSize = game.boardSize || 8;
     for (let r = 0; r < boardSize; r++) {
@@ -572,5 +665,7 @@
   exports.getAllPossibleCapturesForPiece = getAllPossibleCapturesForPiece;
   exports.hasValidMoves = hasValidMoves;
   exports.getUniqueCaptureMove = getUniqueCaptureMove;
+  exports.canCaptureMore = canCaptureMore;
+  exports.getBestCaptureCount = getBestCaptureCount;
   exports.isProgressMove = isProgressMove;
 })(typeof exports === "undefined" ? (this.gameLogic = {}) : exports);
