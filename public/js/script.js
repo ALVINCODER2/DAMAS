@@ -399,6 +399,124 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // --- Bloco de carregamento de tabuleiro (jogo.html) ---
+  safeAddListener("load-board-btn-main", "click", () => {
+    const ta = document.getElementById("board-json-input-main");
+    if (!ta) return;
+    const raw = ta.value && ta.value.trim();
+    if (!raw) {
+      try {
+        document.getElementById("game-status").textContent =
+          "Cole o JSON do tabuleiro antes.";
+      } catch (e) {}
+      return;
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      try {
+        document.getElementById("game-status").textContent =
+          "JSON inválido: " + e.message;
+      } catch (e) {}
+      return;
+    }
+
+    let boardArr = null;
+    let player = null;
+    if (Array.isArray(parsed)) boardArr = parsed;
+    else if (parsed && Array.isArray(parsed.board)) {
+      boardArr = parsed.board;
+      if (parsed.currentPlayer) player = parsed.currentPlayer;
+    }
+
+    if (
+      !boardArr ||
+      boardArr.length < 2 ||
+      !boardArr.every((r) => Array.isArray(r))
+    ) {
+      try {
+        document.getElementById("game-status").textContent =
+          "Formato inválido: envie um array 8x8 ou objeto {board,...}.";
+      } catch (e) {}
+      return;
+    }
+
+    // Atualiza localmente o estado do GameCore
+    try {
+      const size = boardArr.length;
+      if (window.GameCore && window.GameCore.state) {
+        const s = window.GameCore.state;
+        s.boardState = JSON.parse(JSON.stringify(boardArr));
+        s.currentBoardSize = size;
+        if (player === "b" || player === "p")
+          s.lastServerCurrentPlayer = player;
+        s.currentTurnCapturedPieces = [];
+        s.serverProcessingCapture = false;
+        // Re-render UI
+        if (window.UI && UI.createBoard)
+          UI.createBoard(size, GameCore.handleBoardClick);
+        if (window.UI && UI.renderPieces)
+          UI.renderPieces(s.boardState, s.currentBoardSize);
+      }
+    } catch (e) {
+      console.error("Erro aplicando board localmente:", e);
+    }
+
+    // Envia ao servidor para propagar para oponente/spectators
+    try {
+      if (GameCore.state && GameCore.state.currentRoom) {
+        socket.emit("requestSetBoard", {
+          roomCode: GameCore.state.currentRoom,
+          boardState: boardArr,
+          boardSize: boardArr.length,
+          currentPlayer:
+            player || GameCore.state.lastServerCurrentPlayer || null,
+        });
+        try {
+          document.getElementById("game-status").textContent =
+            "Tabuleiro carregado e enviado ao oponente.";
+        } catch (e) {}
+      }
+    } catch (e) {}
+  });
+
+  safeAddListener("export-board-btn-main", "click", async () => {
+    const ta = document.getElementById("board-json-input-main");
+    try {
+      let json = JSON.stringify(
+        GameCore.state && GameCore.state.boardState
+          ? GameCore.state.boardState
+          : []
+      );
+      if (ta) ta.value = json;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(json);
+        try {
+          document.getElementById("game-status").textContent =
+            "JSON copiado para área de transferência.";
+        } catch (e) {}
+      } else
+        try {
+          document.getElementById("game-status").textContent =
+            "JSON preenchido no campo.";
+        } catch (e) {}
+    } catch (e) {
+      try {
+        document.getElementById("game-status").textContent =
+          "Erro ao exportar JSON: " + e.message;
+      } catch (e) {}
+    }
+  });
+
+  safeAddListener("clear-board-btn-main", "click", () => {
+    const ta = document.getElementById("board-json-input-main");
+    if (ta) ta.value = "";
+    try {
+      document.getElementById("game-status").textContent = "Campo limpo.";
+    } catch (e) {}
+  });
+
   safeAddListener("decline-draw-btn", "click", () => {
     if (GameCore.state.currentRoom) {
       socket.emit("declineDraw", { roomCode: GameCore.state.currentRoom });

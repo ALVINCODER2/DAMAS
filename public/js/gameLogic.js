@@ -266,6 +266,13 @@
       }
     }
 
+    // Se já houver capturas acumuladas neste turno, estamos no meio de
+    // uma sequência de captura — permitir passos subsequentes sem re-aplicar
+    // a "Lei da Maioria" global que compara contra o estado inicial do turno.
+    if (capturedFromStart && capturedFromStart.length > 0) {
+      ignoreMajorityRule = true;
+    }
+
     if (!ignoreMajorityRule) {
       const bestCaptures = findBestCaptureMoves(playerColor, game);
       if (bestCaptures.length > 0) {

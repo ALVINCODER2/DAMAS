@@ -35,6 +35,56 @@ let io; // Variável global para instância do Socket.IO
 // Contador simples para razões de desconexão (diagnóstico)
 const disconnectReasonCounts = {};
 
+// Filtro de logs: suprime mensagens de depuração verbosas em produção.
+// Para habilitar novamente, defina a variável de ambiente `VERBOSE_LOGS=true`.
+try {
+  const VERBOSE = process.env.VERBOSE_LOGS === "true";
+  if (!VERBOSE) {
+    const _log = console.log.bind(console);
+    const _info = console.info.bind(console);
+    const _warn = console.warn.bind(console);
+    const _error = console.error.bind(console);
+    const FILTER_TOKENS = [
+      "[Socket]",
+      "[DEBUG",
+      "[Novo Jogo]",
+      "[gameStart Debug]",
+      "[InvalidMove Debug]",
+      "[GameWatchdog]",
+      "[scheduleTurnInactivity]",
+      "[cleanup]",
+      "[acceptBet]",
+    ];
+
+    function shouldFilter(args) {
+      try {
+        for (const a of args) {
+          if (typeof a !== "string") continue;
+          for (const t of FILTER_TOKENS) if (a.includes(t)) return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    console.log = function (...args) {
+      if (shouldFilter(args)) return;
+      return _log(...args);
+    };
+    console.info = function (...args) {
+      if (shouldFilter(args)) return;
+      return _info(...args);
+    };
+    console.warn = function (...args) {
+      if (shouldFilter(args)) return;
+      return _warn(...args);
+    };
+    console.error = function (...args) {
+      if (shouldFilter(args)) return;
+      return _error(...args);
+    };
+  }
+} catch (e) {}
+
 // Debounced/Throttled lobby update to avoid emitting too frequentemente
 let _lobbyUpdateTimer = null;
 let _lastLobbyPayload = null;
@@ -1677,6 +1727,46 @@ function initializeSocket(ioInstance) {
           );
         }
       });
+    });
+
+    // Permite que um jogador carregue/force um estado de tabuleiro e propague ao oponente
+    socket.on("requestSetBoard", (data) => {
+      try {
+        if (!data || !data.roomCode) return;
+        const room = gameRooms[data.roomCode];
+        if (!room || !room.game) return;
+
+        // Segurança: apenas jogadores na sala podem atualizar o estado
+        const isPlayer = room.players.some((p) => p.socketId === socket.id);
+        if (!isPlayer) return;
+
+        // Validar estrutura mínima
+        if (!data.boardState || !Array.isArray(data.boardState)) return;
+
+        // Atualiza o estado do jogo no servidor
+        try {
+          room.game.boardState = data.boardState;
+          room.game.boardSize = data.boardSize || data.boardState.length;
+          if (data.currentPlayer === "b" || data.currentPlayer === "p")
+            room.game.currentPlayer = data.currentPlayer;
+          // limpa capturas parciais
+          room.game.turnCapturedPieces = [];
+        } catch (e) {
+          console.error("requestSetBoard apply failed:", e);
+        }
+
+        // Envia novo estado para jogadores e espectadores
+        const bestCaptures = findBestCaptureMoves(
+          room.game.currentPlayer,
+          room.game
+        );
+        const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
+        sendGameState(
+          room.roomCode,
+          { ...room.game, mandatoryPieces },
+          { forceSpectator: true }
+        );
+      } catch (e) {}
     });
 
     socket.on("createRoom", async (data) => {
