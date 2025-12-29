@@ -637,20 +637,39 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("invalidMove", (data) => {
-    if (GameCore.state.pendingBoardSnapshot) {
-      console.warn("Movimento inválido detectado. Revertendo...");
-      GameCore.state.boardState = GameCore.state.pendingBoardSnapshot;
-      UI.renderPieces(
-        GameCore.state.boardState,
-        GameCore.state.currentBoardSize
-      );
-      GameCore.state.pendingBoardSnapshot = null;
-      GameCore.state.lastOptimisticMove = null;
-      // libera trava caso estivesse aguardando confirmação
-      try {
-        GameCore.state.serverProcessingCapture = false;
-      } catch (e) {}
-    }
+    try {
+      // Evita processamento repetido do mesmo invalidMove (debounce)
+      const key = (data && data.moveId) || (data && data.message) || "invalid";
+      const now = Date.now();
+      GameCore.state._lastInvalidMove = GameCore.state._lastInvalidMove || {
+        key: null,
+        ts: 0,
+      };
+      if (
+        GameCore.state._lastInvalidMove.key === key &&
+        now - GameCore.state._lastInvalidMove.ts < 1200
+      ) {
+        // ignorar duplicata próxima
+        return;
+      }
+      GameCore.state._lastInvalidMove.key = key;
+      GameCore.state._lastInvalidMove.ts = now;
+
+      if (GameCore.state.pendingBoardSnapshot) {
+        console.warn("Movimento inválido detectado. Revertendo...");
+        GameCore.state.boardState = GameCore.state.pendingBoardSnapshot;
+        UI.renderPieces(
+          GameCore.state.boardState,
+          GameCore.state.currentBoardSize
+        );
+        GameCore.state.pendingBoardSnapshot = null;
+        GameCore.state.lastOptimisticMove = null;
+        // libera trava caso estivesse aguardando confirmação
+        try {
+          GameCore.state.serverProcessingCapture = false;
+        } catch (e) {}
+      }
+    } catch (e) {}
     // Se estivermos executando uma captura automática iniciada pelo clique
     // suprimimos a exibição da mensagem de "Captura obrigatória" para
     // não interromper a sequência visual/automática.
