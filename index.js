@@ -363,6 +363,83 @@ app.put("/api/user/preferences", async (req, res) => {
   }
 });
 
+// --- ROTAS ADMIN SIMPLES (PROTEGIDAS POR ADMIN SECRET) ---
+function checkAdminSecret(req, res) {
+  // If ADMIN_SECRET is not set in the environment, do NOT require a secret.
+  const secret = process.env.ADMIN_SECRET || null;
+  if (!secret) return true;
+  const header =
+    req.headers["x-admin-secret-key"] || (req.body && req.body.secret);
+  if (!header) return false;
+  return header === secret;
+}
+
+app.get("/api/admin/users/no-deposit", async (req, res) => {
+  try {
+    if (!checkAdminSecret(req, res))
+      return res.status(403).json({ message: "Forbidden" });
+    const weeks = parseInt(req.query.weeks, 10) || 2;
+    const cutoff = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+    // ObjectId contains timestamp; use aggregation to filter by creation time
+    const users = await User.find({ hasDeposited: { $ne: true } }).lean();
+    const filtered = users
+      .filter((u) => {
+        try {
+          const ts = u._id && u._id.getTimestamp ? u._id.getTimestamp() : null;
+          if (!ts) return false;
+          return ts < cutoff;
+        } catch (e) {
+          return false;
+        }
+      })
+      .map((u) => ({
+        email: u.email,
+        username: u.username,
+        saldo: u.saldo || 0,
+        referredBy: u.referredBy || null,
+        createdAt: u._id && u._id.getTimestamp ? u._id.getTimestamp() : null,
+      }));
+    res.json(filtered);
+  } catch (e) {
+    console.error("admin no-deposit error:", e);
+    res.status(500).json({ message: "Erro interno" });
+  }
+});
+
+app.get("/api/admin/users/with-balance", async (req, res) => {
+  try {
+    if (!checkAdminSecret(req, res))
+      return res.status(403).json({ message: "Forbidden" });
+    const users = await User.find({ saldo: { $gt: 0 } }).lean();
+    const mapped = users.map((u) => ({
+      email: u.email,
+      username: u.username,
+      saldo: u.saldo || 0,
+      referredBy: u.referredBy || null,
+    }));
+    res.json(mapped);
+  } catch (e) {
+    console.error("admin with-balance error:", e);
+    res.status(500).json({ message: "Erro interno" });
+  }
+});
+
+app.delete("/api/admin/users/:email", async (req, res) => {
+  try {
+    if (!checkAdminSecret(req, res))
+      return res.status(403).json({ message: "Forbidden" });
+    const email = req.params.email;
+    if (!email) return res.status(400).json({ message: "Email obrigatório" });
+    const deleted = await User.findOneAndDelete({ email: email.toLowerCase() });
+    if (!deleted)
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    return res.json({ message: "Usuário removido" });
+  } catch (e) {
+    console.error("admin delete user error:", e);
+    res.status(500).json({ message: "Erro interno" });
+  }
+});
+
 app.post("/api/withdraw", async (req, res) => {
   try {
     const { email, amount, pixKey } = req.body;
@@ -609,15 +686,20 @@ app.post("/api/payment/webhook", async (req, res) => {
 });
 
 // Admin routes
+// Admin authentication: require ADMIN_SECRET_KEY when configured
 const adminAuthBody = (req, res, next) => {
+  const secretEnv = process.env.ADMIN_SECRET_KEY;
+  if (!secretEnv) return next();
   const { secret } = req.body;
-  if (secret && secret === process.env.ADMIN_SECRET_KEY) next();
-  else res.status(403).json({ message: "Acesso não autorizado." });
+  if (secret && secret === secretEnv) return next();
+  return res.status(403).json({ message: "Acesso não autorizado." });
 };
 const adminAuthHeader = (req, res, next) => {
+  const secretEnv = process.env.ADMIN_SECRET_KEY;
+  if (!secretEnv) return next();
   const secretKey = req.headers["x-admin-secret-key"];
-  if (secretKey && secretKey === process.env.ADMIN_SECRET_KEY) next();
-  else res.status(403).json({ message: "Acesso não autorizado." });
+  if (secretKey && secretKey === secretEnv) return next();
+  return res.status(403).json({ message: "Acesso não autorizado." });
 };
 app.put("/api/admin/add-saldo-bonus", adminAuthBody, async (req, res) => {
   try {

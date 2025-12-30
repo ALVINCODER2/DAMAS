@@ -39,17 +39,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function loadUsers() {
     try {
-      const response = await fetch("/api/admin/users", {
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-secret-key": adminSecretKey,
-        },
-      });
-
+      const headers = { "Content-Type": "application/json" };
+      if (adminSecretKey) headers["x-admin-secret-key"] = adminSecretKey;
+      const response = await fetch("/api/admin/users", { headers });
       if (response.status === 403) {
-        authMessage.textContent = "Senha secreta inválida!";
+        authMessage.textContent = "Acesso negado ao carregar usuários.";
         authMessage.style.color = "red";
-        adminSecretKey = null;
         return;
       }
       if (!response.ok) throw new Error("Falha ao carregar utilizadores.");
@@ -64,12 +59,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function loadWithdrawals() {
     try {
-      const response = await fetch("/api/admin/withdrawals", {
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-secret-key": adminSecretKey,
-        },
-      });
+      const headers = { "Content-Type": "application/json" };
+      if (adminSecretKey) headers["x-admin-secret-key"] = adminSecretKey;
+      const response = await fetch("/api/admin/withdrawals", { headers });
       if (!response.ok) throw new Error("Falha ao carregar saques.");
       const withdrawals = await response.json();
       renderWithdrawalsTable(withdrawals);
@@ -77,6 +69,168 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error(error);
       alert("Erro ao carregar lista de saques.");
     }
+  }
+
+  // --- Novas funções para Gestão Especial de Usuários ---
+  const noDepositBtn = document.getElementById("show-no-deposit");
+  const withBalanceBtn = document.getElementById("show-with-balance");
+  const noDepositTableBody = document.querySelector("#no-deposit-table tbody");
+  const withBalanceTableBody = document.querySelector(
+    "#with-balance-table tbody"
+  );
+
+  // Containers (usados para toggle mostrar/ocultar)
+  const noDepositContainerEl = document.getElementById("no-deposit-table")
+    ? document
+        .getElementById("no-deposit-table")
+        .closest(".table-container.card")
+    : null;
+  const withBalanceContainerEl = document.getElementById("with-balance-table")
+    ? document
+        .getElementById("with-balance-table")
+        .closest(".table-container.card")
+    : null;
+
+  if (noDepositBtn)
+    noDepositBtn.addEventListener("click", async () => {
+      try {
+        if (
+          noDepositContainerEl &&
+          !noDepositContainerEl.classList.contains("hidden")
+        ) {
+          // já visível -> ocultar
+          noDepositContainerEl.classList.add("hidden");
+          return;
+        }
+        // mostrar e carregar
+        if (noDepositContainerEl)
+          noDepositContainerEl.classList.remove("hidden");
+        await loadNoDepositUsers();
+      } catch (e) {
+        console.error(e);
+      }
+    });
+
+  if (withBalanceBtn)
+    withBalanceBtn.addEventListener("click", async () => {
+      try {
+        if (
+          withBalanceContainerEl &&
+          !withBalanceContainerEl.classList.contains("hidden")
+        ) {
+          withBalanceContainerEl.classList.add("hidden");
+          return;
+        }
+        if (withBalanceContainerEl)
+          withBalanceContainerEl.classList.remove("hidden");
+        await loadWithBalanceUsers();
+      } catch (e) {
+        console.error(e);
+      }
+    });
+
+  async function loadNoDepositUsers() {
+    try {
+      const headers = {};
+      if (adminSecretKey) headers["x-admin-secret-key"] = adminSecretKey;
+      const resp = await fetch("/api/admin/users/no-deposit?weeks=2", {
+        headers,
+      });
+      if (resp.status === 403) return alert("Acesso negado");
+      if (!resp.ok) throw new Error("Falha ao carregar.");
+      const list = await resp.json();
+      renderNoDeposit(list);
+    } catch (e) {
+      alert("Erro: " + (e.message || e));
+    }
+  }
+
+  async function loadWithBalanceUsers() {
+    try {
+      const headers = {};
+      if (adminSecretKey) headers["x-admin-secret-key"] = adminSecretKey;
+      const resp = await fetch("/api/admin/users/with-balance", { headers });
+      if (resp.status === 403) return alert("Acesso negado");
+      if (!resp.ok) throw new Error("Falha ao carregar.");
+      const list = await resp.json();
+      renderWithBalance(list);
+    } catch (e) {
+      alert("Erro: " + (e.message || e));
+    }
+  }
+
+  function renderNoDeposit(list) {
+    noDepositTableBody.innerHTML = "";
+    if (!list || list.length === 0) {
+      noDepositTableBody.innerHTML =
+        "<tr><td colspan='4' style='text-align:center;'>Nenhum usuário encontrado.</td></tr>";
+      return;
+    }
+    list.forEach((u) => {
+      const tr = document.createElement("tr");
+      const created = u.createdAt
+        ? new Date(u.createdAt).toLocaleString()
+        : "-";
+      tr.innerHTML = `
+        <td>${u.email}</td>
+        <td>${created}</td>
+        <td>${(u.saldo || 0).toFixed(2)}</td>
+        <td><button class="btn-action btn-delete delete-no-deposit" data-email="${
+          u.email
+        }">Apagar Login</button></td>
+      `;
+      noDepositTableBody.appendChild(tr);
+    });
+  }
+
+  function renderWithBalance(list) {
+    withBalanceTableBody.innerHTML = "";
+    if (!list || list.length === 0) {
+      withBalanceTableBody.innerHTML =
+        "<tr><td colspan='3' style='text-align:center;'>Nenhum usuário encontrado.</td></tr>";
+      return;
+    }
+    list.forEach((u) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${u.email}</td>
+        <td>${(u.saldo || 0).toFixed(2)}</td>
+        <td>${u.referredBy || "-"}</td>
+      `;
+      withBalanceTableBody.appendChild(tr);
+    });
+  }
+
+  // Delegation for delete in no-deposit table
+  if (noDepositTableBody) {
+    noDepositTableBody.addEventListener("click", async (e) => {
+      const target = e.target;
+      if (target.classList.contains("delete-no-deposit")) {
+        const email = target.dataset.email;
+        if (!confirm(`Apagar login de ${email}? Esta ação é irreversível.`))
+          return;
+        try {
+          const resp = await fetch(
+            `/api/admin/users/${encodeURIComponent(email)}`,
+            {
+              method: "DELETE",
+              headers: {
+                "Content-Type": "application/json",
+                "x-admin-secret-key": adminSecretKey,
+              },
+              body: JSON.stringify({ secret: adminSecretKey }),
+            }
+          );
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.message || "Erro");
+          alert(data.message);
+          loadNoDepositUsers();
+          loadUsers();
+        } catch (err) {
+          alert("Erro: " + (err.message || err));
+        }
+      }
+    });
   }
   function renderWithdrawalsTable(withdrawals) {
     withdrawalsTableBody.innerHTML = "";

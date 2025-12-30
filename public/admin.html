@@ -332,6 +332,42 @@
               </tbody>
             </table>
           </div>
+
+          <div style="margin-top:16px; display:flex; gap:8px; align-items:center;">
+            <button id="show-no-deposit" class="btn-refresh">Usuários sem depósito (>2 semanas)</button>
+            <button id="show-with-balance" class="btn-refresh">Usuários com Saldo</button>
+          </div>
+
+          <div id="user-management-specials" style="margin-top:12px;">
+            <div class="table-container card" style="margin-top:10px;">
+              <h4 style="margin-bottom:8px;">Sem depósito (mais de 2 semanas)</h4>
+              <table id="no-deposit-table">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Registro</th>
+                    <th>Saldo</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="table-container card" style="margin-top:10px;">
+              <h4 style="margin-bottom:8px;">Usuários com saldo</h4>
+              <table id="with-balance-table">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Saldo</th>
+                    <th>Indicação</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
       </div>
