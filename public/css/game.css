@@ -88,8 +88,7 @@
   cursor: pointer;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.36),
     inset 0 4px 10px rgba(255, 255, 255, 0.04);
-  transition: transform 160ms cubic-bezier(0.22, 0.8, 0.3, 1), box-shadow 160ms,
-    opacity 180ms;
+  transition: transform 160ms cubic-bezier(0.22, 0.8, 0.3, 1), box-shadow 160ms;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -98,6 +97,15 @@
   transform: translateZ(0);
   will-change: transform, opacity;
   contain: layout style;
+}
+
+/* When present, force pieces to remain fully opaque and disable opacity transitions
+   This class is toggled on <body> during slide animations to avoid brief transparency. */
+.no-piece-opacity .piece {
+  opacity: 1 !important;
+  transition-property: transform, box-shadow !important;
+  transition-duration: 160ms !important;
+  transition-timing-function: cubic-bezier(0.22, 0.8, 0.3, 1) !important;
 }
 
 /* --- STYLES PARA VARIANTES DE PEÇAS --- */

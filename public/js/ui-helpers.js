@@ -391,47 +391,13 @@ window.UI = {
                   });
                 } catch (e) {}
 
-                // Prepara peça para fade-in (simples: só opacidade)
+                // Move piece directly without fade; avoid transparency
                 try {
-                  pieceEl.style.transition = "opacity 200ms linear";
-                  pieceEl.style.opacity = "0";
+                  // clear any transition/opacity flags
+                  pieceEl.style.transition = "";
+                  pieceEl.style.opacity = "";
                 } catch (e) {}
-
                 toSquare.appendChild(pieceEl);
-
-                // Force reflow then fade-in
-                // eslint-disable-next-line no-unused-expressions
-                pieceEl.getBoundingClientRect();
-                requestAnimationFrame(() => {
-                  try {
-                    pieceEl.style.opacity = "1";
-                    // remove a classe fade-out caso venha de fallback
-                    pieceEl.classList.remove("fade-out");
-                  } catch (e) {}
-                });
-
-                const t2 = (ev) => {
-                  if (ev && ev.target !== pieceEl) return;
-                  try {
-                    pieceEl.removeEventListener("transitionend", t2);
-                  } catch (e) {}
-                  // limpa estilos inline que usamos apenas para a transição
-                  try {
-                    pieceEl.style.transition = "";
-                    pieceEl.style.opacity = "";
-                  } catch (e) {}
-                };
-                pieceEl.addEventListener("transitionend", t2);
-                // fallback timeout
-                setTimeout(() => {
-                  try {
-                    pieceEl.removeEventListener("transitionend", t2);
-                  } catch (e) {}
-                  try {
-                    pieceEl.style.transition = "";
-                    pieceEl.style.opacity = "";
-                  } catch (e) {}
-                }, 420);
               } catch (e) {
                 try {
                   const fallback = document.createElement("div");
@@ -445,23 +411,11 @@ window.UI = {
               try {
                 const fallback = document.createElement("div");
                 fallback.className = "piece black-piece";
-                fallback.style.opacity = "0";
                 toSquare.appendChild(fallback);
-                // fade in fallback (simples)
-                // eslint-disable-next-line no-unused-expressions
-                fallback.getBoundingClientRect();
-                requestAnimationFrame(() => {
-                  try {
-                    fallback.style.transition = "opacity 180ms linear";
-                    fallback.style.opacity = "1";
-                  } catch (e) {}
-                });
-                setTimeout(() => {
-                  try {
-                    fallback.style.transition = "";
-                    fallback.style.opacity = "";
-                  } catch (e) {}
-                }, 260);
+                try {
+                  fallback.style.transition = "";
+                  fallback.style.opacity = "";
+                } catch (e) {}
               } catch (e) {}
             }
           } catch (e) {}
@@ -496,11 +450,11 @@ window.UI = {
         clone.style.transform = "translate3d(0, 0, 0) scale(1)";
         clone.style.transformOrigin = "50% 50%";
         // começar invisível para evitar 'pulo' quando escondemos o original
-        clone.style.opacity = "0";
+        // keep clone fully opaque to avoid transparency during slide
+        clone.style.opacity = "1";
         clone.style.boxShadow = "0 24px 48px rgba(0,0,0,0.26)";
-        // Use a 'drag' style animation (simula peça sendo arrastada)
-        clone.style.transition =
-          "transform 480ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 220ms linear, box-shadow 320ms ease";
+        // Use a simple slide animation (only translate)
+        clone.style.transition = "transform 220ms ease";
         clone.style.pointerEvents = "none";
 
         document.body.appendChild(clone);
@@ -521,30 +475,28 @@ window.UI = {
         // eslint-disable-next-line no-unused-expressions
         clone.getBoundingClientRect();
 
+        // Start animation: ensure pieces do not change opacity during slide
+        try {
+          document.body.classList.add("no-piece-opacity");
+        } catch (e) {}
+
         // Start animation: fade-in clone, then translate to destination
         // Simular arrasto: adiciona leve rotação e deslocamento vertical
         requestAnimationFrame(() => {
           try {
-            // primeiro torna o clone visível
-            clone.style.transition =
-              "transform 480ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 220ms linear, box-shadow 320ms ease";
-            clone.style.opacity = "1";
+            // start slide transition (no opacity change)
+            clone.style.transition = "transform 220ms ease";
 
-            const rotateDeg = deltaX > 0 ? -6 : 6;
-            const lift = -6; // pixels levantados durante o arrasto
-            clone.style.transform = `translate3d(${deltaX}px, ${
-              deltaY + lift
-            }px, 0) rotate(${rotateDeg}deg) scale(1)`;
-            // sombra mais pronunciada enquanto 'arrastando'
-            clone.style.boxShadow = "0 18px 40px rgba(0,0,0,0.24)";
+            // Apenas desliza sem rotação/elevação
+            clone.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+            // sombra leve
+            clone.style.boxShadow = "0 10px 20px rgba(0,0,0,0.12)";
 
-            // Após pequeno delay, escondemos a peça original para evitar flicker
+            // Esconder peça original rapidamente para evitar flicker
             if (pieceEl) {
-              setTimeout(() => {
-                try {
-                  pieceEl.style.visibility = "hidden";
-                } catch (e) {}
-              }, 60);
+              try {
+                pieceEl.style.visibility = "hidden";
+              } catch (e) {}
             }
           } catch (e) {}
         });
@@ -643,6 +595,9 @@ window.UI = {
               );
             }
           } catch (e) {}
+          try {
+            document.body.classList.remove("no-piece-opacity");
+          } catch (e) {}
           resolve();
         };
 
@@ -652,19 +607,19 @@ window.UI = {
           cleanUp();
         };
         clone.addEventListener("transitionend", tEnd);
-        // Fallback timeout (ligeiramente maior que a duração da transição)
+        // Fallback timeout (slightly larger than transition duration)
         setTimeout(() => {
           try {
             clone.removeEventListener("transitionend", tEnd);
           } catch (e) {}
           cleanUp();
-        }, 800);
+        }, 360);
         // Safety additional timeout in case of slow devices
         setTimeout(() => {
           try {
             cleanUp();
           } catch (e) {}
-        }, 1400);
+        }, 800);
       } catch (err) {
         try {
           console.error("animatePieceMove error", err);
