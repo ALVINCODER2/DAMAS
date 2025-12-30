@@ -823,8 +823,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const srcSquareEl = document.querySelector(
         `#board .square[data-row='${mv.from.row}'][data-col='${mv.from.col}']`
       );
-      const pieceEl = srcSquareEl ? srcSquareEl.querySelector('.piece') : null;
-      await animatePieceSlide(mv.from.row, mv.from.col, mv.to.row, mv.to.col, pieceEl);
+      const pieceEl = srcSquareEl ? srcSquareEl.querySelector(".piece") : null;
+      await animatePieceSlide(
+        mv.from.row,
+        mv.from.col,
+        mv.to.row,
+        mv.to.col,
+        pieceEl
+      );
 
       // Apply move (estado lógico)
       const piece = testGame.boardState[mv.from.row][mv.from.col];
@@ -1033,19 +1039,23 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!pieceEl) return resolve();
 
         const boardRect = boardElement.getBoundingClientRect();
-        const srcSquare = document.querySelector(`#board .square[data-row='${fromRow}'][data-col='${fromCol}']`);
-        const dstSquare = document.querySelector(`#board .square[data-row='${toRow}'][data-col='${toCol}']`);
+        const srcSquare = document.querySelector(
+          `#board .square[data-row='${fromRow}'][data-col='${fromCol}']`
+        );
+        const dstSquare = document.querySelector(
+          `#board .square[data-row='${toRow}'][data-col='${toCol}']`
+        );
         if (!srcSquare || !dstSquare) return resolve();
 
         const srcRect = srcSquare.getBoundingClientRect();
         const dstRect = dstSquare.getBoundingClientRect();
 
         const clone = pieceEl.cloneNode(true);
-        clone.style.position = 'absolute';
-        clone.style.pointerEvents = 'none';
-        clone.style.margin = '0';
+        clone.style.position = "absolute";
+        clone.style.pointerEvents = "none";
+        clone.style.margin = "0";
         clone.style.zIndex = 9999;
-        clone.style.transition = 'transform 220ms ease';
+        clone.style.transition = "transform 220ms ease";
 
         const sizeW = srcRect.width;
         const sizeH = srcRect.height;
@@ -1059,7 +1069,7 @@ document.addEventListener("DOMContentLoaded", () => {
         clone.style.top = `${offsetY}px`;
 
         // coloca dentro do board para ficar posicionado corretamente
-        clone.style.transform = 'translate3d(0,0,0)';
+        clone.style.transform = "translate3d(0,0,0)";
         boardElement.appendChild(clone);
 
         // força reflow
@@ -1071,17 +1081,23 @@ document.addEventListener("DOMContentLoaded", () => {
         clone.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
 
         const cleanup = () => {
-          try { clone.remove(); } catch (e) {}
+          try {
+            clone.remove();
+          } catch (e) {}
           resolve();
         };
 
         // Timeout fallback caso transitionend não dispare
         const tmo = setTimeout(() => cleanup(), 300);
 
-        clone.addEventListener('transitionend', () => {
-          clearTimeout(tmo);
-          cleanup();
-        }, { once: true });
+        clone.addEventListener(
+          "transitionend",
+          () => {
+            clearTimeout(tmo);
+            cleanup();
+          },
+          { once: true }
+        );
       } catch (e) {
         resolve();
       }
@@ -1113,7 +1129,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function handleBoardClick(e) {
+  async function handleBoardClick(e) {
     const square = e.target.closest(".square");
     if (!square) return;
 
@@ -1204,7 +1220,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
           // animate slide using the selected piece element if available
           const selPieceEl = selectedPiece ? selectedPiece.element : null;
-          await animatePieceSlide(move.from.row, move.from.col, move.to.row, move.to.col, selPieceEl);
+          await animatePieceSlide(
+            move.from.row,
+            move.from.col,
+            move.to.row,
+            move.to.col,
+            selPieceEl
+          );
 
           const piece = testGame.boardState[move.from.row][move.from.col];
           testGame.boardState[move.to.row][move.to.col] = piece;
