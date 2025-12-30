@@ -4,6 +4,50 @@
 document.addEventListener("DOMContentLoaded", () => {
   UI.init();
 
+  // Verifica se houve uma revanche aceita que pediu reload e aplica pequena pausa
+  try {
+    const pausedUntil = parseInt(
+      localStorage.getItem("revanchePausedUntil"),
+      10
+    );
+    if (!isNaN(pausedUntil) && pausedUntil > Date.now()) {
+      const remaining = Math.max(0, pausedUntil - Date.now());
+      // Cria overlay bloqueante para evitar ações durante o reload/pause
+      try {
+        const ov = document.createElement("div");
+        ov.id = "revanche-pause-overlay";
+        ov.style.cssText =
+          "position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:2147483646;color:#fff;font-size:20px;font-weight:700;";
+        ov.textContent = `Recarregando... Aguarde ${Math.ceil(
+          remaining / 1000
+        )}s`;
+        document.body.appendChild(ov);
+      } catch (e) {}
+
+      // Desabilita botões críticos
+      try {
+        document
+          .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
+          .forEach((b) => (b.disabled = true));
+      } catch (e) {}
+
+      setTimeout(() => {
+        try {
+          const ov = document.getElementById("revanche-pause-overlay");
+          if (ov) ov.remove();
+        } catch (e) {}
+        try {
+          document
+            .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
+            .forEach((b) => (b.disabled = false));
+        } catch (e) {}
+        try {
+          localStorage.removeItem("revanchePausedUntil");
+        } catch (e) {}
+      }, remaining + 50);
+    }
+  } catch (e) {}
+
   // Aplica preferências visuais salvas globalmente o mais cedo possível
   try {
     const loadPrefsEarly = () => {
@@ -692,8 +736,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!window.isSpectator) {
         localStorage.setItem("checkersCurrentRoom", GameCore.state.currentRoom);
-        GameCore.state.myColor =
-          socket.id === gameState.players.white ? "b" : "p";
+        // Prefer matching por email quando disponível, fallback para socket.id
+        try {
+          if (
+            window.currentUser &&
+            gameState.users &&
+            gameState.users.white &&
+            window.currentUser.email === gameState.users.white
+          ) {
+            GameCore.state.myColor = "b";
+          } else if (
+            window.currentUser &&
+            gameState.users &&
+            gameState.users.black &&
+            window.currentUser.email === gameState.users.black
+          ) {
+            GameCore.state.myColor = "p";
+          } else {
+            GameCore.state.myColor =
+              socket.id === gameState.players.white ? "b" : "p";
+          }
+        } catch (e) {
+          GameCore.state.myColor =
+            socket.id === gameState.players.white ? "b" : "p";
+        }
 
         let statusText = `Você joga com as ${
           GameCore.state.myColor === "b" ? "Brancas" : "Vermelhas"
@@ -986,8 +1052,30 @@ document.addEventListener("DOMContentLoaded", () => {
     UI.updatePlayerNames(data.gameState.users);
     GameCore.handleTimerState(data);
 
-    GameCore.state.myColor =
-      socket.id === data.gameState.players.white ? "b" : "p";
+    // Prefer matching por email quando disponível, fallback para socket.id
+    try {
+      if (
+        window.currentUser &&
+        data.gameState.users &&
+        data.gameState.users.white &&
+        window.currentUser.email === data.gameState.users.white
+      ) {
+        GameCore.state.myColor = "b";
+      } else if (
+        window.currentUser &&
+        data.gameState.users &&
+        data.gameState.users.black &&
+        window.currentUser.email === data.gameState.users.black
+      ) {
+        GameCore.state.myColor = "p";
+      } else {
+        GameCore.state.myColor =
+          socket.id === data.gameState.players.white ? "b" : "p";
+      }
+    } catch (e) {
+      GameCore.state.myColor =
+        socket.id === data.gameState.players.white ? "b" : "p";
+    }
     UI.elements.board.classList.remove("board-flipped");
     if (GameCore.state.myColor === "p")
       UI.elements.board.classList.add("board-flipped");
@@ -1189,13 +1277,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
   });
 
-  // Quando ambos aceitarem revanche, recarrega a página para sincronizar estado
+  // Quando ambos aceitarem revanche, grava pausa de 3s e recarrega a página
   socket.on("revancheAccepted", () => {
     try {
       // limpa room salvo para evitar rejoin automático inconsistente
       localStorage.removeItem("checkersCurrentRoom");
     } catch (e) {}
-    // reload for both players so client fully resets UI/game state
+    try {
+      // define timestamp até quando bloquear (3 segundos)
+      localStorage.setItem("revanchePausedUntil", String(Date.now() + 3000));
+    } catch (e) {}
+    // reload para que ambos clientes sincronizem e então a página aplicará a pausa
     window.location.reload();
   });
 

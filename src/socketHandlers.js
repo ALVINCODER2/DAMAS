@@ -618,9 +618,7 @@ async function startGameLogic(room) {
   let whitePlayer, blackPlayer;
   // Verifica se é uma continuação de partida (Tablita ou Revanche)
   if (room.game && room.game.players) {
-    console.log(
-      "[Novo Jogo/Revanche] Invertendo cores (matching by email, not socketId)."
-    );
+    // Revanche: determina cores por email (sem debug log)
     // Usa email dos usuários para detectar quem foi branco anteriormente.
     try {
       const previousWhiteEmail = room.game.users && room.game.users.white;
@@ -636,7 +634,6 @@ async function startGameLogic(room) {
     } catch (e) {
       // fallback para comportamento original em caso de erro
       console.error("Erro determinando cores por email:", e);
-      console.log("[Novo Jogo/Revanche] Invertendo cores.");
       const previousWhiteSocketId = room.game.players.white;
       if (player1.socketId === previousWhiteSocketId) {
         whitePlayer = player2;
@@ -647,7 +644,7 @@ async function startGameLogic(room) {
       }
     }
   } else {
-    console.log("[Novo Jogo] Atribuindo cores aleatoriamente.");
+    // Atribui cores aleatoriamente (sem log)
     const isPlayer1White = Math.random() < 0.5;
     whitePlayer = isPlayer1White ? player1 : player2;
     blackPlayer = isPlayer1White ? player2 : player1;
@@ -923,15 +920,7 @@ async function startGameLogic(room) {
 // --- UPDATE: Agora aceita clientMoveId ---
 async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
   if (!io) return;
-  try {
-    console.log(
-      `[DEBUG executeMove] room=${roomCode} from=${JSON.stringify(
-        from
-      )} to=${JSON.stringify(
-        to
-      )} socketId=${socketId} clientMoveId=${clientMoveId}`
-    );
-  } catch (e) {}
+  // Debug logs removed for production
   const gameRoom = gameRooms[roomCode];
   if (!gameRoom || !gameRoom.game) return;
   if (gameRoom.isGameConcluded) return;
@@ -1243,13 +1232,13 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
     // Incrementa/garante um número de sequência simples para detectar dessincronizações
     try {
-      // Se room.seq não existir, inicia em 0; caso exista, incrementa
-      room.seq =
-        typeof room.seq === "number"
-          ? room.seq + 1
-          : (room.seq = (room.seq || 0) + 1);
+      // Se gameRoom.seq não existir, inicia em 0; caso exista, incrementa
+      gameRoom.seq =
+        typeof gameRoom.seq === "number"
+          ? gameRoom.seq + 1
+          : (gameRoom.seq = (gameRoom.seq || 0) + 1);
       // Propaga para o game (garantia de consistência)
-      game.seq = room.seq;
+      game.seq = gameRoom.seq;
     } catch (e) {}
 
     // Emite apenas o delta do movimento para reduzir payloads (clientes podem animar localmente)
@@ -1260,7 +1249,8 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       const seqValue =
         typeof game.seq === "number"
           ? game.seq
-          : ((room.seq = (room.seq || 0) + 1), (game.seq = room.seq));
+          : ((gameRoom.seq = (gameRoom.seq || 0) + 1),
+            (game.seq = gameRoom.seq));
       const pieceMovedPayload = {
         lastMove: game.lastMove,
         captured: capturedThisMove.length > 0 ? [...capturedThisMove] : [],
@@ -1271,13 +1261,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         boardSize: game.boardSize,
       };
       io.to(roomCode).emit("pieceMoved", pieceMovedPayload);
-      try {
-        console.log(
-          `[LATENCY] pieceMoved emitted room=${roomCode} seq=${
-            game.seq
-          } emitDelay=${Date.now() - processStartTs}ms`
-        );
-      } catch (e) {}
+      // debug removed
     } catch (e) {
       console.error("Erro emitindo pieceMoved:", e);
     }
@@ -1421,11 +1405,7 @@ async function startNextTablitaGame(roomCode) {
         p2Score >= 2 ||
         (room.match && room.match.currentGame > 2);
       if (matchAlreadyOver) {
-        console.log(
-          `[Tablita] Não iniciando próxima partida para ${roomCode}: match já decidido (p1=${p1Score} p2=${p2Score} currentGame=${
-            room.match && room.match.currentGame
-          })`
-        );
+        // match já decidido; não iniciar próxima partida
         room.isGameConcluded = true;
         room.cleanupTimeout = setTimeout(() => {
           if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
@@ -1447,9 +1427,7 @@ async function startNextTablitaGame(roomCode) {
       });
 
       if (connectedPlayers.length < 2) {
-        console.log(
-          `[Tablita] Não iniciando jogo 2 em ${roomCode}: jogadores conectados=${connectedPlayers.length}`
-        );
+        // jogadores insuficientes para continuar (sem log)
 
         // Decide vencedor final com base no placar atual ou no jogador presente
         const p1Email =
@@ -2073,13 +2051,7 @@ function initializeSocket(ioInstance) {
         room.players.length === 1 &&
         room.players[0].socketId === socket.id
       ) {
-        try {
-          console.log(
-            `[${new Date().toISOString()}] [cancelRoom] Removendo room ${roomCode} requested by creator totalBefore=${
-              Object.keys(gameRooms).length
-            }`
-          );
-        } catch (e) {}
+        // room cancel requested by creator (log removed)
         delete gameRooms[roomCode];
         socket.emit("roomCancelled");
         scheduleLobbyUpdate();
@@ -2091,17 +2063,7 @@ function initializeSocket(ioInstance) {
         // Log de recepção para diagnóstico de latência
         try {
           const recvTs = Date.now();
-          if (moveData && moveData.ts) {
-            console.log(
-              `[LATENCY] playerMove received room=${moveData.room} moveId=${
-                moveData.moveId
-              } recvDelay=${recvTs - moveData.ts}ms`
-            );
-          } else {
-            console.log(
-              `[LATENCY] playerMove received room=${moveData.room} moveId=${moveData.moveId} recvDelay=na`
-            );
-          }
+          // latency debug logs removed
         } catch (le) {}
 
         // Atualiza socketId do jogador na sala caso ele tenha reconectado
@@ -2125,13 +2087,7 @@ function initializeSocket(ioInstance) {
           socket.id,
           moveData.moveId
         );
-        try {
-          console.log(
-            `[LATENCY] executeMove processed room=${moveData.room} moveId=${
-              moveData.moveId
-            } execTime=${Date.now() - startExec}ms`
-          );
-        } catch (e) {}
+        // executeMove latency log removed
       } catch (ex) {
         console.error("executeMove erro:", ex);
       }
