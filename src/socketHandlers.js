@@ -1241,9 +1241,14 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       ? [{ row: to.row, col: to.col }]
       : bestCaptures.map((seq) => seq[0]);
 
-    // Incrementa um número de sequência simples para detectar dessincronizações
+    // Incrementa/garante um número de sequência simples para detectar dessincronizações
     try {
-      room.seq = (room.seq || 0) + 1;
+      // Se room.seq não existir, inicia em 0; caso exista, incrementa
+      room.seq =
+        typeof room.seq === "number"
+          ? room.seq + 1
+          : (room.seq = (room.seq || 0) + 1);
+      // Propaga para o game (garantia de consistência)
       game.seq = room.seq;
     } catch (e) {}
 
@@ -1252,12 +1257,16 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       // Garante que o payload do delta contenha as posições capturadas
       // ocorridas neste movimento (mesmo que o servidor já tenha removido
       // as peças do tabuleiro ao terminar o turno).
+      const seqValue =
+        typeof game.seq === "number"
+          ? game.seq
+          : ((room.seq = (room.seq || 0) + 1), (game.seq = room.seq));
       const pieceMovedPayload = {
         lastMove: game.lastMove,
         captured: capturedThisMove.length > 0 ? [...capturedThisMove] : [],
         currentPlayer: game.currentPlayer,
         mandatoryPieces,
-        seq: game.seq,
+        seq: seqValue,
         ts: Date.now(),
         boardSize: game.boardSize,
       };
