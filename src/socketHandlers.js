@@ -90,6 +90,7 @@ let _lobbyUpdateTimer = null;
 let _lastLobbyPayload = null;
 function scheduleLobbyUpdate(force) {
   try {
+    const processStartTs = Date.now();
     _lastLobbyPayload = getLobbyInfo();
     if (force) {
       if (io) io.volatile.emit("updateLobby", _lastLobbyPayload);
@@ -1257,9 +1258,17 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         currentPlayer: game.currentPlayer,
         mandatoryPieces,
         seq: game.seq,
+        ts: Date.now(),
         boardSize: game.boardSize,
       };
       io.to(roomCode).emit("pieceMoved", pieceMovedPayload);
+      try {
+        console.log(
+          `[LATENCY] pieceMoved emitted room=${roomCode} seq=${
+            game.seq
+          } emitDelay=${Date.now() - processStartTs}ms`
+        );
+      } catch (e) {}
     } catch (e) {
       console.error("Erro emitindo pieceMoved:", e);
     }
@@ -2070,6 +2079,22 @@ function initializeSocket(ioInstance) {
 
     socket.on("playerMove", async (moveData) => {
       try {
+        // Log de recepção para diagnóstico de latência
+        try {
+          const recvTs = Date.now();
+          if (moveData && moveData.ts) {
+            console.log(
+              `[LATENCY] playerMove received room=${moveData.room} moveId=${
+                moveData.moveId
+              } recvDelay=${recvTs - moveData.ts}ms`
+            );
+          } else {
+            console.log(
+              `[LATENCY] playerMove received room=${moveData.room} moveId=${moveData.moveId} recvDelay=na`
+            );
+          }
+        } catch (le) {}
+
         // Atualiza socketId do jogador na sala caso ele tenha reconectado
         const room = gameRooms[moveData.room];
         if (room && room.players && socket.userData && socket.userData.email) {
@@ -2081,13 +2106,26 @@ function initializeSocket(ioInstance) {
       } catch (e) {
         console.warn("playerMove: erro ao atualizar socketId do jogador", e);
       }
-      await executeMove(
-        moveData.room,
-        moveData.from,
-        moveData.to,
-        socket.id,
-        moveData.moveId
-      );
+
+      try {
+        const startExec = Date.now();
+        await executeMove(
+          moveData.room,
+          moveData.from,
+          moveData.to,
+          socket.id,
+          moveData.moveId
+        );
+        try {
+          console.log(
+            `[LATENCY] executeMove processed room=${moveData.room} moveId=${
+              moveData.moveId
+            } execTime=${Date.now() - startExec}ms`
+          );
+        } catch (e) {}
+      } catch (ex) {
+        console.error("executeMove erro:", ex);
+      }
     });
 
     socket.on("getValidMoves", (data) => {

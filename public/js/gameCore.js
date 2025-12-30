@@ -131,6 +131,16 @@ window.GameCore = (function () {
             return;
           }
 
+          // Log de latência (diagnóstico)
+          try {
+            if (payload && payload.ts) {
+              const recvLag = Date.now() - payload.ts;
+              console.log(
+                `[LATENCY] pieceMoved recvLag=${recvLag}ms seq=${payload.seq}`
+              );
+            }
+          } catch (e) {}
+
           // Aplica delta: move peça localmente
           if (payload.lastMove) {
             const from = payload.lastMove.from;
@@ -885,12 +895,26 @@ window.GameCore = (function () {
         performOptimisticMove(moveFrom, moveTo, moveId).catch(console.error);
         // trava local até receber confirmação do servidor (reduz double-click/desincronias)
         state.serverProcessingCapture = true;
-        state.socket.emit("playerMove", {
-          from: moveFrom,
-          to: moveTo,
-          room: state.currentRoom,
-          moveId: moveId,
-        });
+        try {
+          const sendTs = Date.now();
+          console.log(
+            `[LATENCY] sending playerMove sendTs=${sendTs} moveId=${moveId}`
+          );
+          state.socket.emit("playerMove", {
+            from: moveFrom,
+            to: moveTo,
+            room: state.currentRoom,
+            moveId: moveId,
+            ts: sendTs,
+          });
+        } catch (e) {
+          state.socket.emit("playerMove", {
+            from: moveFrom,
+            to: moveTo,
+            room: state.currentRoom,
+            moveId: moveId,
+          });
+        }
         return;
       }
       if (state.selectedPiece.row === row && state.selectedPiece.col === col) {
@@ -981,12 +1005,26 @@ window.GameCore = (function () {
               } catch (e) {}
               // trava local até confirmação do servidor
               state.serverProcessingCapture = true;
-              state.socket.emit("playerMove", {
-                from: { row: curFrom.row, col: curFrom.col },
-                to: dest,
-                room: state.currentRoom,
-                moveId: moveId,
-              });
+              try {
+                const sendTs = Date.now();
+                console.log(
+                  `[LATENCY] sending playerMove sendTs=${sendTs} moveId=${moveId}`
+                );
+                state.socket.emit("playerMove", {
+                  from: { row: curFrom.row, col: curFrom.col },
+                  to: dest,
+                  room: state.currentRoom,
+                  moveId: moveId,
+                  ts: sendTs,
+                });
+              } catch (e) {
+                state.socket.emit("playerMove", {
+                  from: { row: curFrom.row, col: curFrom.col },
+                  to: dest,
+                  room: state.currentRoom,
+                  moveId: moveId,
+                });
+              }
 
               const ok = await waitForMoveAck(moveId, 10000);
               try {
@@ -1118,12 +1156,26 @@ window.GameCore = (function () {
             console.error
           );
           state.serverProcessingCapture = true;
-          state.socket.emit("playerMove", {
-            from: { row, col },
-            to: uniqueMove.to,
-            room: state.currentRoom,
-            moveId: moveId,
-          });
+          try {
+            const sendTs = Date.now();
+            console.log(
+              `[LATENCY] sending playerMove sendTs=${sendTs} moveId=${moveId}`
+            );
+            state.socket.emit("playerMove", {
+              from: { row: col },
+              to: uniqueMove.to,
+              room: state.currentRoom,
+              moveId: moveId,
+              ts: sendTs,
+            });
+          } catch (e) {
+            state.socket.emit("playerMove", {
+              from: { row: col },
+              to: uniqueMove.to,
+              room: state.currentRoom,
+              moveId: moveId,
+            });
+          }
         } finally {
           // manter flag até que o server confirme via pieceMoved/ack; clear em handlers
         }
@@ -1177,12 +1229,26 @@ window.GameCore = (function () {
               console.error
             );
             state.serverProcessingCapture = true;
-            state.socket.emit("playerMove", {
-              from: { row, col },
-              to: dest,
-              room: state.currentRoom,
-              moveId: moveId,
-            });
+            try {
+              const sendTs = Date.now();
+              console.log(
+                `[LATENCY] sending playerMove sendTs=${sendTs} moveId=${moveId}`
+              );
+              state.socket.emit("playerMove", {
+                from: { row, col },
+                to: dest,
+                room: state.currentRoom,
+                moveId: moveId,
+                ts: sendTs,
+              });
+            } catch (e) {
+              state.socket.emit("playerMove", {
+                from: { row, col },
+                to: dest,
+                room: state.currentRoom,
+                moveId: moveId,
+              });
+            }
           } finally {
             // manter flag até confirmação do servidor
           }
