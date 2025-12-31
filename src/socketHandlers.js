@@ -2234,59 +2234,82 @@ function initializeSocket(ioInstance) {
 
       const game = room.game;
       const validMoves = [];
-      const captures = timedGetAllPossibleCapturesForPiece(
-        row,
-        col,
-        game,
-        roomCode
-      );
 
-      if (game.mustCaptureWith) {
-        if (
-          row !== game.mustCaptureWith.row ||
-          col !== game.mustCaptureWith.col
-        ) {
-          return socket.emit("showValidMoves", []);
-        }
-        captures.forEach((seq) => {
-          for (let i = 1; i < seq.length; i++) validMoves.push(seq[i]);
-        });
-        return socket.emit("showValidMoves", validMoves);
-      }
+      try {
+        // Determina a cor da peça clicada pelo estado do tabuleiro. Em alguns
+        // casos de corrida o game.currentPlayer pode não estar atualizado no
+        // momento do clique; usar a peça como referência torna a resposta
+        // mais resiliente (o cliente já valida turno antes de pedir).
+        const piece =
+          game.boardState && game.boardState[row]
+            ? game.boardState[row][col]
+            : null;
 
-      const bestCaptures = timedFindBestCaptureMoves(
-        game.currentPlayer,
-        game,
-        roomCode
-      );
-      if (bestCaptures.length > 0) {
-        const capturesForThis = bestCaptures.filter(
-          (seq) => seq[0].row === row && seq[0].col === col
+        if (!piece) return socket.emit("showValidMoves", []);
+
+        const pieceColor = String(piece).toLowerCase() === "b" ? "b" : "p";
+
+        // Prioriza sequências de captura para a cor do jogador que possui a peça
+        const bestCaptures = timedFindBestCaptureMoves(
+          pieceColor,
+          game,
+          roomCode
         );
-        capturesForThis.forEach((seq) => {
-          for (let i = 1; i < seq.length; i++) validMoves.push(seq[i]);
-        });
-      } else {
+
+        if (game.mustCaptureWith) {
+          // Se há uma peça obrigatória diferente da clicada, não mostramos
+          if (
+            game.mustCaptureWith.row !== row ||
+            game.mustCaptureWith.col !== col
+          ) {
+            return socket.emit("showValidMoves", []);
+          }
+          // Caso a peça clicada seja a obrigatória, extrai destinos de captura
+          const capturesForThis = bestCaptures.filter(
+            (seq) => seq[0] && seq[0].row === row && seq[0].col === col
+          );
+          capturesForThis.forEach((seq) => {
+            for (let i = 1; i < seq.length; i++) validMoves.push(seq[i]);
+          });
+          return socket.emit("showValidMoves", validMoves);
+        }
+
+        if (bestCaptures && bestCaptures.length > 0) {
+          const capturesForThis = bestCaptures.filter(
+            (seq) => seq[0] && seq[0].row === row && seq[0].col === col
+          );
+          capturesForThis.forEach((seq) => {
+            for (let i = 1; i < seq.length; i++) validMoves.push(seq[i]);
+          });
+          return socket.emit("showValidMoves", validMoves);
+        }
+
+        // Sem capturas obrigatórias: verifica movimentos válidos simples para
+        // a peça clicada usando isMoveValid (ignorando regra da maioria aqui).
         const boardSize = game.boardSize;
         for (let r = 0; r < boardSize; r++) {
           for (let c = 0; c < boardSize; c++) {
-            if (
-              timedIsMoveValid(
+            try {
+              const mv = timedIsMoveValid(
                 { row, col },
                 { row: r, col: c },
-                game.currentPlayer,
+                pieceColor,
                 game,
                 true,
                 roomCode
-              ).valid
-            ) {
-              validMoves.push({ row: r, col: c });
+              );
+              if (mv && mv.valid) validMoves.push({ row: r, col: c });
+            } catch (inner) {
+              /* continue */
             }
           }
         }
-      }
 
-      socket.emit("showValidMoves", validMoves);
+        socket.emit("showValidMoves", validMoves);
+      } catch (err) {
+        console.error("getValidMoves error:", err);
+        socket.emit("showValidMoves", []);
+      }
     });
 
     socket.on("rejoinActiveGame", (data) => {
