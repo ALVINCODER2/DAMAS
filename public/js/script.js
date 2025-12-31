@@ -668,6 +668,13 @@ document.addEventListener("DOMContentLoaded", () => {
       GameCore.state.isProcessingQueue = false;
       GameCore.state.currentTurnCapturedPieces = [];
       GameCore.state.lastOptimisticMove = null;
+      // Garantir que quaisquer travas locais sejam liberadas ao iniciar novo jogo
+      try {
+        GameCore.state.serverProcessingCapture = false;
+        GameCore.state._autoExecutingCapture = false;
+        GameCore.state.pendingBoardSnapshot = null;
+        GameCore.state._suppressMoveUntil = 0;
+      } catch (e) {}
       GameCore.state.drawMovesCounter = 0;
 
       document.getElementById("game-over-overlay").classList.add("hidden");
