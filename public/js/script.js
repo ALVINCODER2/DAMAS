@@ -840,25 +840,47 @@ document.addEventListener("DOMContentLoaded", () => {
         UI.elements.board.classList.remove("board-flipped");
       }
 
-      GameCore.processGameUpdate(gameState, true);
-      UI.highlightMandatoryPieces(gameState.mandatoryPieces);
-      UI.updatePlayerNames(gameState.users);
-      UI.playAudio("join");
-      // Garantia extra: atualiza indicador de turno imediatamente
-      try {
-        const normalize = (v) => {
-          if (!v) return null;
-          if (v === "b" || v === "p") return v;
-          const s = String(v).toLowerCase();
-          if (s.includes("branc") || s.includes("white")) return "b";
-          if (s.includes("pret") || s.includes("black") || s.includes("preta"))
-            return "p";
-          return null;
-        };
-        const cur = normalize(gameState.currentPlayer);
-        const mine = GameCore.state.myColor === "b" ? "b" : "p";
-        UI.updateTurnIndicator(!!(cur && mine && cur === mine));
-      } catch (e) {}
+      // Aguarda o processamento completo do update antes de aplicar highlights
+      GameCore.processGameUpdate(gameState, true)
+        .then(() => {
+          try {
+            UI.highlightMandatoryPieces(gameState.mandatoryPieces);
+          } catch (e) {}
+          try {
+            UI.updatePlayerNames(gameState.users);
+          } catch (e) {}
+          try {
+            UI.playAudio("join");
+          } catch (e) {}
+
+          // Garantia extra: atualiza indicador de turno imediatamente
+          try {
+            const normalize = (v) => {
+              if (!v) return null;
+              if (v === "b" || v === "p") return v;
+              const s = String(v).toLowerCase();
+              if (s.includes("branc") || s.includes("white")) return "b";
+              if (
+                s.includes("pret") ||
+                s.includes("black") ||
+                s.includes("preta")
+              )
+                return "p";
+              return null;
+            };
+            const cur = normalize(gameState.currentPlayer);
+            const mine = GameCore.state.myColor === "b" ? "b" : "p";
+            UI.updateTurnIndicator(!!(cur && mine && cur === mine));
+          } catch (e) {}
+        })
+        .catch((err) => {
+          console.error("processGameUpdate failed on gameStart:", err);
+          // Tentativa de fallback: aplica os highlights mesmo em erro
+          try {
+            UI.highlightMandatoryPieces(gameState.mandatoryPieces);
+            UI.updatePlayerNames(gameState.users);
+          } catch (e) {}
+        });
     } catch (e) {
       console.error(e);
       if (!window.isSpectator) {
@@ -1111,9 +1133,24 @@ document.addEventListener("DOMContentLoaded", () => {
     UI.createBoard(GameCore.state.currentBoardSize, GameCore.handleBoardClick);
     UI.renderPieces(GameCore.state.boardState, GameCore.state.currentBoardSize);
 
-    GameCore.processGameUpdate(data.gameState, true);
-    UI.updatePlayerNames(data.gameState.users);
-    GameCore.handleTimerState(data);
+    GameCore.processGameUpdate(data.gameState, true)
+      .then(() => {
+        try {
+          UI.updatePlayerNames(data.gameState.users);
+        } catch (e) {}
+        try {
+          GameCore.handleTimerState(data);
+        } catch (e) {}
+      })
+      .catch((err) => {
+        console.error("processGameUpdate failed on gameResumed:", err);
+        try {
+          UI.updatePlayerNames(data.gameState.users);
+        } catch (e) {}
+        try {
+          GameCore.handleTimerState(data);
+        } catch (e) {}
+      });
 
     // Prefer matching por email quando disponível, fallback para socket.id
     try {
