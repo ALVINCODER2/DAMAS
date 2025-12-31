@@ -400,6 +400,26 @@ window.GameCore = (function () {
       });
     } catch (e) {}
 
+    // Handler para ack de movimento do servidor: limpa travas locais
+    try {
+      state.socket.on("moveAck", (payload) => {
+        try {
+          if (!payload) return;
+          // Se o ack corresponde ao nosso movimento otimista, limpe o estado relacionado
+          if (
+            payload.moveId &&
+            state.lastOptimisticMove &&
+            state.lastOptimisticMove.moveId === payload.moveId
+          ) {
+            state.lastOptimisticMove = null;
+            state.pendingBoardSnapshot = null;
+          }
+          // Sempre liberar a trava de processamento local para evitar bloqueios
+          state.serverProcessingCapture = false;
+        } catch (e) {}
+      });
+    } catch (e) {}
+
     // Handler para mensagens de jogada inválida (ex.: bloqueio de 1s no servidor)
     try {
       state.socket.on("invalidMove", (payload) => {

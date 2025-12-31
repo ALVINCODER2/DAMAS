@@ -1389,6 +1389,16 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       };
       io.to(roomCode).emit("pieceMoved", pieceMovedPayload);
       // debug removed
+      // Acknowledge to origin socket so client can release local locks
+      try {
+        if (socketId) {
+          const originSock = io.sockets.sockets.get(socketId);
+          if (originSock)
+            originSock.emit("moveAck", { moveId: moveId, ok: true });
+        }
+      } catch (ackErr) {
+        /* ignore ack errors */
+      }
     } catch (e) {
       console.error("Erro emitindo pieceMoved:", e);
     }
@@ -1490,6 +1500,10 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         socket.emit("invalidMove", {
           message: isValid.reason || "Movimento inválido.",
         });
+        try {
+          // envia ack negativo para que o cliente libere travas locais
+          socket.emit("moveAck", { moveId: clientMoveId || null, ok: false });
+        } catch (e) {}
       }
     }
   }
