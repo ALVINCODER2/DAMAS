@@ -678,6 +678,69 @@ document.addEventListener("DOMContentLoaded", () => {
       GameCore.state.currentBoardSize = gameState.boardSize;
       GameCore.state.boardState = gameState.boardState;
 
+      // Se o jogo iniciar com ambos os timers zerados (bug de revanche/zeramento),
+      // recarrega a página automaticamente para forçar re-sincronização.
+      try {
+        let bothZero = false;
+        if (
+          typeof gameState.whiteTime === "number" &&
+          typeof gameState.blackTime === "number"
+        ) {
+          if (gameState.whiteTime === 0 && gameState.blackTime === 0)
+            bothZero = true;
+        } else if (typeof gameState.timeLeft === "number") {
+          if (gameState.timeLeft === 0) bothZero = true;
+        }
+        if (bothZero) {
+          console.warn("gameStart: ambos timers zerados — recarregando página");
+          setTimeout(() => {
+            try {
+              window.location.reload();
+            } catch (e) {
+              window.location.href = window.location.href;
+            }
+          }, 700);
+          return; // aborta inicialização normal — a página será recarregada
+        }
+      } catch (e) {}
+
+      // Se apenas o jogador que tem a vez aparece com tempo zerado, recarrega para sincronizar.
+      try {
+        const curPlayer = gameState.currentPlayer || gameState.turn || null;
+        let myColor = null;
+        if (window.currentUser && gameState.users) {
+          if (gameState.users.white === window.currentUser.email) myColor = "b";
+          else if (gameState.users.black === window.currentUser.email)
+            myColor = "p";
+        }
+        if (curPlayer && myColor && curPlayer === myColor) {
+          let myTime = null;
+          if (
+            typeof gameState.whiteTime === "number" &&
+            typeof gameState.blackTime === "number"
+          ) {
+            myTime =
+              curPlayer === "b" ? gameState.whiteTime : gameState.blackTime;
+          } else if (typeof gameState.timeLeft === "number") {
+            // fallback: se timeLeft é usado e está zerado, considerar como problema
+            myTime = gameState.timeLeft;
+          }
+          if (myTime === 0) {
+            console.warn(
+              "gameStart: seu timer está zerado ao iniciar — recarregando para sincronizar"
+            );
+            setTimeout(() => {
+              try {
+                window.location.reload();
+              } catch (e) {
+                window.location.href = window.location.href;
+              }
+            }, 700);
+            return;
+          }
+        }
+      } catch (e) {}
+
       // Carrega preferências do usuário salvas localmente (se houver) antes de criar o tabuleiro
       try {
         const tryLoadPrefs = () => {
