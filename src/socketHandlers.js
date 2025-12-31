@@ -1061,16 +1061,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
   // Bloqueio de 1s pós-movimento: evita que o jogador responda instantaneamente
   // (previne problemas quando o cliente envia jogadas muito rápidas).
-  try {
-    if (game._inputLockUntil && Date.now() < game._inputLockUntil) {
-      if (socketId) {
-        const sk = io.sockets.sockets.get(socketId);
-        if (sk)
-          sk.emit("invalidMove", { message: "Aguarde 1s antes de jogar." });
-      }
-      return;
-    }
-  } catch (e) {}
+  // (lock de 1s removido)
 
   if (game.isFirstMove) {
     // clear first-move watchdog (player acted within allowed window)
@@ -1402,10 +1393,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       console.error("Erro emitindo pieceMoved:", e);
     }
 
-    // Aplica lock para inputs por 1s após emitir o movimento para todos os clientes
-    try {
-      game._inputLockUntil = Date.now() + 1000;
-    } catch (e) {}
+    // (lock de 1s removido)
 
     // Ainda emitimos o estado completo para jogadores conectados por compatibilidade,
     // e forçamos uma atualização imediata para espectadores para que seus

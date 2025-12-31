@@ -39,8 +39,6 @@ window.GameCore = (function () {
     // Fila
     updateQueue: [],
     isProcessingQueue: false,
-    // Bloqueio de input temporário (timestamp em ms)
-    _inputLockUntil: 0,
     // Lock para evitar processamento de clicks enquanto o servidor confirma uma captura
     serverProcessingCapture: false,
     drawMovesCounter: 0,
@@ -235,11 +233,7 @@ window.GameCore = (function () {
             if (payload.currentPlayer)
               state.lastServerCurrentPlayer = payload.currentPlayer;
 
-            // Bloqueia entrada por 1s para evitar jogadas instantâneas
-            // imediatamente após aplicar o movimento do oponente.
-            try {
-              if (!isMyMove) state._inputLockUntil = Date.now() + 1000;
-            } catch (e) {}
+            // (lock de 1s removido)
 
             // Tocar áudio correspondente
             try {
@@ -896,8 +890,6 @@ window.GameCore = (function () {
   function handleBoardClick(e) {
     if (window.isSpectator || state.isReplaying) return;
     if (state.serverProcessingCapture) return; // bloqueia cliques até confirmação do servidor
-    // Bloqueia interação por janela curta após receber movimento do oponente
-    if (state._inputLockUntil && Date.now() < state._inputLockUntil) return;
     if (!state.myColor) return;
     // Bloqueia interação caso não seja o turno do jogador local
     if (
@@ -1488,12 +1480,7 @@ window.GameCore = (function () {
         state.pendingBoardSnapshot = null;
       }
 
-      // Se o movimento recebido não foi nosso, aplica lock de 1s para
-      // evitar que o jogador adversário seja forçado a jogar instantaneamente.
-      try {
-        if (gameState.lastMove && !isMyMove)
-          state._inputLockUntil = Date.now() + 1000;
-      } catch (e) {}
+      // (lock de 1s removido)
     }
 
     // 2. APLICAÇÃO DO EFEITO FANTASMA (ANTES DA ANIMAÇÃO)
