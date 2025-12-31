@@ -35,6 +35,110 @@ let io; // Variável global para instância do Socket.IO
 // Contador simples para razões de desconexão (diagnóstico)
 const disconnectReasonCounts = {};
 
+// Monitor simples do event-loop: loga se o loop ficar bloqueado além de um limiar.
+try {
+  const LAG_THRESHOLD_MS = 200; // warn se o loop atrasar mais que isso
+  let _lastTick = Date.now();
+  setInterval(() => {
+    try {
+      const now = Date.now();
+      const drift = now - _lastTick - 500;
+      _lastTick = now;
+      if (drift > LAG_THRESHOLD_MS) {
+        try {
+          console.warn(
+            `[EVENT_LOOP_LAG] drift=${drift}ms at ${new Date().toISOString()}`
+          );
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }, 500).unref();
+} catch (e) {}
+
+// Wrappers temporizados para funções de lógica que podem ser pesadas.
+const _TIMING_WARN_MS =
+  typeof process.env.LOG_SLOW_THRESHOLD_MS === "number"
+    ? process.env.LOG_SLOW_THRESHOLD_MS
+    : 30;
+function timedFindBestCaptureMoves(playerColor, game, ctx) {
+  const s = Date.now();
+  try {
+    return findBestCaptureMoves(playerColor, game);
+  } finally {
+    const dt = Date.now() - s;
+    if (dt > _TIMING_WARN_MS) {
+      try {
+        console.warn(
+          `[SLOW] findBestCaptureMoves dt=${dt}ms room=${
+            ctx || (game && game.roomCode) || "unknown"
+          }`
+        );
+      } catch (e) {}
+    }
+  }
+}
+
+function timedGetAllPossibleCapturesForPiece(row, col, game, ctx) {
+  const s = Date.now();
+  try {
+    return getAllPossibleCapturesForPiece(row, col, game);
+  } finally {
+    const dt = Date.now() - s;
+    if (dt > _TIMING_WARN_MS) {
+      try {
+        console.warn(
+          `[SLOW] getAllPossibleCapturesForPiece dt=${dt}ms room=${
+            ctx || (game && game.roomCode) || "unknown"
+          }`
+        );
+      } catch (e) {}
+    }
+  }
+}
+
+function timedHasValidMoves(playerColor, game, ctx) {
+  const s = Date.now();
+  try {
+    return hasValidMoves(playerColor, game);
+  } finally {
+    const dt = Date.now() - s;
+    if (dt > _TIMING_WARN_MS) {
+      try {
+        console.warn(
+          `[SLOW] hasValidMoves dt=${dt}ms room=${
+            ctx || (game && game.roomCode) || "unknown"
+          }`
+        );
+      } catch (e) {}
+    }
+  }
+}
+
+function timedIsMoveValid(
+  from,
+  to,
+  playerColor,
+  game,
+  ignoreMajorityRule,
+  ctx
+) {
+  const s = Date.now();
+  try {
+    return isMoveValid(from, to, playerColor, game, ignoreMajorityRule);
+  } finally {
+    const dt = Date.now() - s;
+    if (dt > _TIMING_WARN_MS) {
+      try {
+        console.warn(
+          `[SLOW] isMoveValid dt=${dt}ms room=${
+            ctx || (game && game.roomCode) || "unknown"
+          }`
+        );
+      } catch (e) {}
+    }
+  }
+}
+
 // Filtro de logs: suprime mensagens de depuração verbosas em produção.
 // Para habilitar novamente, defina a variável de ambiente `VERBOSE_LOGS=true`.
 try {
@@ -263,7 +367,11 @@ function scheduleTurnInactivity(roomCode) {
         });
 
         // Emite estado atualizado do jogo
-        const bestCaptures = findBestCaptureMoves(r.game.currentPlayer, r.game);
+        const bestCaptures = timedFindBestCaptureMoves(
+          r.game.currentPlayer,
+          r.game,
+          r.roomCode
+        );
         const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
         sendGameState(r.roomCode, {
           ...r.game,
@@ -366,9 +474,10 @@ function scheduleTurnInactivity(roomCode) {
             })();
             return;
           }
-          const bestCaptures2 = findBestCaptureMoves(
-            rr.game.currentPlayer,
-            rr.game
+          const bestCaptures = timedFindBestCaptureMoves(
+            game.currentPlayer,
+            game,
+            roomCode
           );
           const mandatoryPieces2 = bestCaptures2.map((seq) => seq[0]);
           sendGameState(rr.roomCode, {
@@ -424,15 +533,42 @@ function sendGameState(roomCode, fullState, opts = {}) {
     const room = gameRooms[roomCode];
     if (!room) return;
 
-    // Envia sempre o estado completo para os jogadores (por socketId)
+    // Envia para os jogadores: por padrão um payload reduzido (para economizar
+    // banda). Se o chamador explicitamente passar `opts.fullForPlayers = true`
+    // então enviaremos o `fullState`.
     if (room.players && room.players.length > 0) {
-      // Por padrão enviamos apenas um payload reduzido para economizar banda.
-      // Se o chamador precisar enviar o estado completo aos jogadores, passe
-      // `opts.fullForPlayers = true`.
       for (const p of room.players) {
         try {
-          if (p && p.socketId)
+          if (!p || !p.socketId) continue;
+          if (opts.fullForPlayers) {
             io.to(p.socketId).emit("gameStateUpdate", fullState);
+            continue;
+          }
+
+          // Payload enxuto para players — inclui tudo o necessário para
+          // atualizar o tabuleiro e timers sem enviar campos extras.
+          const playerPayload = {
+            boardState: fullState.boardState,
+            boardSize: fullState.boardSize,
+            currentPlayer: fullState.currentPlayer || fullState.turn || null,
+            lastMove: fullState.lastMove || null,
+            mandatoryPieces: fullState.mandatoryPieces || null,
+            seq: typeof fullState.seq === "number" ? fullState.seq : undefined,
+            timerActive: !!fullState.timerActive,
+            whiteTime:
+              typeof fullState.whiteTime === "number"
+                ? fullState.whiteTime
+                : null,
+            blackTime:
+              typeof fullState.blackTime === "number"
+                ? fullState.blackTime
+                : null,
+            timeLeft:
+              typeof fullState.timeLeft === "number"
+                ? fullState.timeLeft
+                : null,
+          };
+          io.to(p.socketId).emit("gameStateUpdate", playerPayload);
         } catch (e) {}
       }
     }
@@ -492,43 +628,6 @@ async function startGameLogic(room) {
         `[startGameLogic] Sala ${room.roomCode} já está em processo de start -> abortando start concorrente`
       );
       return;
-    }
-    room._starting = true;
-  } catch (e) {}
-
-  // Limpamos timeouts/contadores pendentes antes de iniciar um novo jogo
-  // Guard rails: não iniciar se a sala estiver marcada como concluída,
-  // se o match Tablita já foi decidido, ou se não houver 2 jogadores conectados.
-  try {
-    if (!room) return;
-    if (room.isGameConcluded) {
-      console.log(
-        `[startGameLogic] Sala ${room.roomCode} marcada como concluída. Abortando novo jogo.`
-      );
-      return;
-    }
-    if (room.isTablita && room.match) {
-      const p1 = room.match.player1 && room.match.player1.email;
-      const p2 = room.match.player2 && room.match.player2.email;
-      const p1Score =
-        room.match.score && typeof room.match.score[p1] === "number"
-          ? room.match.score[p1]
-          : 0;
-      const p2Score =
-        room.match.score && typeof room.match.score[p2] === "number"
-          ? room.match.score[p2]
-          : 0;
-      if (
-        p1Score >= 2 ||
-        p2Score >= 2 ||
-        (room.match.currentGame && room.match.currentGame > 2)
-      ) {
-        console.log(
-          `[startGameLogic] Match já decidido para sala ${room.roomCode} (p1=${p1Score} p2=${p2Score} currentGame=${room.match.currentGame}). Abortando.`
-        );
-        room.isGameConcluded = true;
-        return;
-      }
     }
     // Checa se ambos jogadores estão conectados
     const connectedCount = (room.players || []).filter((p) => {
@@ -729,7 +828,7 @@ async function startGameLogic(room) {
     turnCapturedPieces: [], // INICIALIZA O ARRAY DE PEÇAS CAPTURADAS NO TURNO
   };
 
-  if (!hasValidMoves(room.game.currentPlayer, room.game)) {
+  if (!timedHasValidMoves(room.game.currentPlayer, room.game, room.roomCode)) {
     return safeProcessEndOfGame(
       null,
       null,
@@ -745,7 +844,11 @@ async function startGameLogic(room) {
     room.timeLeft = room.timerDuration;
   }
 
-  const bestCaptures = findBestCaptureMoves(room.game.currentPlayer, room.game);
+  const bestCaptures = timedFindBestCaptureMoves(
+    room.game.currentPlayer,
+    room.game,
+    room.roomCode
+  );
   const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
 
   const gameState = {
@@ -936,8 +1039,8 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
   const playerColor = game.currentPlayer;
 
+  let socketPlayerColor = null;
   if (socketId) {
-    let socketPlayerColor = null;
     try {
       const pl = gameRoom.players.find((p) => p.socketId === socketId);
       if (pl && game.users) {
@@ -956,6 +1059,19 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     if (socketPlayerColor && socketPlayerColor !== playerColor) return;
   }
 
+  // Bloqueio de 1s pós-movimento: evita que o jogador responda instantaneamente
+  // (previne problemas quando o cliente envia jogadas muito rápidas).
+  try {
+    if (game._inputLockUntil && Date.now() < game._inputLockUntil) {
+      if (socketId) {
+        const sk = io.sockets.sockets.get(socketId);
+        if (sk)
+          sk.emit("invalidMove", { message: "Aguarde 1s antes de jogar." });
+      }
+      return;
+    }
+  } catch (e) {}
+
   if (game.isFirstMove) {
     // clear first-move watchdog (player acted within allowed window)
     if (gameRoom.firstMoveTimeout) {
@@ -970,11 +1086,22 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
   }
 
   // Validação agora considera peças capturadas (fantasmas)
-  const isValid = isMoveValid(from, to, playerColor, game);
+  const isValid = timedIsMoveValid(
+    from,
+    to,
+    playerColor,
+    game,
+    false,
+    roomCode
+  );
 
   // Validação extra de captura obrigatória no servidor:
   try {
-    const bestCaps = findBestCaptureMoves(game.currentPlayer, game);
+    const bestCaps = timedFindBestCaptureMoves(
+      game.currentPlayer,
+      game,
+      roomCode
+    );
     if (bestCaps && bestCaps.length > 0 && !isValid.isCapture) {
       // Jogada inválida: existe captura obrigatória
       if (socketId) {
@@ -1029,7 +1156,12 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       }
 
       // Verifica se pode capturar mais
-      const nextCaptures = getAllPossibleCapturesForPiece(to.row, to.col, game);
+      const nextCaptures = timedGetAllPossibleCapturesForPiece(
+        to.row,
+        to.col,
+        game,
+        roomCode
+      );
       canCaptureAgain = nextCaptures.length > 0;
     }
 
@@ -1198,7 +1330,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       game.turnCapturedPieces = []; // Garante limpeza de peças fantasmas na troca de turno
 
       // Verifica se o próximo jogador tem movimentos
-      if (!hasValidMoves(game.currentPlayer, game)) {
+      if (!timedHasValidMoves(game.currentPlayer, game, roomCode)) {
         const winner = game.currentPlayer === "b" ? "p" : "b";
         return safeProcessEndOfGame(
           winner,
@@ -1225,7 +1357,11 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     }
 
     // Calcula próximas jogadas obrigatórias
-    const bestCaptures = findBestCaptureMoves(game.currentPlayer, game);
+    const bestCaptures = timedFindBestCaptureMoves(
+      game.currentPlayer,
+      game,
+      roomCode
+    );
     const mandatoryPieces = canCaptureAgain
       ? [{ row: to.row, col: to.col }]
       : bestCaptures.map((seq) => seq[0]);
@@ -1265,6 +1401,11 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     } catch (e) {
       console.error("Erro emitindo pieceMoved:", e);
     }
+
+    // Aplica lock para inputs por 1s após emitir o movimento para todos os clientes
+    try {
+      game._inputLockUntil = Date.now() + 1000;
+    } catch (e) {}
 
     // Ainda emitimos o estado completo para jogadores conectados por compatibilidade,
     // e forçamos uma atualização imediata para espectadores para que seus
@@ -1318,7 +1459,11 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         reason.includes("Captura obrigat")
       ) {
         try {
-          const best = findBestCaptureMoves(game.currentPlayer, game);
+          const best = timedFindBestCaptureMoves(
+            game.currentPlayer,
+            game,
+            roomCode
+          );
           console.error(
             "[InvalidMove Debug] room=",
             roomCode,
@@ -1752,9 +1897,10 @@ function initializeSocket(ioInstance) {
         }
 
         // Envia novo estado para jogadores e espectadores
-        const bestCaptures = findBestCaptureMoves(
+        const bestCaptures2 = timedFindBestCaptureMoves(
           room.game.currentPlayer,
-          room.game
+          room.game,
+          room.roomCode
         );
         const mandatoryPieces = bestCaptures.map((seq) => seq[0]);
         sendGameState(
@@ -2100,7 +2246,12 @@ function initializeSocket(ioInstance) {
 
       const game = room.game;
       const validMoves = [];
-      const captures = getAllPossibleCapturesForPiece(row, col, game);
+      const captures = timedGetAllPossibleCapturesForPiece(
+        row,
+        col,
+        game,
+        roomCode
+      );
 
       if (game.mustCaptureWith) {
         if (
@@ -2115,7 +2266,11 @@ function initializeSocket(ioInstance) {
         return socket.emit("showValidMoves", validMoves);
       }
 
-      const bestCaptures = findBestCaptureMoves(game.currentPlayer, game);
+      const bestCaptures = timedFindBestCaptureMoves(
+        game.currentPlayer,
+        game,
+        roomCode
+      );
       if (bestCaptures.length > 0) {
         const capturesForThis = bestCaptures.filter(
           (seq) => seq[0].row === row && seq[0].col === col
@@ -2128,12 +2283,13 @@ function initializeSocket(ioInstance) {
         for (let r = 0; r < boardSize; r++) {
           for (let c = 0; c < boardSize; c++) {
             if (
-              isMoveValid(
+              timedIsMoveValid(
                 { row, col },
                 { row: r, col: c },
                 game.currentPlayer,
                 game,
-                true
+                true,
+                roomCode
               ).valid
             ) {
               validMoves.push({ row: r, col: c });

@@ -39,6 +39,8 @@ window.GameCore = (function () {
     // Fila
     updateQueue: [],
     isProcessingQueue: false,
+    // Bloqueio de input temporário (timestamp em ms)
+    _inputLockUntil: 0,
     // Lock para evitar processamento de clicks enquanto o servidor confirma uma captura
     serverProcessingCapture: false,
     drawMovesCounter: 0,
@@ -233,6 +235,12 @@ window.GameCore = (function () {
             if (payload.currentPlayer)
               state.lastServerCurrentPlayer = payload.currentPlayer;
 
+            // Bloqueia entrada por 1s para evitar jogadas instantâneas
+            // imediatamente após aplicar o movimento do oponente.
+            try {
+              if (!isMyMove) state._inputLockUntil = Date.now() + 1000;
+            } catch (e) {}
+
             // Tocar áudio correspondente
             try {
               // Não reproduz se já reproduzimos durante o movimento otimista
@@ -395,6 +403,28 @@ window.GameCore = (function () {
         } catch (err) {
           console.error("pieceMoved handler error:", err);
         }
+      });
+    } catch (e) {}
+
+    // Handler para mensagens de jogada inválida (ex.: bloqueio de 1s no servidor)
+    try {
+      state.socket.on("invalidMove", (payload) => {
+        try {
+          if (!payload) return;
+          const msg = payload.message || "Jogada inválida.";
+          if (state.UI && state.UI.elements && state.UI.elements.gameStatus) {
+            const el = state.UI.elements.gameStatus;
+            const prev = el.textContent;
+            el.textContent = msg;
+            setTimeout(() => {
+              try {
+                el.textContent = prev || "";
+              } catch (e) {}
+            }, 1200);
+          } else {
+            console.warn("invalidMove:", payload);
+          }
+        } catch (e) {}
       });
     } catch (e) {}
 
@@ -866,6 +896,8 @@ window.GameCore = (function () {
   function handleBoardClick(e) {
     if (window.isSpectator || state.isReplaying) return;
     if (state.serverProcessingCapture) return; // bloqueia cliques até confirmação do servidor
+    // Bloqueia interação por janela curta após receber movimento do oponente
+    if (state._inputLockUntil && Date.now() < state._inputLockUntil) return;
     if (!state.myColor) return;
     // Bloqueia interação caso não seja o turno do jogador local
     if (
@@ -1455,6 +1487,13 @@ window.GameCore = (function () {
         state.lastOptimisticMove = null;
         state.pendingBoardSnapshot = null;
       }
+
+      // Se o movimento recebido não foi nosso, aplica lock de 1s para
+      // evitar que o jogador adversário seja forçado a jogar instantaneamente.
+      try {
+        if (gameState.lastMove && !isMyMove)
+          state._inputLockUntil = Date.now() + 1000;
+      } catch (e) {}
     }
 
     // 2. APLICAÇÃO DO EFEITO FANTASMA (ANTES DA ANIMAÇÃO)

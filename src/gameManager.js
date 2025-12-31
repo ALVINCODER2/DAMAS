@@ -86,7 +86,7 @@ function startTimer(roomCode) {
         return;
       }
       room.timeLeft--;
-      io.to(roomCode).emit("timerUpdate", {
+      io.to(roomCode).volatile.emit("timerUpdate", {
         timeLeft: room.timeLeft,
         roomCode: roomCode,
       });
@@ -109,7 +109,7 @@ function resetTimer(roomCode) {
       startTimer(roomCode);
     } else {
       room.timeLeft = room.timerDuration;
-      io.to(roomCode).emit("timerUpdate", {
+      io.to(roomCode).volatile.emit("timerUpdate", {
         timeLeft: room.timeLeft,
         roomCode: roomCode,
       });
