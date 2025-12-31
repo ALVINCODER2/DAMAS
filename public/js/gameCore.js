@@ -420,6 +420,54 @@ window.GameCore = (function () {
       });
     } catch (e) {}
 
+    // Handler para latência alta: servidor pausou a partida por alta RTT
+    try {
+      state.socket.on("opponentHighLatency", (payload) => {
+        try {
+          state._latencyPaused = true;
+          // Pausa o timer cliente
+          try {
+            state.handleTimerState({ timerActive: false });
+          } catch (e) {}
+          // Mostra aviso na UI
+          try {
+            if (state.UI && state.UI.elements && state.UI.elements.gameStatus) {
+              state.UI.elements.gameStatus.textContent =
+                "Latência alta detectada — partida pausada.";
+            }
+          } catch (e) {}
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    // Handler para latência resolvida: servidor retomou a partida
+    try {
+      state.socket.on("latencyResolved", (payload) => {
+        try {
+          state._latencyPaused = false;
+          // Solicita sync completo para garantir estado coerente
+          try {
+            if (state.currentRoom)
+              state.socket.emit("requestGameSync", {
+                roomCode: state.currentRoom,
+              });
+          } catch (e) {}
+          // Mensagem informativa
+          try {
+            if (state.UI && state.UI.elements && state.UI.elements.gameStatus) {
+              state.UI.elements.gameStatus.textContent =
+                "Latência normalizada. Partida retomada.";
+              setTimeout(() => {
+                try {
+                  state.UI.elements.gameStatus.textContent = "";
+                } catch (e) {}
+              }, 3000);
+            }
+          } catch (e) {}
+        } catch (e) {}
+      });
+    } catch (e) {}
+
     // Handler para mensagens de jogada inválida (ex.: bloqueio de 1s no servidor)
     try {
       state.socket.on("invalidMove", (payload) => {

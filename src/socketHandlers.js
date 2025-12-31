@@ -34,6 +34,10 @@ const gameRooms = {};
 let io; // Variável global para instância do Socket.IO
 // Contador simples para razões de desconexão (diagnóstico)
 const disconnectReasonCounts = {};
+// Latency thresholds (ms)
+const LATENCY_WARNING_MS = 1000; // apenas aviso
+const LATENCY_PAUSE_MS = 3000; // pausar partida quando alcançado
+const LATENCY_RESUME_MS = 1500; // retomar quando abaixo deste valor
 
 // Monitor simples do event-loop: loga se o loop ficar bloqueado além de um limiar.
 try {
@@ -265,39 +269,58 @@ function scheduleTurnInactivity(roomCode) {
   function getDurationForRoom(r) {
     if (!r) return 10 * 1000;
     try {
+      let baseMs = 10 * 1000;
       // Se o jogo acabou de iniciar (primeiro lance ainda não ocorreu),
       // aplicamos regra específica para torneios: passagem rápida de vez.
       // Em torneios, se o jogador não der o primeiro lance em 20s, passa-se a vez.
       if (r.game && r.game.isFirstMove) {
         if (r.isTournament) {
-          return 20 * 1000; // 20s para primeiro lance em torneio
+          baseMs = 20 * 1000; // 20s para primeiro lance em torneio
+        } else {
+          baseMs = Math.max(10 * 1000, 60 * 1000); // 60s de graça no primeiro lance para não-torneios
         }
-        return Math.max(10 * 1000, 60 * 1000); // 60s de graça no primeiro lance para não-torneios
-      }
-      // Prioriza timeControl configurado
-      if (r.timeControl === "match") {
+      } else if (r.timeControl === "match") {
         // Usa tempo restante do jogador atual (whiteTime / blackTime)
         const cp = r.game && r.game.currentPlayer;
         const rem = cp === "b" ? r.whiteTime : r.blackTime;
-        return Math.max(1, typeof rem === "number" ? rem : 10) * 1000;
-      }
-      if (r.timeControl === "move") {
+        baseMs = Math.max(1, typeof rem === "number" ? rem : 10) * 1000;
+      } else if (r.timeControl === "move") {
         // Usa timerDuration (segundos por jogada) caso exista
         const dur =
           typeof r.timerDuration === "number"
             ? r.timerDuration
             : r.timeLeft || 10;
-        return Math.max(1, dur) * 1000;
+        baseMs = Math.max(1, dur) * 1000;
+      } else if (r.game && r.game.timerActive) {
+        if (typeof r.timeLeft === "number")
+          baseMs = Math.max(1, r.timeLeft) * 1000;
+        else {
+          const cp2 = r.game.currentPlayer;
+          const rem2 = cp2 === "b" ? r.whiteTime : r.blackTime;
+          if (typeof rem2 === "number") baseMs = Math.max(1, rem2) * 1000;
+        }
       }
 
-      // Se existir timerActive no game, tentamos usar timeLeft / whiteTime/blackTime
-      if (r.game && r.game.timerActive) {
-        if (typeof r.timeLeft === "number")
-          return Math.max(1, r.timeLeft) * 1000;
-        const cp2 = r.game.currentPlayer;
-        const rem2 = cp2 === "b" ? r.whiteTime : r.blackTime;
-        if (typeof rem2 === "number") return Math.max(1, rem2) * 1000;
-      }
+      // Ajuste dinâmico baseado em latência do jogador atual (se disponível).
+      try {
+        const cp = r.game && r.game.currentPlayer;
+        const currentSocketId =
+          cp === "b" ? r.game.players.white : r.game.players.black;
+        const sock = currentSocketId
+          ? io.sockets.sockets.get(currentSocketId)
+          : null;
+        const lastLatency =
+          sock && sock.userData && typeof sock.userData.lastLatency === "number"
+            ? sock.userData.lastLatency
+            : 0;
+        if (lastLatency && lastLatency > 200) {
+          // Aumenta o timeout linearmente com o RTT (até um limite razoável)
+          const extra = Math.min(15000, Math.ceil(lastLatency / 500) * 1000); // até +15s
+          baseMs = Math.max(baseMs, baseMs + extra);
+        }
+      } catch (e) {}
+
+      return baseMs;
     } catch (e) {}
     // fallback padrão 10s
     return 10 * 1000;
@@ -1722,6 +1745,55 @@ function initializeSocket(ioInstance) {
         if (!socket.userData) socket.userData = {};
         socket.userData.lastLatency =
           payload && payload.rtt ? payload.rtt : null;
+        // Se o cliente reportou latência muito alta, tente pausar a partida
+        try {
+          const last = socket.userData.lastLatency;
+          if (typeof last === "number") {
+            // Identifica sala em que o socket participa (se jogador)
+            const roomCode = Object.keys(gameRooms).find((rc) =>
+              gameRooms[rc].players.some((p) => p.socketId === socket.id)
+            );
+            if (roomCode) {
+              const r = gameRooms[roomCode];
+              if (
+                last >= LATENCY_PAUSE_MS &&
+                !r._latencyPaused &&
+                !r.isGameConcluded
+              ) {
+                try {
+                  r._latencyPaused = true;
+                  // pause server-side timer to avoid penalizar jogador com ping alto
+                  if (r.timerInterval) {
+                    clearInterval(r.timerInterval);
+                    r.timerInterval = null;
+                  }
+                  io.to(r.roomCode).emit("opponentHighLatency", {
+                    roomCode: r.roomCode,
+                    latency: last,
+                  });
+                  io.to(r.roomCode).emit("timerPaused", {
+                    reason: "highLatency",
+                  });
+                } catch (e) {}
+              }
+
+              // Se a latência caiu abaixo do limiar de retomada e a sala estava pausada, retome
+              if (last < LATENCY_RESUME_MS && r._latencyPaused) {
+                try {
+                  r._latencyPaused = false;
+                  io.to(r.roomCode).emit("latencyResolved", {
+                    roomCode: r.roomCode,
+                    latency: last,
+                  });
+                  // Reinicia timer se o jogo estava ativo
+                  try {
+                    if (r.game && r.game.timerActive) startTimer(r.roomCode);
+                  } catch (e) {}
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (e) {}
       } catch (e) {}
     });
 
