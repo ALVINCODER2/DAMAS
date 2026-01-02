@@ -1243,6 +1243,69 @@ window.initLobby = function (socket, UI) {
         list.innerHTML = "";
         if (data.length === 0) {
           list.innerHTML = "<p>Sem partidas recentes.</p>";
+          // Offer to show recent public matches
+          try {
+            const btn = document.createElement("button");
+            btn.textContent = "Ver partidas públicas recentes";
+            btn.style.marginTop = "8px";
+            btn.addEventListener("click", async () => {
+              try {
+                btn.disabled = true;
+                btn.textContent = "Carregando...";
+                const resp = await fetch(`/api/recent-matches?limit=50`);
+                const pub = await resp.json();
+                list.innerHTML = "";
+                if (!pub || pub.length === 0) {
+                  list.innerHTML = "<p>Nenhuma partida pública recente.</p>";
+                } else {
+                  const ul2 = document.createElement("ul");
+                  ul2.style.listStyle = "none";
+                  ul2.style.padding = "0";
+                  pub.forEach((m) => {
+                    try {
+                      const li = document.createElement("li");
+                      li.style.background = "rgba(255,255,255,0.05)";
+                      li.style.marginBottom = "8px";
+                      li.style.padding = "10px";
+                      li.style.borderRadius = "8px";
+                      li.style.fontSize = "0.9rem";
+                      let resultText = "Empate";
+                      let color = "#95a5a6";
+                      if (m.winner) {
+                        // mark if current user participated
+                        if (
+                          window.currentUser &&
+                          m.winner === window.currentUser.email
+                        ) {
+                          resultText = "VITÓRIA";
+                          color = "#2ecc71";
+                        } else {
+                          resultText = "DERROTA";
+                          color = "#e74c3c";
+                        }
+                      }
+                      const opponent = window.currentUser
+                        ? m.player1 === window.currentUser.email
+                          ? m.player2
+                          : m.player1
+                        : m.player1 + " / " + m.player2;
+                      const date = new Date(m.createdAt).toLocaleDateString();
+                      li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+                        opponent.split("@")[0]
+                      }</span><span>Aposta: <strong>R$ ${Number(
+                        m.bet || 0
+                      ).toFixed(2)}</strong></span></div>`;
+                      ul2.appendChild(li);
+                    } catch (e) {}
+                  });
+                  list.appendChild(ul2);
+                }
+              } catch (e) {
+                list.innerHTML = "<p>Erro ao carregar públicas.</p>";
+              }
+            });
+            list.appendChild(btn);
+          } catch (e) {}
           return;
         }
         const ul = document.createElement("ul");

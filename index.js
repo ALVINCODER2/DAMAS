@@ -858,6 +858,27 @@ app.get("/metrics", async (req, res) => {
   }
 });
 
+// Public endpoint: retorna partidas recentes (últimas N) sem exigir autenticação
+app.get("/api/recent-matches", async (req, res) => {
+  try {
+    const limit = Math.min(
+      200,
+      Math.max(1, parseInt(req.query.limit || "50", 10))
+    );
+    const cutoffMs =
+      Number(process.env.RECENT_MATCHES_RETENTION_MS) || 24 * 60 * 60 * 1000;
+    const cutoff = new Date(Date.now() - cutoffMs);
+    const recents = await MatchHistory.find({ createdAt: { $gte: cutoff } })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    res.json(recents);
+  } catch (e) {
+    console.error("/api/recent-matches error:", e);
+    res.status(500).json({ error: "failed" });
+  }
+});
+
 // Debug: listar últimos registros de MatchHistory (requer ADMIN_SECRET_KEY quando configurada)
 app.get("/debug/recent-history", adminAuthHeader, async (req, res) => {
   try {
