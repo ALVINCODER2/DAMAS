@@ -137,6 +137,39 @@ async function saveMatchHistory(room, winnerEmail, reason) {
         reason: reason,
       },
     });
+    // Emit immediate socket event so clients can update their local history
+    try {
+      const payload = {
+        player1: p1Email,
+        player2: p2Email,
+        winner: winnerEmail || null,
+        bet: room.bet,
+        gameMode: room.gameMode,
+        reason: reason,
+        createdAt: new Date(),
+      };
+
+      // emit to the room and directly to players (if socketId available)
+      if (io && room && room.roomCode) {
+        try {
+          io.to(room.roomCode).emit("matchRecorded", payload);
+        } catch (e) {}
+      }
+
+      // Also emit directly to player sockets if present
+      try {
+        if (Array.isArray(room.players)) {
+          room.players.forEach((p) => {
+            if (p && p.socketId && io && io.sockets) {
+              try {
+                const s = io.sockets.sockets.get(p.socketId);
+                if (s) s.emit("matchRecorded", payload);
+              } catch (er) {}
+            }
+          });
+        }
+      } catch (e) {}
+    } catch (e) {}
   } catch (err) {
     try {
       console.error("Erro ao enfileirar histórico:", err);

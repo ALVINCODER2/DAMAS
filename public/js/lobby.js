@@ -1137,12 +1137,90 @@ window.initLobby = function (socket, UI) {
             }...</span>${statusHtml}`;
             ul.appendChild(li);
           });
+          // expose helper to prepend future entries
+          window.__historyListElement = ul;
           list.appendChild(ul);
         }
       } catch (e) {
         list.innerHTML = "<p style='color: #e74c3c;'>Erro ao carregar.</p>";
       }
     });
+
+  // Listen for immediate history events from server and update UI if relevant
+  try {
+    socket.on("matchRecorded", (m) => {
+      try {
+        if (!window.currentUser) return;
+        const email = window.currentUser.email;
+        if (m.player1 !== email && m.player2 !== email) return;
+
+        // Create li similar to the history rendering above
+        const li = document.createElement("li");
+        li.style.background = "rgba(255,255,255,0.05)";
+        li.style.marginBottom = "8px";
+        li.style.padding = "10px";
+        li.style.borderRadius = "8px";
+        li.style.fontSize = "0.9rem";
+        let resultText = "Empate";
+        let color = "#95a5a6";
+        if (m.winner) {
+          if (m.winner === email) {
+            resultText = "VITÓRIA";
+            color = "#2ecc71";
+          } else {
+            resultText = "DERROTA";
+            color = "#e74c3c";
+          }
+        }
+        const opponent = m.player1 === email ? m.player2 : m.player1;
+        const date = new Date(m.createdAt).toLocaleDateString();
+        li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+          opponent.split("@")[0]
+        }</span><span>Aposta: <strong>R$ ${Number(m.bet || 0).toFixed(
+          2
+        )}</strong></span></div>`;
+
+        // If history overlay is open and list present, prepend; otherwise show small toast
+        const overlay = document.getElementById("history-overlay");
+        const listEl = document.getElementById("history-list");
+        if (
+          overlay &&
+          !overlay.classList.contains("hidden") &&
+          window.__historyListElement
+        ) {
+          // prepend to displayed list
+          window.__historyListElement.insertBefore(
+            li,
+            window.__historyListElement.firstChild
+          );
+        } else if (listEl) {
+          // keep recent entry for when user opens history: store in a small buffer
+          try {
+            window.__recentHistoryBuffer = window.__recentHistoryBuffer || [];
+            window.__recentHistoryBuffer.unshift(m);
+            if (window.__recentHistoryBuffer.length > 50)
+              window.__recentHistoryBuffer.pop();
+          } catch (e) {}
+          // show a brief notification
+          try {
+            const n = document.createElement("div");
+            n.style.position = "fixed";
+            n.style.bottom = "20px";
+            n.style.left = "50%";
+            n.style.transform = "translateX(-50%)";
+            n.style.background = "rgba(0,0,0,0.8)";
+            n.style.color = "#fff";
+            n.style.padding = "8px 12px";
+            n.style.borderRadius = "6px";
+            n.style.zIndex = 99999;
+            n.textContent = "Partida registrada — ver Histórico";
+            document.body.appendChild(n);
+            setTimeout(() => n.remove(), 3000);
+          } catch (e) {}
+        }
+      } catch (e) {}
+    });
+  } catch (e) {}
   const closeRefBtn = document.getElementById("close-referrals-overlay-btn");
   if (closeRefBtn)
     closeRefBtn.addEventListener("click", () =>
@@ -1170,7 +1248,15 @@ window.initLobby = function (socket, UI) {
         const ul = document.createElement("ul");
         ul.style.listStyle = "none";
         ul.style.padding = "0";
+        // Build a signature set to avoid duplicates when merging recent buffer
+        const sigSet = new Set();
         data.forEach((m) => {
+          try {
+            const sig = `${m.player1}|${m.player2}|${m.winner}|${new Date(
+              m.createdAt
+            ).getTime()}`;
+            sigSet.add(sig);
+          } catch (e) {}
           const li = document.createElement("li");
           li.style.background = "rgba(255,255,255,0.05)";
           li.style.marginBottom = "8px";
@@ -1198,6 +1284,57 @@ window.initLobby = function (socket, UI) {
           )}</strong></span></div>`;
           ul.appendChild(li);
         });
+
+        // Merge recent in-memory buffer (if any) and prepend unique entries
+        try {
+          if (
+            window.__recentHistoryBuffer &&
+            Array.isArray(window.__recentHistoryBuffer)
+          ) {
+            const buf = window.__recentHistoryBuffer.slice();
+            buf.reverse(); // older first so we prepend newest on top
+            buf.forEach((m) => {
+              try {
+                const sig = `${m.player1}|${m.player2}|${m.winner}|${new Date(
+                  m.createdAt
+                ).getTime()}`;
+                if (sigSet.has(sig)) return;
+                // create li same as above
+                const li = document.createElement("li");
+                li.style.background = "rgba(255,255,255,0.05)";
+                li.style.marginBottom = "8px";
+                li.style.padding = "10px";
+                li.style.borderRadius = "8px";
+                li.style.fontSize = "0.9rem";
+                let resultText = "Empate";
+                let color = "#95a5a6";
+                if (m.winner) {
+                  if (m.winner === window.currentUser.email) {
+                    resultText = "VITÓRIA";
+                    color = "#2ecc71";
+                  } else {
+                    resultText = "DERROTA";
+                    color = "#e74c3c";
+                  }
+                }
+                const opponent =
+                  m.player1 === window.currentUser.email
+                    ? m.player2
+                    : m.player1;
+                const date = new Date(m.createdAt).toLocaleDateString();
+                li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+                  opponent.split("@")[0]
+                }</span><span>Aposta: <strong>R$ ${Number(m.bet || 0).toFixed(
+                  2
+                )}</strong></span></div>`;
+                ul.insertBefore(li, ul.firstChild);
+                sigSet.add(sig);
+              } catch (e) {}
+            });
+            // Clear buffer after merging
+            window.__recentHistoryBuffer = [];
+          }
+        } catch (e) {}
         list.appendChild(ul);
       } catch (e) {
         list.innerHTML =
