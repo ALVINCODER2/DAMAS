@@ -57,100 +57,231 @@ window.initLobby = function (socket, UI) {
         `;
 
         sw.addEventListener("click", () => {
-          // Seleciona preset
-          currentSelectedPresetId = p.id;
-          // highlight
-          document.querySelectorAll(".prefs-preset-btn").forEach((btn) => {
-            btn.style.borderColor = "transparent";
-            btn.style.boxShadow = "none";
-          });
-          sw.style.borderColor = "#f1c40f";
-          sw.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
-
-          // Aplica preset ao preview e tabuleiro principal
-          const prefsNow = {
-            presetId: p.id,
-            boardLight: p.boardLight,
-            boardDark: p.boardDark,
-            pieceWhite: p.pieceWhite,
-            pieceBlack: p.pieceBlack,
-          };
-          window.userPreferences = prefsNow;
-          if (window.UI && window.UI.applyPreferences)
-            window.UI.applyPreferences(prefsNow);
+          // Aplica preset ao preview e marca como selecionado
           try {
+            currentSelectedPresetId = p.id;
             const previewBoard = document.getElementById("prefs-preview-board");
-            if (previewBoard && window.UI && window.UI.renderBoardInto) {
-              const sample = makeEmptyBoard(previewBoard.dataset.size || 8);
-              window.UI.renderBoardInto(previewBoard, sample, 8);
-              previewBoard
-                .querySelectorAll(".light, .dark")
-                .forEach((sq) => (sq.style.backgroundImage = "none"));
+            if (previewBoard) {
+              if (p.boardLight)
+                previewBoard.style.setProperty("--light-square", p.boardLight);
+              if (p.boardDark)
+                previewBoard.style.setProperty("--dark-square", p.boardDark);
+              if (p.pieceWhite)
+                previewBoard.style.setProperty(
+                  "--white-piece-color-1",
+                  p.pieceWhite
+                );
+              if (p.pieceBlack)
+                previewBoard.style.setProperty(
+                  "--black-piece-color-1",
+                  p.pieceBlack
+                );
+              if (window.UI && window.UI.renderBoardInto) {
+                const sample = makeEmptyBoard(8);
+                window.UI.renderBoardInto(previewBoard, sample, 8);
+              }
             }
+            // Highlight selected
+            document.querySelectorAll(".prefs-preset-btn").forEach((btn) => {
+              btn.style.borderColor = "transparent";
+              btn.style.boxShadow = "none";
+              if (btn.title === currentSelectedPresetId) {
+                btn.style.borderColor = "#f1c40f";
+                btn.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
+              }
+            });
           } catch (e) {}
         });
-
         container.appendChild(sw);
-        // se já selecionado, aplica destaque
-        if (currentSelectedPresetId && currentSelectedPresetId === p.id) {
-          sw.style.borderColor = "#f1c40f";
-          sw.style.boxShadow = "0 0 0 3px rgba(241,196,15,0.12)";
-        }
       });
-    } catch (e) {
-      console.error("populatePresets error", e);
-    }
-  }
-
-  async function loadAndApplyPreferences() {
-    try {
-      let prefs = null;
-      if (window.currentUser && window.currentUser.email) {
-        const res = await fetch(
-          `/api/user/preferences?email=${encodeURIComponent(
-            window.currentUser.email
-          )}`
-        );
-        if (res.ok) {
-          const j = await res.json();
-          prefs = j.preferences;
-        }
-      }
-      if (!prefs) {
-        const key = `prefs_${window.currentUser?.email || "anon"}`;
-        const ls = localStorage.getItem(key);
-        if (ls) prefs = JSON.parse(ls);
-      }
-      if (prefs && window.UI && window.UI.applyPreferences)
-        // If prefs only contains presetId, expand it to actual colors
-        try {
-          if (prefs.presetId && !(prefs.boardLight && prefs.boardDark)) {
-            const preset = (window.BOARD_PRESETS || []).find(
-              (x) => x.id === prefs.presetId
-            );
-            if (preset) {
-              prefs = Object.assign({}, preset, prefs);
-            }
-          }
-        } catch (e) {}
-      window.UI.applyPreferences(prefs);
-      window.userPreferences = prefs || {};
     } catch (e) {}
   }
 
-  // --- PREVIEW BOARD HELPERS ---
-  function makeEmptyBoard(size) {
-    return Array.from({ length: size }, (_, r) =>
-      Array.from({ length: size }, (_, c) => {
-        // peças em casas escuras: linhas 0-2 -> black ('p'), 5-7 -> white ('b')
-        if (size === 8) {
-          if (r <= 2 && (r + c) % 2 === 1) return "p";
-          if (r >= 5 && (r + c) % 2 === 1) return "b";
+  // --- Handler do botão de Histórico (permite busca por email e ver públicas) ---
+  try {
+    const viewHistoryBtn = document.getElementById("view-history-btn");
+    if (viewHistoryBtn)
+      viewHistoryBtn.addEventListener("click", async () => {
+        const overlay = document.getElementById("history-overlay");
+        const list = document.getElementById("history-list");
+        overlay.classList.remove("hidden");
+        // Build a small search control to allow fetching by email
+        try {
+          list.innerHTML = "";
+          const ctrl = document.createElement("div");
+          ctrl.style.display = "flex";
+          ctrl.style.gap = "8px";
+          ctrl.style.marginBottom = "10px";
+          const input = document.createElement("input");
+          input.type = "email";
+          input.placeholder =
+            "Email para buscar histórico (ex: alvincoder@gmail.com)";
+          input.style.flex = "1";
+          input.style.padding = "6px";
+          input.style.borderRadius = "6px";
+          input.style.border = "1px solid #444";
+          if (window.currentUser && window.currentUser.email)
+            input.value = window.currentUser.email;
+          const btn = document.createElement("button");
+          btn.textContent = "Buscar";
+          btn.className = "btn-confirm";
+          ctrl.appendChild(input);
+          ctrl.appendChild(btn);
+          list.appendChild(ctrl);
+
+          const resultsContainer = document.createElement("div");
+          list.appendChild(resultsContainer);
+
+          async function doSearch(targetEmail) {
+            resultsContainer.innerHTML =
+              '<p style="color:#ccc;">Carregando...</p>';
+            try {
+              const res = await fetch("/api/user/history", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: targetEmail }),
+              });
+              const data = await res.json();
+              resultsContainer.innerHTML = "";
+              if (!data || data.length === 0) {
+                resultsContainer.innerHTML = "<p>Sem partidas recentes.</p>";
+                const pubBtn = document.createElement("button");
+                pubBtn.textContent = "Ver partidas públicas recentes";
+                pubBtn.style.marginTop = "8px";
+                pubBtn.addEventListener("click", async () => {
+                  try {
+                    pubBtn.disabled = true;
+                    pubBtn.textContent = "Carregando...";
+                    const resp = await fetch(`/api/recent-matches?limit=50`);
+                    const pubRaw = await resp.json();
+                    const target = (
+                      targetEmail ||
+                      (window.currentUser && window.currentUser.email) ||
+                      ""
+                    ).toLowerCase();
+                    const pub = Array.isArray(pubRaw)
+                      ? pubRaw.filter((m) => {
+                          const p1 = (m.player1 || "").toLowerCase();
+                          const p2 = (m.player2 || "").toLowerCase();
+                          return p1 === target || p2 === target;
+                        })
+                      : [];
+                    resultsContainer.innerHTML = "";
+                    if (!pub || pub.length === 0) {
+                      resultsContainer.innerHTML =
+                        "<p>Nenhuma partida pública recente.</p>";
+                    } else {
+                      const ul2 = document.createElement("ul");
+                      ul2.style.listStyle = "none";
+                      ul2.style.padding = "0";
+                      pub.forEach((m) => {
+                        try {
+                          const li = document.createElement("li");
+                          li.style.background = "rgba(255,255,255,0.05)";
+                          li.style.marginBottom = "8px";
+                          li.style.padding = "10px";
+                          li.style.borderRadius = "8px";
+                          li.style.fontSize = "0.9rem";
+                          let resultText = "Empate";
+                          let color = "#95a5a6";
+                          if (m.winner) {
+                            if (
+                              window.currentUser &&
+                              m.winner === window.currentUser.email
+                            ) {
+                              resultText = "VITÓRIA";
+                              color = "#2ecc71";
+                            } else {
+                              resultText = "DERROTA";
+                              color = "#e74c3c";
+                            }
+                          }
+                          const opponent = window.currentUser
+                            ? m.player1 === window.currentUser.email
+                              ? m.player2
+                              : m.player1
+                            : m.player1 + " / " + m.player2;
+                          const date = new Date(
+                            m.createdAt
+                          ).toLocaleDateString();
+                          li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+                            opponent.split("@")[0]
+                          }</span><span>Aposta: <strong>R$ ${Number(
+                            m.bet || 0
+                          ).toFixed(2)}</strong></span></div>`;
+                          ul2.appendChild(li);
+                        } catch (e) {}
+                      });
+                      resultsContainer.appendChild(ul2);
+                    }
+                  } catch (e) {
+                    resultsContainer.innerHTML =
+                      "<p>Erro ao carregar públicas.</p>";
+                  }
+                });
+                resultsContainer.appendChild(pubBtn);
+                return;
+              }
+              const ul = document.createElement("ul");
+              ul.style.listStyle = "none";
+              ul.style.padding = "0";
+              data.forEach((m) => {
+                try {
+                  const li = document.createElement("li");
+                  li.style.background = "rgba(255,255,255,0.05)";
+                  li.style.marginBottom = "8px";
+                  li.style.padding = "10px";
+                  li.style.borderRadius = "8px";
+                  li.style.fontSize = "0.9rem";
+                  let resultText = "Empate";
+                  let color = "#95a5a6";
+                  if (m.winner) {
+                    if (
+                      m.winner ===
+                      (window.currentUser && window.currentUser.email)
+                    ) {
+                      resultText = "VITÓRIA";
+                      color = "#2ecc71";
+                    } else {
+                      resultText = "DERROTA";
+                      color = "#e74c3c";
+                    }
+                  }
+                  const opponent =
+                    m.player1 ===
+                    (window.currentUser && window.currentUser.email)
+                      ? m.player2
+                      : m.player1;
+                  const date = new Date(m.createdAt).toLocaleDateString();
+                  li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+                    opponent.split("@")[0]
+                  }</span><span>Aposta: <strong>R$ ${Number(m.bet || 0).toFixed(
+                    2
+                  )}</strong></span></div>`;
+                  ul.appendChild(li);
+                } catch (e) {}
+              });
+              resultsContainer.appendChild(ul);
+            } catch (e) {
+              resultsContainer.innerHTML =
+                "<p style='color:#e74c3c;'>Erro ao carregar.</p>";
+            }
+          }
+
+          btn.addEventListener("click", () => {
+            const target = (input.value || "").trim();
+            if (!target) return alert("Informe um email válido.");
+            doSearch(target.toLowerCase());
+          });
+          // auto-search if input had preset value
+          if (input.value && input.value.trim() !== "")
+            doSearch(input.value.trim().toLowerCase());
+        } catch (e) {
+          list.innerHTML =
+            "<p style='color:#e74c3c;'>Erro ao abrir histórico.</p>";
         }
-        return 0;
-      })
-    );
-  }
+      });
+  } catch (e) {}
 
   function renderPreviewBoard(boardEl, boardState) {
     try {
@@ -1253,7 +1384,18 @@ window.initLobby = function (socket, UI) {
                 btn.disabled = true;
                 btn.textContent = "Carregando...";
                 const resp = await fetch(`/api/recent-matches?limit=50`);
-                const pub = await resp.json();
+                const pubRaw = await resp.json();
+                const target =
+                  window.currentUser && window.currentUser.email
+                    ? window.currentUser.email.toLowerCase()
+                    : "";
+                const pub = Array.isArray(pubRaw)
+                  ? pubRaw.filter((m) => {
+                      const p1 = (m.player1 || "").toLowerCase();
+                      const p2 = (m.player2 || "").toLowerCase();
+                      return p1 === target || p2 === target;
+                    })
+                  : [];
                 list.innerHTML = "";
                 if (!pub || pub.length === 0) {
                   list.innerHTML = "<p>Nenhuma partida pública recente.</p>";
