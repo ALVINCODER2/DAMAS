@@ -57,6 +57,9 @@ function enqueue(jobOrFn) {
   if (typeof jobOrFn === "function") {
     inMemoryQueue.push(jobOrFn);
     setImmediate(processInMemory);
+    try {
+      console.log("[jobQueue] enqueued function job (in-memory)");
+    } catch (e) {}
     return;
   }
 
@@ -67,6 +70,12 @@ function enqueue(jobOrFn) {
     // Push serializable job to Bull (shared across nodes)
     try {
       bullQueue.add(jobOrFn).catch(() => {});
+      try {
+        console.log(
+          "[jobQueue] enqueued job to Bull:",
+          jobOrFn.type || "<unknown>"
+        );
+      } catch (e) {}
     } catch (e) {
       // If enqueue to Bull fails, fallback to local processing
       inMemoryQueue.push(jobOrFn);
@@ -76,6 +85,12 @@ function enqueue(jobOrFn) {
     // No Redis/Bull: process in-process via handlers
     inMemoryQueue.push(jobOrFn);
     setImmediate(processInMemory);
+    try {
+      console.log(
+        "[jobQueue] enqueued job in-memory:",
+        jobOrFn.type || "<unknown>"
+      );
+    } catch (e) {}
   }
 }
 

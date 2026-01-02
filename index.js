@@ -858,6 +858,24 @@ app.get("/metrics", async (req, res) => {
   }
 });
 
+// Debug: listar últimos registros de MatchHistory (requer ADMIN_SECRET_KEY quando configurada)
+app.get("/debug/recent-history", adminAuthHeader, async (req, res) => {
+  try {
+    const limit = Math.min(
+      200,
+      Math.max(1, parseInt(req.query.limit || "50", 10))
+    );
+    const recents = await MatchHistory.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    res.json({ count: recents.length, records: recents });
+  } catch (e) {
+    console.error("/debug/recent-history error:", e);
+    res.status(500).json({ error: "failed" });
+  }
+});
+
 // Rotina de limpeza automática MOVIDA para `src/worker.js` para não
 // bloquear o event loop do processo principal.
 
