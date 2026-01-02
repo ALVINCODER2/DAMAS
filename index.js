@@ -17,6 +17,27 @@ const Withdrawal = require("./models/Withdrawal");
 const MatchHistory = require("./models/MatchHistory");
 const Transaction = require("./models/Transaction");
 const bcrypt = require("bcryptjs");
+// Simple concurrency limiter for expensive operations (like bcrypt.compare)
+const LOGIN_CONCURRENCY = Number(process.env.LOGIN_CONCURRENCY) || 4;
+let loginRunning = 0;
+const loginQueue = [];
+function acquireLoginSlot() {
+  return new Promise((resolve) => {
+    if (loginRunning < LOGIN_CONCURRENCY) {
+      loginRunning++;
+      return resolve();
+    }
+    loginQueue.push(resolve);
+  });
+}
+function releaseLoginSlot() {
+  loginRunning--;
+  const next = loginQueue.shift();
+  if (next) {
+    loginRunning++;
+    next();
+  }
+}
 
 // Importação do SDK
 const { MercadoPagoConfig, Payment } = require("mercadopago");
@@ -48,7 +69,7 @@ const io = socketIo(server, {
   // Compatibilidade com clients Engine.IO v3 quando necessário
   allowEIO3: true,
   // Habilita compressão de mensagens do Engine.IO/WS
-  perMessageDeflate: true,
+  perMessageDeflate: false,
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
@@ -154,7 +175,13 @@ app.post("/api/login", async (req, res) => {
     const emailLower = email.toLowerCase();
     const user = await User.findOne({ email: emailLower });
     if (!user) return res.status(400).json({ message: "Inválido." });
-    const isMatch = await bcrypt.compare(password, user.password);
+    await acquireLoginSlot();
+    let isMatch = false;
+    try {
+      isMatch = await bcrypt.compare(password, user.password);
+    } finally {
+      releaseLoginSlot();
+    }
     if (!isMatch) return res.status(400).json({ message: "Inválido." });
     res.status(200).json({
       message: "Login bem-sucedido!",
@@ -283,26 +310,8 @@ app.post("/api/user/history", async (req, res) => {
   }
 });
 
-// Job: limpar histórico mais antigo que 24 horas (executa a cada hora)
-try {
-  setInterval(async () => {
-    try {
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const result = await MatchHistory.deleteMany({
-        createdAt: { $lt: cutoff },
-      });
-      if (result && result.deletedCount && result.deletedCount > 0) {
-        console.log(
-          `[cleanup] Deleted ${result.deletedCount} old history records older than 24h`
-        );
-      }
-    } catch (e) {
-      console.error("[cleanup] Error deleting old match history:", e);
-    }
-  }, 1000 * 60 * 60);
-} catch (e) {
-  console.warn("Could not schedule history cleanup job:", e);
-}
+// Nota: limpeza automática do histórico movida para `src/worker.js`
+// para evitar bloquear a thread principal do servidor.
 
 // Rota para limpar histórico do usuário
 app.delete("/api/user/history", async (req, res) => {
@@ -849,27 +858,8 @@ app.get("/metrics", async (req, res) => {
   }
 });
 
-// --- ROTINA DE LIMPEZA AUTOMÁTICA DE HISTÓRICO ---
-const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 Hora em milissegundos
-const HISTORY_RETENTION = 24 * 60 * 60 * 1000; // 24 Horas em milissegundos
-
-setInterval(async () => {
-  try {
-    const cutoffDate = new Date(Date.now() - HISTORY_RETENTION);
-
-    const result = await MatchHistory.deleteMany({
-      createdAt: { $lt: cutoffDate },
-    });
-
-    if (result.deletedCount > 0) {
-      console.log(
-        `[Limpeza Automática] Removidos ${result.deletedCount} registros de histórico com mais de 24 horas.`
-      );
-    }
-  } catch (error) {
-    console.error("[Limpeza Automática] Erro ao limpar histórico:", error);
-  }
-}, CLEANUP_INTERVAL);
+// Rotina de limpeza automática MOVIDA para `src/worker.js` para não
+// bloquear o event loop do processo principal.
 
 const HOST = process.env.HOST || "0.0.0.0";
 server.listen(PORT, HOST, () => {
