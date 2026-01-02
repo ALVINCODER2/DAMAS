@@ -1452,6 +1452,13 @@ window.GameCore = (function () {
     if (!gameState || !gameState.boardState) return;
     state.lastPacketTime = Date.now();
 
+    // Atualiza nomes e badges/teams se o payload trouxer informações de users
+    try {
+      if (gameState.users && state.UI && state.UI.updatePlayerNames) {
+        state.UI.updatePlayerNames(gameState.users);
+      }
+    } catch (e) {}
+
     let skipAnimation = false;
     let isMyMove = false;
     let moveDist = 0;

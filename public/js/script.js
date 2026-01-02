@@ -1109,8 +1109,12 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       GameCore.handleTimerState({ timerActive: false });
     } catch (e) {}
-    if (UI.elements.timerDisplay)
-      UI.elements.timerDisplay.textContent = "Pausado";
+    try {
+      if (UI.elements.whiteTimer)
+        UI.elements.whiteTimer.textContent = "Pausado";
+      if (UI.elements.blackTimer)
+        UI.elements.blackTimer.textContent = "Pausado";
+    } catch (e) {}
   });
 
   socket.on("showValidMoves", (moves) => {

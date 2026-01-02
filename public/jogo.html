@@ -275,30 +275,34 @@
                     /* Texto branco para alto contraste */
                 }
 
-                #white-player-name,
-                #black-player-name {
-                    font-weight: 900;
-                    /* Negrito mais forte para melhor visibilidade */
-                    font-size: 1.3em;
-                    /* Maior para destaque */
-                    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
-                    /* Sombra mais forte no texto para elegância e contraste */
-                }
+                /* nome dos jogadores não exibido separadamente; usamos badges de team */
             </style>
             <div class="player-card white-player">
                 <img id="white-player-avatar" src="" class="avatar-small hidden">
                 <div class="player-details">
-                    <span id="white-player-name">TESTE</span>
+                    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;">
+                        <span id="white-player-team"
+                            style="font-weight:800;font-size:0.95em;padding:6px 10px;border-radius:8px;background:#ffffff;color:#111;border:2px solid #2ecc71;box-shadow:0 0 12px rgba(46,204,113,0.18);">TIME
+                            A</span>
+                    </div>
                     <div class="piece-indicator white"></div>
+                    <div class="vs-timer player-timer-left" style="margin-left:8px;">
+                        <span id="white-timer">0:20</span>
+                    </div>
                 </div>
             </div>
-            <div class="vs-timer">
-                <span id="timer">32s</span>
-            </div>
+            <!-- central timer removed: agora temos timers separados por jogador -->
             <div class="player-card black-player">
                 <div class="player-details right">
-                    <span id="black-player-name">ALVIN</span>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                        <span id="black-player-team"
+                            style="font-weight:800;font-size:0.95em;padding:6px 10px;border-radius:8px;background:#111;color:#fff;border:2px solid #2ecc71;box-shadow:0 0 12px rgba(46,204,113,0.18);">TIME
+                            B</span>
+                    </div>
                     <div class="piece-indicator black"></div>
+                    <div class="vs-timer player-timer-right" style="margin-right:8px;">
+                        <span id="black-timer">0:00</span>
+                    </div>
                 </div>
                 <img id="black-player-avatar" src="" class="avatar-small hidden">
             </div>

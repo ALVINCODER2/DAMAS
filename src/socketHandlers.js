@@ -590,6 +590,8 @@ function sendGameState(roomCode, fullState, opts = {}) {
               typeof fullState.timeLeft === "number"
                 ? fullState.timeLeft
                 : null,
+            team: p && p.user ? p.user.team || null : null,
+            users: fullState.users || null,
           };
           io.to(p.socketId).emit("gameStateUpdate", playerPayload);
         } catch (e) {}
@@ -623,6 +625,8 @@ function sendGameState(roomCode, fullState, opts = {}) {
           typeof fullState.blackTime === "number" ? fullState.blackTime : null,
         timeLeft:
           typeof fullState.timeLeft === "number" ? fullState.timeLeft : null,
+        // incluir users para que espectadores também recebam badges/teams
+        users: fullState.users || null,
       };
       try {
         // Emit in batch to the spectators room to avoid per-socket loops.
@@ -832,6 +836,9 @@ async function startGameLogic(room) {
       black: blackPlayer.user.email,
       whiteName: whitePlayer.user.username || whitePlayer.user.email,
       blackName: blackPlayer.user.username || blackPlayer.user.email,
+      // team fields para uso no frontend
+      whiteTeam: (whitePlayer.user && whitePlayer.user.team) || null,
+      blackTeam: (blackPlayer.user && blackPlayer.user.team) || null,
       whiteAvatar: whitePlayer.user.avatar,
       blackAvatar: blackPlayer.user.avatar,
     },
@@ -2016,6 +2023,12 @@ function initializeSocket(ioInstance) {
         roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
       }
       socket.join(roomCode);
+      // garante campo `team` no userData do criador
+      socket.userData = socket.userData || {};
+      socket.userData.team =
+        socket.userData.team ||
+        socket.userData.username ||
+        socket.userData.email;
       console.log(
         `[Socket] createRoom: socket=${socket.id} user=${
           socket.userData?.email || "unknown"
@@ -2198,6 +2211,12 @@ function initializeSocket(ioInstance) {
           socket.userData?.email || "unknown"
         } joined room=${roomCode}`
       );
+      // garante campo `team` no userData do entrante
+      socket.userData = socket.userData || {};
+      socket.userData.team =
+        socket.userData.team ||
+        socket.userData.username ||
+        socket.userData.email;
       room.players.push({ socketId: socket.id, user: socket.userData });
 
       // Notifica o criador da sala que um oponente entrou (para tocar som no cliente)
@@ -2420,6 +2439,7 @@ function initializeSocket(ioInstance) {
       ) {
         const alreadyIn = room.players.some((p) => p.user.email === user.email);
         if (!alreadyIn) {
+          user.team = user.team || user.username || user.email;
           room.players.push({ socketId: socket.id, user: user });
           socket.join(roomCode);
           console.log(
@@ -2431,6 +2451,8 @@ function initializeSocket(ioInstance) {
           if (room.players.length === 2) {
             startGameLogic(room);
           }
+          player.user.team =
+            player.user.team || player.user.username || player.user.email;
           return;
         }
       }

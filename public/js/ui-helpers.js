@@ -13,7 +13,9 @@ window.UI = {
       openRoomsList: document.getElementById("open-rooms-list"),
       activeRoomsList: document.getElementById("active-rooms-list"),
       timerSelect: document.getElementById("timer-select"),
-      timerDisplay: document.getElementById("timer"),
+      // timers separados por jogador
+      whiteTimer: document.getElementById("white-timer"),
+      blackTimer: document.getElementById("black-timer"),
       turnDisplay: document.getElementById("turn"),
       gameStatus: document.getElementById("game-status"),
       overlay: document.getElementById("game-over-overlay"),
@@ -33,6 +35,8 @@ window.UI = {
       blackPlayerName: document.getElementById("black-player-name"),
       whitePlayerAvatar: document.getElementById("white-player-avatar"),
       blackPlayerAvatar: document.getElementById("black-player-avatar"),
+      whitePlayerTeam: document.getElementById("white-player-team"),
+      blackPlayerTeam: document.getElementById("black-player-team"),
       createRoomBtn: document.getElementById("create-room-btn"),
       betAmountInput: document.getElementById("bet-amount-input"),
       gameModeSelect: document.getElementById("game-mode-select"),
@@ -1377,6 +1381,16 @@ window.UI = {
     if (this.elements.blackPlayerName)
       this.elements.blackPlayerName.textContent = blackName;
 
+    // atualiza teams se informados
+    try {
+      if (users) {
+        if (this.elements.whitePlayerTeam)
+          this.elements.whitePlayerTeam.textContent = users.whiteTeam || "";
+        if (this.elements.blackPlayerTeam)
+          this.elements.blackPlayerTeam.textContent = users.blackTeam || "";
+      }
+    } catch (e) {}
+
     if (this.elements.whitePlayerAvatar) {
       this.elements.whitePlayerAvatar.classList.add("hidden");
     }
@@ -1389,23 +1403,29 @@ window.UI = {
   },
 
   updateTimer: function (data) {
-    if (typeof data.timeLeft === "number") {
-      // Unifica formato para timeLeft (ex.: 0:17)
-      this.elements.timerDisplay.textContent = this.formatTime(
-        typeof data.timeLeft === "number" ? data.timeLeft : 0
-      );
-    } else if (
-      typeof data.whiteTime === "number" &&
-      typeof data.blackTime === "number"
-    ) {
-      const turnColor = this.elements.turnDisplay.textContent;
-      let timeToShow = 0;
-      if (turnColor === "Brancas") timeToShow = data.whiteTime;
-      else timeToShow = data.blackTime;
-      this.elements.timerDisplay.textContent = this.formatTime(
-        typeof timeToShow === "number" ? timeToShow : 0
-      );
-    }
+    // Mostra tempos separadamente quando disponíveis
+    try {
+      if (typeof data.whiteTime === "number" && this.elements.whiteTimer)
+        this.elements.whiteTimer.textContent = this.formatTime(data.whiteTime);
+    } catch (e) {}
+    try {
+      if (typeof data.blackTime === "number" && this.elements.blackTimer)
+        this.elements.blackTimer.textContent = this.formatTime(data.blackTime);
+    } catch (e) {}
+    // Fallback: se apenas timeLeft for enviado, aplica à vez atual
+    try {
+      if (
+        (typeof data.whiteTime !== "number" ||
+          typeof data.blackTime !== "number") &&
+        typeof data.timeLeft === "number"
+      ) {
+        const turn = data.currentPlayer || data.turn || null;
+        if (turn === "b" && this.elements.whiteTimer)
+          this.elements.whiteTimer.textContent = this.formatTime(data.timeLeft);
+        else if (turn === "p" && this.elements.blackTimer)
+          this.elements.blackTimer.textContent = this.formatTime(data.timeLeft);
+      }
+    } catch (e) {}
   },
 
   // --- TOASTS (não bloqueantes) ---

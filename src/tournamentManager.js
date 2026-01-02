@@ -355,7 +355,10 @@ async function processRoundMatches(tournament) {
 
         const playersPlaceholders = [match.player1, match.player2].map(
           (email) => {
-            return { socketId: emailToSocket[email] || null, user: { email } };
+            return {
+              socketId: emailToSocket[email] || null,
+              user: { email, team: email },
+            };
           }
         );
 
