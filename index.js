@@ -100,6 +100,56 @@ try {
   }
 } catch (e) {}
 
+// Subscribe to Redis notifications for match saves so main process can update cache and emit
+try {
+  const REDIS_URL = process.env.REDIS_URL;
+  if (REDIS_URL) {
+    const { createClient } = require("redis");
+    const notifClient = createClient({ url: REDIS_URL });
+    notifClient
+      .connect()
+      .then(() => {
+        try {
+          notifClient
+            .subscribe("damas:matchSaved", (msg) => {
+              try {
+                const m = JSON.parse(msg);
+                // Ensure cache exists
+                try {
+                  app.locals.recentMatchCache =
+                    app.locals.recentMatchCache || [];
+                } catch (e) {
+                  app.locals = app.locals || {};
+                  app.locals.recentMatchCache =
+                    app.locals.recentMatchCache || [];
+                }
+                // prepend to cache and trim
+                try {
+                  app.locals.recentMatchCache.unshift(m);
+                  const max = 500;
+                  if (app.locals.recentMatchCache.length > max)
+                    app.locals.recentMatchCache.length = max;
+                } catch (e) {}
+
+                // Emit matchRecorded to clients so UI updates
+                try {
+                  if (io) {
+                    io.emit("matchRecorded", m);
+                    // keep in-process cache in sync for immediate API responses
+                    try {
+                      io.recentMatchCache = app.locals.recentMatchCache;
+                    } catch (e) {}
+                  }
+                } catch (e) {}
+              } catch (err) {}
+            })
+            .catch(() => {});
+        } catch (e) {}
+      })
+      .catch(() => {});
+  }
+} catch (e) {}
+
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -841,6 +891,40 @@ app.get("/api/admin/openings", adminAuthHeader, (req, res) => {
   res.json(idfTablitaOpenings);
 });
 
+// DEBUG: endpoint para simular fim de partida e testar gravação/emissão
+app.post("/debug/save-match", async (req, res) => {
+  try {
+    const { player1, player2, winner, bet, gameMode, roomCode } = req.body;
+    if (!player1 || !player2)
+      return res
+        .status(400)
+        .json({ message: "player1 e player2 obrigatórios" });
+
+    const room = {
+      players: [
+        { user: { email: String(player1).toLowerCase() }, socketId: null },
+        { user: { email: String(player2).toLowerCase() }, socketId: null },
+      ],
+      roomCode: roomCode || `debug-${Date.now()}`,
+      bet: Number(bet) || 0,
+      gameMode: gameMode || "classic",
+      game: { moveHistory: [], initialBoardState: [] },
+    };
+
+    // Chama saveMatchHistory do manager para enfileirar/gravar e emitir
+    const gm = require("./src/gameManager");
+    await gm.saveMatchHistory(
+      room,
+      winner ? String(winner).toLowerCase() : null,
+      "debug-endpoint"
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("/debug/save-match error:", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 // Inicialização
 initializeManager(io, gameRooms);
 // UPDATE: Passa gameRooms para o tournamentManager
@@ -905,6 +989,25 @@ app.get("/api/recent-matches", async (req, res) => {
     const cutoffMs =
       Number(process.env.RECENT_MATCHES_RETENTION_MS) || 24 * 60 * 60 * 1000;
     const cutoff = new Date(Date.now() - cutoffMs);
+    // If an in-process recentMatchCache exists (populated at boot or via Redis),
+    // prefer it for immediate consistency instead of querying the DB.
+    try {
+      if (
+        io &&
+        Array.isArray(io.recentMatchCache) &&
+        io.recentMatchCache.length
+      ) {
+        const filtered = io.recentMatchCache.filter((m) => {
+          try {
+            return new Date(m.createdAt) >= cutoff;
+          } catch (e) {
+            return false;
+          }
+        });
+        return res.json(filtered.slice(0, limit));
+      }
+    } catch (e) {}
+
     const recents = await MatchHistory.find({ createdAt: { $gte: cutoff } })
       .sort({ createdAt: -1 })
       .limit(limit)

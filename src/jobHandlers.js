@@ -1,6 +1,15 @@
 // src/jobHandlers.js
 // Centraliza handlers para jobs serializáveis.
 const MatchHistory = require("../models/MatchHistory");
+let _redisPub = null;
+try {
+  const REDIS_URL = process.env.REDIS_URL;
+  if (REDIS_URL) {
+    const { createClient } = require("redis");
+    _redisPub = createClient({ url: REDIS_URL });
+    _redisPub.connect().catch(() => {});
+  }
+} catch (e) {}
 
 async function handleSaveMatchHistory(payload) {
   // Basic validation and defensive logging to catch silent failures
@@ -36,7 +45,23 @@ async function handleSaveMatchHistory(payload) {
     });
 
     try {
-      await history.save();
+      const saved = await history.save();
+      // Publish to Redis channel so main server process(es) can react (update cache, emit)
+      try {
+        if (_redisPub) {
+          const msg = JSON.stringify({
+            _id: saved._id,
+            player1: saved.player1,
+            player2: saved.player2,
+            winner: saved.winner,
+            bet: saved.bet,
+            gameMode: saved.gameMode,
+            reason: saved.reason,
+            createdAt: saved.createdAt,
+          });
+          _redisPub.publish("damas:matchSaved", msg).catch(() => {});
+        }
+      } catch (e) {}
     } catch (firstErr) {
       console.error(
         "handleSaveMatchHistory: first save attempt failed",
@@ -45,7 +70,22 @@ async function handleSaveMatchHistory(payload) {
       );
       // retry once after tiny delay
       await new Promise((r) => setTimeout(r, 200));
-      await history.save();
+      const saved = await history.save();
+      try {
+        if (_redisPub) {
+          const msg = JSON.stringify({
+            _id: saved._id,
+            player1: saved.player1,
+            player2: saved.player2,
+            winner: saved.winner,
+            bet: saved.bet,
+            gameMode: saved.gameMode,
+            reason: saved.reason,
+            createdAt: saved.createdAt,
+          });
+          _redisPub.publish("damas:matchSaved", msg).catch(() => {});
+        }
+      } catch (e) {}
     }
   } catch (e) {
     console.error(

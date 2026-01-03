@@ -169,6 +169,24 @@ async function saveMatchHistory(room, winnerEmail, reason) {
           });
         }
       } catch (e) {}
+
+      // ALSO: emit globally so clients not inside the room (e.g., lobby)
+      // immediately receive the update. This complements Redis-based
+      // cross-process notifications and helps single-process setups.
+      try {
+        if (io) io.emit("matchRecorded", payload);
+      } catch (e) {}
+
+      // Update in-process recent match cache (used by /api/recent-matches)
+      try {
+        if (io) {
+          io.recentMatchCache = io.recentMatchCache || [];
+          io.recentMatchCache.unshift(payload);
+          const MAX = 500;
+          if (io.recentMatchCache.length > MAX)
+            io.recentMatchCache.length = MAX;
+        }
+      } catch (e) {}
     } catch (e) {}
   } catch (err) {
     try {
