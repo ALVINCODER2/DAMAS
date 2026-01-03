@@ -224,7 +224,14 @@ window.initLobby = function (socket, UI) {
                       });
                       // Merge recent optimistic buffer entries (if any) into the displayed list
                       try {
-                        const buf = window.__recentHistoryBuffer || [];
+                        const buf = (window.__recentHistoryBuffer || []).filter(
+                          (bm) => {
+                            const targetLower = (target || "").toLowerCase();
+                            const bp1 = (bm.player1 || "").toLowerCase();
+                            const bp2 = (bm.player2 || "").toLowerCase();
+                            return bp1 === targetLower || bp2 === targetLower;
+                          }
+                        );
                         buf.forEach((bm) => {
                           try {
                             const exists = pub.some((d) => {
@@ -1406,11 +1413,23 @@ window.initLobby = function (socket, UI) {
   try {
     socket.on("matchRecorded", (m) => {
       try {
-        if (!window.currentUser || !window.currentUser.email) return;
-        const email = (window.currentUser.email || "").toLowerCase();
+        // Always keep a small recent buffer so events that arrive before
+        // the page has currentUser set are not lost. Buffer is per-client
+        // (in-memory) and will be merged into the history view when opened.
+        try {
+          window.__recentHistoryBuffer = window.__recentHistoryBuffer || [];
+          window.__recentHistoryBuffer.unshift(m);
+          if (window.__recentHistoryBuffer.length > 50)
+            window.__recentHistoryBuffer.pop();
+        } catch (e) {}
+
+        const currentEmail =
+          window.currentUser && window.currentUser.email
+            ? (window.currentUser.email || "").toLowerCase()
+            : null;
         const p1 = (m.player1 || "").toLowerCase();
         const p2 = (m.player2 || "").toLowerCase();
-        if (p1 !== email && p2 !== email) return;
+        if (currentEmail && p1 !== currentEmail && p2 !== currentEmail) return;
 
         // Create li similar to the history rendering above
         const li = document.createElement("li");
@@ -1454,12 +1473,7 @@ window.initLobby = function (socket, UI) {
           );
         } else if (listEl) {
           // keep recent entry for when user opens history: store in a small buffer
-          try {
-            window.__recentHistoryBuffer = window.__recentHistoryBuffer || [];
-            window.__recentHistoryBuffer.unshift(m);
-            if (window.__recentHistoryBuffer.length > 50)
-              window.__recentHistoryBuffer.pop();
-          } catch (e) {}
+          // (already buffered above)
           // show a brief notification
           try {
             const n = document.createElement("div");

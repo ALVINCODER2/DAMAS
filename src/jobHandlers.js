@@ -35,33 +35,58 @@ async function handleSaveMatchHistory(payload) {
       return;
     }
 
-    const history = new MatchHistory({
-      player1,
-      player2,
-      winner: payload.winner ? String(payload.winner).toLowerCase() : null,
-      bet,
-      gameMode,
-      reason: payload.reason,
-    });
-
+    // Avoid duplicate writes: if a similar match was recently saved in DB,
+    // skip creating a new one. Use createdAt window when provided.
     try {
-      const saved = await history.save();
-      // Publish to Redis channel so main server process(es) can react (update cache, emit)
-      try {
-        if (_redisPub) {
-          const msg = JSON.stringify({
-            _id: saved._id,
-            player1: saved.player1,
-            player2: saved.player2,
-            winner: saved.winner,
-            bet: saved.bet,
-            gameMode: saved.gameMode,
-            reason: saved.reason,
-            createdAt: saved.createdAt,
-          });
-          _redisPub.publish("damas:matchSaved", msg).catch(() => {});
-        }
-      } catch (e) {}
+      const createdAt = payload.createdAt ? new Date(payload.createdAt) : null;
+      let existing = null;
+      if (createdAt && !isNaN(createdAt.getTime())) {
+        const start = new Date(createdAt.getTime() - 5000);
+        const end = new Date(createdAt.getTime() + 5000);
+        existing = await MatchHistory.findOne({
+          player1,
+          player2,
+          bet,
+          gameMode,
+          createdAt: { $gte: start, $lte: end },
+        }).lean();
+      }
+      if (!existing) {
+        const history = new MatchHistory({
+          player1,
+          player2,
+          winner: payload.winner ? String(payload.winner).toLowerCase() : null,
+          bet,
+          gameMode,
+          reason: payload.reason,
+          createdAt: createdAt || undefined,
+        });
+        const saved = await history.save();
+        // Publish to Redis channel so main server process(es) can react (update cache, emit)
+        try {
+          if (_redisPub) {
+            const msg = JSON.stringify({
+              _id: saved._id,
+              player1: saved.player1,
+              player2: saved.player2,
+              winner: saved.winner,
+              bet: saved.bet,
+              gameMode: saved.gameMode,
+              reason: saved.reason,
+              createdAt: saved.createdAt,
+            });
+            _redisPub.publish("damas:matchSaved", msg).catch(() => {});
+          }
+        } catch (e) {}
+      } else {
+        // already exists — emit via Redis if possible so other processes update
+        try {
+          if (_redisPub) {
+            const msg = JSON.stringify(existing);
+            _redisPub.publish("damas:matchSaved", msg).catch(() => {});
+          }
+        } catch (e) {}
+      }
     } catch (firstErr) {
       console.error(
         "handleSaveMatchHistory: first save attempt failed",
@@ -70,22 +95,65 @@ async function handleSaveMatchHistory(payload) {
       );
       // retry once after tiny delay
       await new Promise((r) => setTimeout(r, 200));
-      const saved = await history.save();
+      // second attempt: try an idempotent create (use same logic)
       try {
-        if (_redisPub) {
-          const msg = JSON.stringify({
-            _id: saved._id,
-            player1: saved.player1,
-            player2: saved.player2,
-            winner: saved.winner,
-            bet: saved.bet,
-            gameMode: saved.gameMode,
-            reason: saved.reason,
-            createdAt: saved.createdAt,
+        const createdAt2 = payload.createdAt
+          ? new Date(payload.createdAt)
+          : null;
+        const start2 = createdAt2
+          ? new Date(createdAt2.getTime() - 5000)
+          : new Date(Date.now() - 10000);
+        const end2 = createdAt2
+          ? new Date(createdAt2.getTime() + 5000)
+          : new Date();
+        const existing2 = await MatchHistory.findOne({
+          player1,
+          player2,
+          bet,
+          gameMode,
+          createdAt: { $gte: start2, $lte: end2 },
+        }).lean();
+        if (!existing2) {
+          const history2 = new MatchHistory({
+            player1,
+            player2,
+            winner: payload.winner
+              ? String(payload.winner).toLowerCase()
+              : null,
+            bet,
+            gameMode,
+            reason: payload.reason,
+            createdAt: createdAt2 || undefined,
           });
-          _redisPub.publish("damas:matchSaved", msg).catch(() => {});
+          const saved2 = await history2.save();
+          try {
+            if (_redisPub) {
+              const msg = JSON.stringify({
+                _id: saved2._id,
+                player1: saved2.player1,
+                player2: saved2.player2,
+                winner: saved2.winner,
+                bet: saved2.bet,
+                gameMode: saved2.gameMode,
+                reason: saved2.reason,
+                createdAt: saved2.createdAt,
+              });
+              _redisPub.publish("damas:matchSaved", msg).catch(() => {});
+            }
+          } catch (e) {}
+        } else {
+          try {
+            if (_redisPub) {
+              _redisPub
+                .publish("damas:matchSaved", JSON.stringify(existing2))
+                .catch(() => {});
+            }
+          } catch (e) {}
         }
-      } catch (e) {}
+      } catch (e) {
+        // fallthrough to outer catch
+        throw e;
+      }
     }
   } catch (e) {
     console.error(

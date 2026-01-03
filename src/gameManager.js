@@ -125,21 +125,76 @@ async function saveMatchHistory(room, winnerEmail, reason) {
     const p1Email = room.players[0].user.email;
     const p2Email = room.players[1].user.email;
 
-    // Enfileira uma tarefa serializável para ser processada por worker/fila.
-    enqueue({
-      type: "saveMatchHistory",
-      payload: {
-        player1: p1Email,
-        player2: p2Email,
-        winner: winnerEmail || null,
-        bet: room.bet,
-        gameMode: room.gameMode,
-        reason: reason,
-      },
-    });
-    // Emit immediate socket event so clients can update their local history
+    const payload = {
+      player1: p1Email,
+      player2: p2Email,
+      winner: winnerEmail || null,
+      bet: room.bet,
+      gameMode: room.gameMode,
+      reason: reason,
+      createdAt: new Date(),
+    };
+
+    // Try to persist immediately in this process so the match is visible
+    // immediately in DB and can be published to Redis for other instances.
+    let saved = null;
     try {
-      const payload = {
+      saved = await MatchHistory.create(payload);
+      // update in-process cache and emit
+      try {
+        const doc = saved.toObject ? saved.toObject() : saved;
+        if (io) {
+          io.recentMatchCache = io.recentMatchCache || [];
+          io.recentMatchCache.unshift(doc);
+          if (io.recentMatchCache.length > 500)
+            io.recentMatchCache.length = 500;
+          io.emit("matchRecorded", doc);
+        }
+      } catch (e) {}
+
+      // publish to Redis channel so other instances receive the notification
+      try {
+        const REDIS_URL = process.env.REDIS_URL;
+        if (REDIS_URL) {
+          const { createClient } = require("redis");
+          const rc = createClient({ url: REDIS_URL });
+          rc.connect()
+            .then(() =>
+              rc.publish(
+                "damas:matchSaved",
+                JSON.stringify({
+                  _id: saved._id,
+                  player1: saved.player1,
+                  player2: saved.player2,
+                  winner: saved.winner,
+                  bet: saved.bet,
+                  gameMode: saved.gameMode,
+                  reason: saved.reason,
+                  createdAt: saved.createdAt,
+                })
+              )
+            )
+            .catch(() => {})
+            .finally(() => {
+              try {
+                rc.disconnect().catch(() => {});
+              } catch (e) {}
+            });
+        }
+      } catch (e) {}
+    } catch (e) {
+      // if immediate save fails, fall back to enqueueing job for worker
+      try {
+        enqueue({
+          type: "saveMatchHistory",
+          payload,
+        });
+      } catch (er) {}
+    }
+    // Also emit immediate socket event for local players (if saved failed earlier,
+    // we still emit optimistic payload so players see immediate feedback)
+    try {
+      const optimistic = {
         player1: p1Email,
         player2: p2Email,
         winner: winnerEmail || null,
@@ -148,43 +203,21 @@ async function saveMatchHistory(room, winnerEmail, reason) {
         reason: reason,
         createdAt: new Date(),
       };
-
-      // emit to the room and directly to players (if socketId available)
       if (io && room && room.roomCode) {
         try {
-          io.to(room.roomCode).emit("matchRecorded", payload);
+          io.to(room.roomCode).emit("matchRecorded", optimistic);
         } catch (e) {}
       }
-
-      // Also emit directly to player sockets if present
       try {
         if (Array.isArray(room.players)) {
           room.players.forEach((p) => {
             if (p && p.socketId && io && io.sockets) {
               try {
                 const s = io.sockets.sockets.get(p.socketId);
-                if (s) s.emit("matchRecorded", payload);
+                if (s) s.emit("matchRecorded", optimistic);
               } catch (er) {}
             }
           });
-        }
-      } catch (e) {}
-
-      // ALSO: emit globally so clients not inside the room (e.g., lobby)
-      // immediately receive the update. This complements Redis-based
-      // cross-process notifications and helps single-process setups.
-      try {
-        if (io) io.emit("matchRecorded", payload);
-      } catch (e) {}
-
-      // Update in-process recent match cache (used by /api/recent-matches)
-      try {
-        if (io) {
-          io.recentMatchCache = io.recentMatchCache || [];
-          io.recentMatchCache.unshift(payload);
-          const MAX = 500;
-          if (io.recentMatchCache.length > MAX)
-            io.recentMatchCache.length = MAX;
         }
       } catch (e) {}
     } catch (e) {}
