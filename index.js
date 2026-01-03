@@ -105,48 +105,66 @@ try {
   const REDIS_URL = process.env.REDIS_URL;
   if (REDIS_URL) {
     const { createClient } = require("redis");
-    const notifClient = createClient({ url: REDIS_URL });
-    notifClient
-      .connect()
-      .then(() => {
-        try {
-          notifClient
-            .subscribe("damas:matchSaved", (msg) => {
-              try {
-                const m = JSON.parse(msg);
-                // Ensure cache exists
-                try {
-                  app.locals.recentMatchCache =
-                    app.locals.recentMatchCache || [];
-                } catch (e) {
-                  app.locals = app.locals || {};
-                  app.locals.recentMatchCache =
-                    app.locals.recentMatchCache || [];
-                }
-                // prepend to cache and trim
-                try {
-                  app.locals.recentMatchCache.unshift(m);
-                  const max = 500;
-                  if (app.locals.recentMatchCache.length > max)
-                    app.locals.recentMatchCache.length = max;
-                } catch (e) {}
+    let notifClient = null;
 
-                // Emit matchRecorded to clients so UI updates
-                try {
-                  if (io) {
-                    io.emit("matchRecorded", m);
-                    // keep in-process cache in sync for immediate API responses
-                    try {
-                      io.recentMatchCache = app.locals.recentMatchCache;
-                    } catch (e) {}
-                  }
-                } catch (e) {}
-              } catch (err) {}
-            })
-            .catch(() => {});
+    async function startNotifClient() {
+      try {
+        notifClient = createClient({ url: REDIS_URL });
+        notifClient.on("error", (e) => {
+          try {
+            console.warn(
+              "Redis notif client error:",
+              e && e.message ? e.message : e
+            );
+          } catch (er) {}
+        });
+
+        notifClient.on("end", () => {
+          try {
+            console.warn(
+              "Redis notif client disconnected, will reconnect in 5s"
+            );
+          } catch (er) {}
+          setTimeout(() => startNotifClient(), 5000);
+        });
+
+        await notifClient.connect();
+        await notifClient.subscribe("damas:matchSaved", (msg) => {
+          try {
+            const m = JSON.parse(msg);
+            try {
+              app.locals.recentMatchCache = app.locals.recentMatchCache || [];
+              app.locals.recentMatchCache.unshift(m);
+              if (app.locals.recentMatchCache.length > 500)
+                app.locals.recentMatchCache.length = 500;
+            } catch (e) {}
+
+            try {
+              if (io) {
+                io.emit("matchRecorded", m);
+                io.recentMatchCache = app.locals.recentMatchCache;
+              }
+            } catch (e) {}
+          } catch (e) {}
+        });
+        try {
+          console.log("Redis notif client subscribed to damas:matchSaved");
         } catch (e) {}
-      })
-      .catch(() => {});
+      } catch (e) {
+        try {
+          console.warn(
+            "Failed to start Redis notif client, retrying in 5s:",
+            e && e.message ? e.message : e
+          );
+        } catch (er) {}
+        try {
+          if (notifClient) notifClient.disconnect().catch(() => {});
+        } catch (er) {}
+        setTimeout(() => startNotifClient(), 5000);
+      }
+    }
+
+    startNotifClient();
   }
 } catch (e) {}
 
@@ -891,39 +909,7 @@ app.get("/api/admin/openings", adminAuthHeader, (req, res) => {
   res.json(idfTablitaOpenings);
 });
 
-// DEBUG: endpoint para simular fim de partida e testar gravação/emissão
-app.post("/debug/save-match", async (req, res) => {
-  try {
-    const { player1, player2, winner, bet, gameMode, roomCode } = req.body;
-    if (!player1 || !player2)
-      return res
-        .status(400)
-        .json({ message: "player1 e player2 obrigatórios" });
-
-    const room = {
-      players: [
-        { user: { email: String(player1).toLowerCase() }, socketId: null },
-        { user: { email: String(player2).toLowerCase() }, socketId: null },
-      ],
-      roomCode: roomCode || `debug-${Date.now()}`,
-      bet: Number(bet) || 0,
-      gameMode: gameMode || "classic",
-      game: { moveHistory: [], initialBoardState: [] },
-    };
-
-    // Chama saveMatchHistory do manager para enfileirar/gravar e emitir
-    const gm = require("./src/gameManager");
-    await gm.saveMatchHistory(
-      room,
-      winner ? String(winner).toLowerCase() : null,
-      "debug-endpoint"
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("/debug/save-match error:", e);
-    res.status(500).json({ error: String(e) });
-  }
-});
+// Debug endpoint removed — use gameplay or admin tools to test.
 
 // Inicialização
 initializeManager(io, gameRooms);
@@ -931,6 +917,76 @@ initializeManager(io, gameRooms);
 tournamentManager.initializeTournamentManager(io, gameRooms);
 setTournamentManager(tournamentManager);
 initializeSocket(io);
+
+// Periodic poll to fetch new MatchHistory entries from DB in case
+// Redis notifications are unavailable. This ensures eventual
+// consistency and that clients receive `matchRecorded` events.
+try {
+  const POLL_INTERVAL_MS = Number(process.env.RECENT_MATCHES_POLL_MS) || 15000;
+  let _lastSeenTs = Date.now();
+  try {
+    if (
+      app.locals &&
+      Array.isArray(app.locals.recentMatchCache) &&
+      app.locals.recentMatchCache.length
+    ) {
+      const first = app.locals.recentMatchCache[0];
+      _lastSeenTs = new Date(first.createdAt).getTime();
+    }
+  } catch (e) {}
+
+  async function pollNewMatches() {
+    try {
+      const cutoff = new Date(_lastSeenTs);
+      const docs = await MatchHistory.find({ createdAt: { $gt: cutoff } })
+        .sort({ createdAt: 1 })
+        .limit(200)
+        .lean();
+
+      if (!docs || docs.length === 0) return;
+
+      for (const m of docs) {
+        try {
+          // prepend to app.locals cache
+          try {
+            app.locals.recentMatchCache = app.locals.recentMatchCache || [];
+            app.locals.recentMatchCache.unshift(m);
+            if (app.locals.recentMatchCache.length > 500)
+              app.locals.recentMatchCache.length = 500;
+          } catch (e) {}
+
+          // emit to clients and update io cache
+          try {
+            if (io) {
+              io.emit("matchRecorded", m);
+              io.recentMatchCache = io.recentMatchCache || [];
+              io.recentMatchCache.unshift(m);
+              if (io.recentMatchCache.length > 500)
+                io.recentMatchCache.length = 500;
+            }
+          } catch (e) {}
+
+          const ts = new Date(m.createdAt).getTime();
+          if (ts > _lastSeenTs) _lastSeenTs = ts;
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.error(
+        "recentMatches poll error:",
+        e && e.message ? e.message : e
+      );
+    }
+  }
+
+  // start poll shortly after boot
+  setTimeout(() => {
+    try {
+      pollNewMatches();
+      setInterval(pollNewMatches, POLL_INTERVAL_MS).unref &&
+        setInterval(pollNewMatches, POLL_INTERVAL_MS).unref();
+    } catch (e) {}
+  }, 5000);
+} catch (e) {}
 
 // --- Monitor simples de event-loop (ajuda a diagnosticar latência do servidor)
 try {
