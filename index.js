@@ -116,7 +116,44 @@ app.get("/favicon.ico", (req, res) => res.sendStatus(204));
 
 mongoose
   .connect(MONGO_URI)
-  .then(() => console.log("Conectado ao MongoDB Atlas com sucesso!"))
+  .then(async () => {
+    console.log("Conectado ao MongoDB Atlas com sucesso!");
+    // Ao iniciar o servidor, carregamos os históricos recentes para cache
+    try {
+      const cutoffMs =
+        Number(process.env.RECENT_MATCHES_RETENTION_MS) || 24 * 60 * 60 * 1000;
+      const cutoff = new Date(Date.now() - cutoffMs);
+      const recents = await MatchHistory.find({ createdAt: { $gte: cutoff } })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .lean();
+
+      // Guarda em memória para consultas rápidas
+      app.locals.recentMatchCache = recents;
+
+      // Estatísticas rápidas: vitórias/derrotas/empates (relativas ao registro, não por usuário)
+      let wins = 0,
+        losses = 0,
+        draws = 0;
+      for (const r of recents) {
+        if (!r.winner) draws++;
+        else wins++; // tratamos qualquer registro com `winner` como partida com vencedor
+      }
+      losses = recents.length - wins - draws;
+      console.log(
+        `[Boot] Carregados ${recents.length} partidas recentes: vitórias~${wins} empates~${draws} perdas~${losses}`
+      );
+
+      // Emitir para clientes conectados uma lista inicial (até 100)
+      try {
+        if (io) {
+          io.emit("bootRecentMatches", recents.slice(0, 100));
+        }
+      } catch (e) {}
+    } catch (e) {
+      console.warn("Erro ao carregar histórico inicial:", e);
+    }
+  })
   .catch((err) => console.error("Erro ao conectar ao MongoDB:", err));
 
 // Carrega handlers locais para jobs serializáveis (processamento in-memory quando não há Redis).

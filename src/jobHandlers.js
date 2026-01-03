@@ -9,8 +9,8 @@ async function handleSaveMatchHistory(payload) {
       throw new Error("Invalid payload for saveMatchHistory");
     }
 
-    const player1 = (payload.player1 || "").toString();
-    const player2 = (payload.player2 || "").toString();
+    const player1 = (payload.player1 || "").toString().toLowerCase();
+    const player2 = (payload.player2 || "").toString().toLowerCase();
     const bet =
       typeof payload.bet === "number" ? payload.bet : Number(payload.bet) || 0;
     const gameMode = payload.gameMode || "unknown";
@@ -29,7 +29,7 @@ async function handleSaveMatchHistory(payload) {
     const history = new MatchHistory({
       player1,
       player2,
-      winner: payload.winner || null,
+      winner: payload.winner ? String(payload.winner).toLowerCase() : null,
       bet,
       gameMode,
       reason: payload.reason,

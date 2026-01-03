@@ -6,6 +6,7 @@ window.initLobby = function (socket, UI) {
   let tournamentCountdownInterval = null;
   let countdownClosedByUser = false;
   let currentSelectedPresetId = null;
+  console.log("[initLobby] currentUser at init:", window.currentUser);
 
   // --- HELPER: UPDATE WELCOME MESSAGE (Global) ---
   window.updateLobbyWelcome = function () {
@@ -133,9 +134,18 @@ window.initLobby = function (socket, UI) {
           list.appendChild(resultsContainer);
 
           async function doSearch(targetEmail) {
+            console.log(
+              "[history] doSearch targetEmail:",
+              targetEmail,
+              "window.currentUser:",
+              window.currentUser && window.currentUser.email
+            );
             resultsContainer.innerHTML =
               '<p style="color:#ccc;">Carregando...</p>';
             try {
+              console.log("[history] POST /api/user/history body:", {
+                email: targetEmail,
+              });
               const res = await fetch("/api/user/history", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -212,6 +222,65 @@ window.initLobby = function (socket, UI) {
                           ul2.appendChild(li);
                         } catch (e) {}
                       });
+                      // Merge recent optimistic buffer entries (if any) into the displayed list
+                      try {
+                        const buf = window.__recentHistoryBuffer || [];
+                        buf.forEach((bm) => {
+                          try {
+                            const exists = pub.some((d) => {
+                              if (!d || !bm) return false;
+                              const matchPlayers =
+                                (d.player1 === bm.player1 &&
+                                  d.player2 === bm.player2) ||
+                                (d.player1 === bm.player2 &&
+                                  d.player2 === bm.player1);
+                              const sameBet =
+                                Number(d.bet || 0) === Number(bm.bet || 0);
+                              const timeDiff = Math.abs(
+                                new Date(d.createdAt).getTime() -
+                                  new Date(bm.createdAt).getTime()
+                              );
+                              return matchPlayers && sameBet && timeDiff < 5000;
+                            });
+                            if (!exists) {
+                              const li = document.createElement("li");
+                              li.style.background = "rgba(255,255,255,0.05)";
+                              li.style.marginBottom = "8px";
+                              li.style.padding = "10px";
+                              li.style.borderRadius = "8px";
+                              li.style.fontSize = "0.9rem";
+                              let resultText = "Empate";
+                              let color = "#95a5a6";
+                              if (bm.winner) {
+                                if (
+                                  window.currentUser &&
+                                  bm.winner === window.currentUser.email
+                                ) {
+                                  resultText = "VITÓRIA";
+                                  color = "#2ecc71";
+                                } else {
+                                  resultText = "DERROTA";
+                                  color = "#e74c3c";
+                                }
+                              }
+                              const opponent = window.currentUser
+                                ? bm.player1 === window.currentUser.email
+                                  ? bm.player2
+                                  : bm.player1
+                                : bm.player1 + " / " + bm.player2;
+                              const date = new Date(
+                                bm.createdAt
+                              ).toLocaleDateString();
+                              li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+                                opponent.split("@")[0]
+                              }</span><span>Aposta: <strong>R$ ${Number(
+                                bm.bet || 0
+                              ).toFixed(2)}</strong></span></div>`;
+                              ul2.insertBefore(li, ul2.firstChild);
+                            }
+                          } catch (e) {}
+                        });
+                      } catch (e) {}
                       resultsContainer.appendChild(ul2);
                     }
                   } catch (e) {
@@ -261,6 +330,62 @@ window.initLobby = function (socket, UI) {
                   ul.appendChild(li);
                 } catch (e) {}
               });
+              // Merge recent optimistic buffer entries (if any) into the displayed personal list
+              try {
+                const buf = window.__recentHistoryBuffer || [];
+                buf.forEach((bm) => {
+                  try {
+                    const exists = data.some((d) => {
+                      if (!d || !bm) return false;
+                      const matchPlayers =
+                        (d.player1 === bm.player1 &&
+                          d.player2 === bm.player2) ||
+                        (d.player1 === bm.player2 && d.player2 === bm.player1);
+                      const sameBet =
+                        Number(d.bet || 0) === Number(bm.bet || 0);
+                      const timeDiff = Math.abs(
+                        new Date(d.createdAt).getTime() -
+                          new Date(bm.createdAt).getTime()
+                      );
+                      return matchPlayers && sameBet && timeDiff < 5000;
+                    });
+                    if (!exists) {
+                      const li = document.createElement("li");
+                      li.style.background = "rgba(255,255,255,0.05)";
+                      li.style.marginBottom = "8px";
+                      li.style.padding = "10px";
+                      li.style.borderRadius = "8px";
+                      li.style.fontSize = "0.9rem";
+                      let resultText = "Empate";
+                      let color = "#95a5a6";
+                      if (bm.winner) {
+                        if (
+                          bm.winner ===
+                          (window.currentUser && window.currentUser.email)
+                        ) {
+                          resultText = "VITÓRIA";
+                          color = "#2ecc71";
+                        } else {
+                          resultText = "DERROTA";
+                          color = "#e74c3c";
+                        }
+                      }
+                      const opponent =
+                        bm.player1 ===
+                        (window.currentUser && window.currentUser.email)
+                          ? bm.player2
+                          : bm.player1;
+                      const date = new Date(bm.createdAt).toLocaleDateString();
+                      li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"> <strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
+                        opponent.split("@")[0]
+                      }</span><span>Aposta: <strong>R$ ${Number(
+                        bm.bet || 0
+                      ).toFixed(2)}</strong></span></div>`;
+                      ul.insertBefore(li, ul.firstChild);
+                    }
+                  } catch (e) {}
+                });
+              } catch (e) {}
               resultsContainer.appendChild(ul);
             } catch (e) {
               resultsContainer.innerHTML =
@@ -1281,9 +1406,11 @@ window.initLobby = function (socket, UI) {
   try {
     socket.on("matchRecorded", (m) => {
       try {
-        if (!window.currentUser) return;
-        const email = window.currentUser.email;
-        if (m.player1 !== email && m.player2 !== email) return;
+        if (!window.currentUser || !window.currentUser.email) return;
+        const email = (window.currentUser.email || "").toLowerCase();
+        const p1 = (m.player1 || "").toLowerCase();
+        const p2 = (m.player2 || "").toLowerCase();
+        if (p1 !== email && p2 !== email) return;
 
         // Create li similar to the history rendering above
         const li = document.createElement("li");
@@ -1303,7 +1430,8 @@ window.initLobby = function (socket, UI) {
             color = "#e74c3c";
           }
         }
-        const opponent = m.player1 === email ? m.player2 : m.player1;
+        const opponent =
+          (m.player1 || "").toLowerCase() === email ? m.player2 : m.player1;
         const date = new Date(m.createdAt).toLocaleDateString();
         li.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><strong style="color:${color}">${resultText}</strong><span style="color:#aaa; font-size:0.8rem;">${date}</span></div><div style="display:flex; justify-content:space-between;"><span>vs ${
           opponent.split("@")[0]
@@ -1358,17 +1486,27 @@ window.initLobby = function (socket, UI) {
       document.getElementById("referrals-overlay").classList.add("hidden")
     );
   const viewHistoryBtn = document.getElementById("view-history-btn");
+  console.log("[initLobby] viewHistoryBtn found:", !!viewHistoryBtn);
   if (viewHistoryBtn)
     viewHistoryBtn.addEventListener("click", async () => {
+      console.log(
+        "[history] viewHistory clicked; currentUser:",
+        window.currentUser && window.currentUser.email
+      );
       if (!window.currentUser) return;
       const list = document.getElementById("history-list");
       document.getElementById("history-overlay").classList.remove("hidden");
       list.innerHTML = '<p style="color:#ccc;">Carregando...</p>';
       try {
+        console.log("[history] auto POST /api/user/history body:", {
+          email: window.currentUser && window.currentUser.email,
+        });
         const res = await fetch("/api/user/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: window.currentUser.email }),
+          body: JSON.stringify({
+            email: window.currentUser && window.currentUser.email,
+          }),
         });
         const data = await res.json();
         list.innerHTML = "";
