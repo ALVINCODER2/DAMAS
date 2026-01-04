@@ -157,17 +157,6 @@ window.GameCore = (function () {
 
             // Atualiza state.boardState de forma defensiva
             try {
-              if (
-                !Array.isArray(state.boardState) ||
-                state.boardState.length === 0
-              ) {
-                // nothing to update, request full sync
-                state.socket.emit("requestGameSync", {
-                  roomCode: state.currentRoom,
-                });
-                return;
-              }
-
               const movingPiece = state.boardState[from.row][from.col];
               state.boardState[to.row][to.col] = movingPiece;
               state.boardState[from.row][from.col] = 0;
@@ -196,9 +185,8 @@ window.GameCore = (function () {
               }
             } catch (e) {
               console.error("Erro aplicando delta localmente:", e);
-              state.socket.emit("requestGameSync", {
-                roomCode: state.currentRoom,
-              });
+              // OTIMIZAÇÃO: Não solicita sync por erro local, apenas loga
+              // O próximo pieceMoved ou gameStateUpdate irá corrigir
               return;
             }
 
@@ -444,12 +432,8 @@ window.GameCore = (function () {
                 }, 2200);
               }
             } catch (e) {}
-            try {
-              if (state.currentRoom)
-                state.socket.emit("requestGameSync", {
-                  roomCode: state.currentRoom,
-                });
-            } catch (e) {}
+            // OTIMIZAÇÃO: Removido requestGameSync - turnValidation já contém
+            // informações suficientes (mandatoryPieces e sampleMoves)
             return;
           }
 
@@ -504,13 +488,8 @@ window.GameCore = (function () {
       state.socket.on("latencyResolved", (payload) => {
         try {
           state._latencyPaused = false;
-          // Solicita sync completo para garantir estado coerente
-          try {
-            if (state.currentRoom)
-              state.socket.emit("requestGameSync", {
-                roomCode: state.currentRoom,
-              });
-          } catch (e) {}
+          // OTIMIZAÇÃO: Removido requestGameSync após latencyResolved
+          // O servidor já envia gameStateUpdate quando retoma
           // Mensagem informativa
           try {
             if (state.UI && state.UI.elements && state.UI.elements.gameStatus) {

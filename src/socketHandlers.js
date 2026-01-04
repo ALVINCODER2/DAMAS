@@ -34,10 +34,22 @@ const gameRooms = {};
 let io; // Variável global para instância do Socket.IO
 // Contador simples para razões de desconexão (diagnóstico)
 const disconnectReasonCounts = {};
+
+// ============================================================================
+// CONFIGURAÇÕES OTIMIZADAS PARA REDUÇÃO DE LATÊNCIA
+// ============================================================================
+// Estas configurações foram ajustadas para reduzir o tráfego Socket.IO
+// mantendo a funcionalidade completa do jogo.
+
+// Throttling/Debouncing (ms)
+const SPECTATOR_UPDATE_INTERVAL = 1000; // Espectadores: 1000ms (era 350ms)
+const LOBBY_UPDATE_DEBOUNCE = 2000; // Lobby: 2000ms (era 300ms)
+
 // Latency thresholds (ms)
 const LATENCY_WARNING_MS = 1000; // apenas aviso
 const LATENCY_PAUSE_MS = 3000; // pausar partida quando alcançado
 const LATENCY_RESUME_MS = 1500; // retomar quando abaixo deste valor
+// ============================================================================
 
 // Monitor simples do event-loop: loga se o loop ficar bloqueado além de um limiar.
 try {
@@ -212,7 +224,7 @@ function scheduleLobbyUpdate(force) {
       } catch (e) {}
       _lobbyUpdateTimer = null;
       _lastLobbyPayload = null;
-    }, 300); // debounce 300ms
+    }, 2000); // debounce 2000ms (otimizado para reduzir latência)
   } catch (e) {}
 }
 
@@ -600,7 +612,7 @@ function sendGameState(roomCode, fullState, opts = {}) {
 
     // Throttle para espectadores: no máximo uma emissão a cada INTERVAL ms
     const INTERVAL =
-      typeof opts.spectatorInterval === "number" ? opts.spectatorInterval : 350;
+      typeof opts.spectatorInterval === "number" ? opts.spectatorInterval : 1000; // otimizado: 1000ms (era 350ms)
     const now = Date.now();
     if (!room._lastSpectatorUpdate) room._lastSpectatorUpdate = 0;
     if (now - room._lastSpectatorUpdate < INTERVAL && !opts.forceSpectator)
@@ -1349,6 +1361,11 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       game.mustCaptureWith = null;
       game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
       game.turnCapturedPieces = []; // Garante limpeza de peças fantasmas na troca de turno
+      
+      // REMOVIDO: Verificação de turnValidation que causava indicadores incorretos
+      // Os indicadores devem aparecer apenas quando o jogador clica na peça,
+      // não automaticamente ao trocar de turno.
+      /*
       // Verificação rápida: notifica jogador novo com amostra de movimentos válidos
       try {
         const targetColor = game.currentPlayer;
@@ -1434,6 +1451,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       } catch (e) {
         console.error("Erro ao emitir turnValidation:", e);
       }
+      */
 
       // Verifica se o próximo jogador tem movimentos
       if (!timedHasValidMoves(game.currentPlayer, game, roomCode)) {
@@ -1520,15 +1538,14 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
     // (lock de 1s removido)
 
-    // Ainda emitimos o estado completo para jogadores conectados por compatibilidade,
-    // e forçamos uma atualização imediata para espectadores para que seus
-    // timers (contadores) sejam atualizados imediatamente após a jogada.
+    // CORREÇÃO: Restaurado sendGameState para jogadores (necessário para sincronização)
+    // Mantemos payload otimizado e throttling para espectadores.
+    // O pieceMoved sozinho não é suficiente - cliente precisa do boardState completo.
     sendGameState(
       roomCode,
       {
         ...game,
         mandatoryPieces,
-        // Garantir que campos de tempo venham do room para espectadores
         whiteTime:
           typeof gameRoom.whiteTime === "number"
             ? gameRoom.whiteTime
@@ -1543,7 +1560,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
           game.timerActive !== undefined ? !!game.timerActive : undefined,
         currentPlayer: game.currentPlayer,
       },
-      { forceSpectator: true }
+      { forceSpectator: false } // usa throttling normal para espectadores
     );
 
     // Auto-move se for único E for sequência de captura
