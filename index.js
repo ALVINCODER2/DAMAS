@@ -62,14 +62,33 @@ const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
 const io = socketIo(server, {
-  pingInterval: 25000,
-  pingTimeout: 60000,
+  // OTIMIZAÇÃO: Aumentar intervalos de ping para reduzir overhead
+  pingInterval: 30000, // era 25000 (30s)
+  pingTimeout: 90000,  // era 60000 (90s)
+  
   // Forçar uso de WebSocket para reduzir latência (evita polling)
   transports: ["websocket"],
+  
   // Compatibilidade com clients Engine.IO v3 quando necessário
   allowEIO3: true,
-  // Habilita compressão de mensagens do Engine.IO/WS
-  perMessageDeflate: false,
+  
+  // OTIMIZAÇÃO CRÍTICA: Habilitar compressão WebSocket (redução de 40-60%)
+  perMessageDeflate: {
+    threshold: 512, // comprimir apenas mensagens > 512 bytes
+    zlibDeflateOptions: {
+      chunkSize: 1024,
+      memLevel: 7,
+      level: 6, // balanço entre compressão e CPU
+    },
+    zlibInflateOptions: {
+      chunkSize: 10 * 1024,
+    },
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    serverMaxWindowBits: 10,
+    concurrencyLimit: 10,
+  },
+  
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
