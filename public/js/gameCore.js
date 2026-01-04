@@ -420,6 +420,65 @@ window.GameCore = (function () {
       });
     } catch (e) {}
 
+    // Handler para validação rápida de turno enviada pelo servidor
+    try {
+      state.socket.on("turnValidation", (payload) => {
+        try {
+          if (!payload) return;
+          // Se o servidor reporta que NÃO há movimentos válidos, pede sync
+          if (payload.hasValidMoves === false) {
+            try {
+              if (
+                state.UI &&
+                state.UI.elements &&
+                state.UI.elements.gameStatus
+              ) {
+                const el = state.UI.elements.gameStatus;
+                const prev = el.textContent;
+                el.textContent =
+                  "Nenhuma peça disponível — sincronizando com o servidor...";
+                setTimeout(() => {
+                  try {
+                    el.textContent = prev || "";
+                  } catch (e) {}
+                }, 2200);
+              }
+            } catch (e) {}
+            try {
+              if (state.currentRoom)
+                state.socket.emit("requestGameSync", {
+                  roomCode: state.currentRoom,
+                });
+            } catch (e) {}
+            return;
+          }
+
+          // Caso haja movimentos, destaque peças obrigatórias e movimentos de exemplo
+          try {
+            if (
+              payload.mandatoryPieces &&
+              state.UI &&
+              state.UI.highlightMandatoryPieces
+            ) {
+              state.UI.highlightMandatoryPieces(payload.mandatoryPieces);
+            }
+            if (
+              Array.isArray(payload.sampleMoves) &&
+              payload.sampleMoves.length > 0 &&
+              state.UI &&
+              state.UI.highlightValidMoves
+            ) {
+              // highlightValidMoves espera posições {row,col}
+              const dests = payload.sampleMoves.map((m) => m.to || m);
+              state.UI.highlightValidMoves(dests);
+            }
+          } catch (e) {}
+        } catch (e) {
+          /* ignore */
+        }
+      });
+    } catch (e) {}
+
     // Handler para latência alta: servidor pausou a partida por alta RTT
     try {
       state.socket.on("opponentHighLatency", (payload) => {

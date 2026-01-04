@@ -1219,9 +1219,27 @@ window.initLobby = function (socket, UI) {
   });
   const withdrawBtn = document.getElementById("withdraw-btn");
   if (withdrawBtn)
-    withdrawBtn.addEventListener("click", () =>
-      document.getElementById("withdraw-overlay").classList.remove("hidden")
-    );
+    withdrawBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch(
+          `/api/withdraw/check?email=${encodeURIComponent(
+            window.currentUser.email
+          )}`
+        );
+        if (!res.ok) throw new Error("Erro ao checar saque pendente");
+        const data = await res.json();
+        if (data.hasPending) {
+          alert(
+            "Você já tem uma solicitação de saque pendente. Aguarde aprovação ou rejeição."
+          );
+          return;
+        }
+        document.getElementById("withdraw-overlay").classList.remove("hidden");
+      } catch (e) {
+        console.error(e);
+        alert("Erro ao checar saque pendente.");
+      }
+    });
   document
     .getElementById("close-withdraw-overlay-btn")
     .addEventListener("click", () =>
@@ -1251,6 +1269,8 @@ window.initLobby = function (socket, UI) {
         if (res.ok) {
           alert("Solicitação enviada!");
           document.getElementById("withdraw-overlay").classList.add("hidden");
+          // Após enviar, prevenir nova tentativa até admin resolver
+          withdrawBtn.disabled = true;
         } else {
           alert(data.message);
         }

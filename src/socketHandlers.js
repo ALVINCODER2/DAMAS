@@ -1349,6 +1349,91 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       game.mustCaptureWith = null;
       game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
       game.turnCapturedPieces = []; // Garante limpeza de peças fantasmas na troca de turno
+      // Verificação rápida: notifica jogador novo com amostra de movimentos válidos
+      try {
+        const targetColor = game.currentPlayer;
+        // tenta resolver socketId a partir de emails mapeados em game.users
+        let targetSocketId = null;
+        try {
+          if (game.users && game.users.white && game.users.black) {
+            const targetEmail =
+              targetColor === "b" ? game.users.white : game.users.black;
+            if (targetEmail) {
+              const pl = gameRoom.players.find(
+                (p) => p.user && p.user.email === targetEmail
+              );
+              if (pl) targetSocketId = pl.socketId;
+            }
+          }
+        } catch (e) {}
+        // fallback para mapping antigo
+        if (!targetSocketId) {
+          try {
+            targetSocketId =
+              targetColor === "b" ? game.players.white : game.players.black;
+          } catch (e) {}
+        }
+
+        // Computa amostra de movimentos válidos (limitado para não travar)
+        const sampleMoves = [];
+        try {
+          const bs = game.boardState || [];
+          const size = game.boardSize || 8;
+          for (let r = 0; r < size && sampleMoves.length < 12; r++) {
+            for (let c = 0; c < size && sampleMoves.length < 12; c++) {
+              const piece = bs[r] && bs[r][c];
+              if (!piece || piece === 0) continue;
+              if (String(piece).toLowerCase() !== targetColor) continue;
+              for (let tr = 0; tr < size && sampleMoves.length < 12; tr++) {
+                for (let tc = 0; tc < size && sampleMoves.length < 12; tc++) {
+                  try {
+                    const valid = timedIsMoveValid(
+                      { row: r, col: c },
+                      { row: tr, col: tc },
+                      targetColor,
+                      game,
+                      true,
+                      roomCode
+                    );
+                    if (valid && valid.valid) {
+                      sampleMoves.push({
+                        from: { row: r, col: c },
+                        to: { row: tr, col: tc },
+                        isCapture: !!valid.isCapture,
+                      });
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+          }
+        } catch (e) {}
+
+        // Emite evento de validação rápida para o socket do jogador
+        try {
+          if (targetSocketId && io && io.sockets) {
+            const sock = io.sockets.sockets.get(targetSocketId);
+            const bestCapsQuick = timedFindBestCaptureMoves(
+              targetColor,
+              game,
+              roomCode
+            );
+            const mandatoryQuick = bestCapsQuick.map((s) => s[0]);
+            const hasMovesQuick =
+              sampleMoves.length > 0 ||
+              (mandatoryQuick && mandatoryQuick.length > 0);
+            if (sock && sock.connected) {
+              sock.emit("turnValidation", {
+                hasValidMoves: !!hasMovesQuick,
+                mandatoryPieces: mandatoryQuick,
+                sampleMoves,
+              });
+            }
+          }
+        } catch (e) {}
+      } catch (e) {
+        console.error("Erro ao emitir turnValidation:", e);
+      }
 
       // Verifica se o próximo jogador tem movimentos
       if (!timedHasValidMoves(game.currentPlayer, game, roomCode)) {

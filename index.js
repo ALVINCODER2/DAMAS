@@ -571,6 +571,15 @@ app.post("/api/withdraw", async (req, res) => {
       return res.status(404).json({ message: "Usuário não encontrado." });
     if (user.saldo < amount)
       return res.status(400).json({ message: "Saldo insuficiente." });
+    // Impede múltiplas solicitações pendentes
+    const existing = await Withdrawal.findOne({
+      email: email.toLowerCase(),
+      status: "pending",
+    });
+    if (existing)
+      return res
+        .status(409)
+        .json({ message: "Já existe uma solicitação de saque pendente." });
     const newWithdrawal = new Withdrawal({
       email: email.toLowerCase(),
       amount,
@@ -581,6 +590,23 @@ app.post("/api/withdraw", async (req, res) => {
     res.status(201).json({ message: "Solicitação enviada." });
   } catch (error) {
     res.status(500).json({ message: "Erro." });
+  }
+});
+
+// Endpoint para o cliente checar se existe saque pendente
+app.get("/api/withdraw/check", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ message: "Email obrigatório." });
+    const pending = await Withdrawal.findOne({
+      email: email.toLowerCase(),
+      status: "pending",
+    });
+    if (pending) return res.json({ hasPending: true, pendingId: pending._id });
+    return res.json({ hasPending: false });
+  } catch (err) {
+    console.error("Erro em /api/withdraw/check:", err);
+    res.status(500).json({ message: "Erro interno." });
   }
 });
 
@@ -869,18 +895,35 @@ app.get("/api/admin/withdrawals", adminAuthHeader, async (req, res) => {
 });
 app.post("/api/admin/approve-withdrawal", adminAuthBody, async (req, res) => {
   const { withdrawalId } = req.body;
-  const w = await Withdrawal.findById(withdrawalId);
-  if (w && w.status === "pending") {
+  if (!withdrawalId)
+    return res.status(400).json({ message: "withdrawalId é obrigatório." });
+  try {
+    const w = await Withdrawal.findById(withdrawalId);
+    if (!w) return res.status(404).json({ message: "Saque não encontrado." });
+    if (w.status !== "pending")
+      return res.status(400).json({ message: "Saque não está pendente." });
     const u = await User.findOne({ email: w.email });
-    if (u && u.saldo >= w.amount) {
-      u.saldo -= w.amount;
-      await u.save();
-      w.status = "completed";
-      await w.save();
-      return res.json({ message: "Aprovado" });
-    }
+    if (!u)
+      return res
+        .status(404)
+        .json({ message: "Usuário do saque não encontrado." });
+    if (u.saldo < w.amount)
+      return res
+        .status(409)
+        .json({ message: "Saldo insuficiente para completar o saque." });
+
+    u.saldo -= w.amount;
+    await u.save();
+    w.status = "completed";
+    await w.save();
+
+    io.emit("balanceUpdate", { email: u.email, newSaldo: u.saldo });
+
+    return res.json({ message: "Aprovado" });
+  } catch (err) {
+    console.error("Erro em /api/admin/approve-withdrawal:", err);
+    return res.status(500).json({ message: "Erro interno" });
   }
-  res.status(400).json({ message: "Erro" });
 });
 app.post("/api/admin/reject-withdrawal", adminAuthBody, async (req, res) => {
   await Withdrawal.findByIdAndUpdate(req.body.withdrawalId, {
