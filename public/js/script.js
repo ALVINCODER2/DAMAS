@@ -338,16 +338,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (socket.connected) startPingChecks();
   else socket.once("connect", startPingChecks);
 
+  // --- VARIÁVEIS GLOBAIS DE USUÁRIO (Sincronizadas com o Auth) ---
+  window.currentUser = null;
+  window.isSpectator = false;
+
   // Inicializa Módulos Globais (Lobby e Auth)
   if (window.initLobby) window.initLobby(socket, UI);
   if (window.initAuth) window.initAuth(socket, UI);
 
   // Inicializa o Core do Jogo
   window.GameCore.init(socket, UI);
-
-  // --- VARIÁVEIS GLOBAIS DE USUÁRIO (Sincronizadas com o Auth) ---
-  window.currentUser = null;
-  window.isSpectator = false;
 
   // Ao retornar ao foco ou aba visível, tenta retomar AudioContext se som ativado
   try {

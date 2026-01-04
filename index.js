@@ -300,6 +300,7 @@ app.post("/api/login", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("/api/login error:", error);
     res.status(500).json({ message: "Erro no servidor." });
   }
 });
@@ -376,6 +377,7 @@ app.post("/api/user/re-authenticate", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("/api/user/re-authenticate error:", error);
     res.status(500).json({ message: "Erro." });
   }
 });
