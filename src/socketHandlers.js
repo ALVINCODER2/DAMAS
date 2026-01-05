@@ -718,8 +718,8 @@ async function startGameLogic(room) {
           try {
             const specRoom = `${room.roomCode}-spectators`;
             io.to(specRoom).emit("gameOver", {
-              winner: winnerColorFinal,
-              reason: finalReason,
+                gameMode: room.gameMode,
+                reason: finalReason,
               moveHistory: room.game ? room.game.moveHistory : [],
               initialBoardState: room.game ? room.game.initialBoardState : null,
             });
@@ -1707,125 +1707,43 @@ async function startNextTablitaGame(roomCode) {
         // match já decidido; não iniciar próxima partida
         room.isGameConcluded = true;
         room.cleanupTimeout = setTimeout(() => {
-          if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
-        }, 60000);
-        return;
-      }
-
-      const connectedPlayers = (room.players || []).filter((p) => {
-        try {
-          return (
-            p &&
-            p.socketId &&
-            io.sockets.sockets.get(p.socketId) &&
-            io.sockets.sockets.get(p.socketId).connected
-          );
-        } catch (ee) {
-          return false;
-        }
-      });
-
-      if (connectedPlayers.length < 2) {
-        // jogadores insuficientes para continuar (sem log)
-
-        // Decide vencedor final com base no placar atual ou no jogador presente
-        const p1Email =
-          room.match && room.match.player1 && room.match.player1.email;
-        const p2Email =
-          room.match && room.match.player2 && room.match.player2.email;
-        const p1Score =
-          room.match && room.match.score ? room.match.score[p1Email] || 0 : 0;
-        const p2Score =
-          room.match && room.match.score ? room.match.score[p2Email] || 0 : 0;
-
-        let finalWinnerData = null;
-        if (p1Score > p2Score) finalWinnerData = room.match.player1;
-        else if (p2Score > p1Score) finalWinnerData = room.match.player2;
-        else if (connectedPlayers.length === 1) {
-          const connEmail = connectedPlayers[0].user.email;
-          finalWinnerData =
-            room.match.player1.email === connEmail
-              ? room.match.player1
-              : room.match.player2;
-        }
-
-        if (finalWinnerData) {
-          try {
-            const prize = room.bet * 2;
-            const updatedWinner = await User.findOneAndUpdate(
-              { email: finalWinnerData.email },
-              [
-                {
-                  $set: { saldo: { $round: [{ $add: ["$saldo", prize] }, 2] } },
-                },
-              ],
-              { new: true }
-            );
-
-            const winnerColorFinal =
-              room.game &&
-              room.game.users &&
-              room.game.users.white === finalWinnerData.email
-                ? "b"
-                : "p";
-
-            const finalReason = `Fim do match: jogador ausente. Placar: ${p1Score} a ${p2Score}.`;
-
-            io.to(room.roomCode).emit("gameOver", {
-              winner: winnerColorFinal,
-              reason: finalReason,
-              moveHistory: room.game ? room.game.moveHistory : [],
-              initialBoardState: room.game ? room.game.initialBoardState : null,
-            });
-            try {
-              const specRoom = `${room.roomCode}-spectators`;
-              io.to(specRoom).emit("gameOver", {
-                winner: winnerColorFinal,
-                reason: finalReason,
-                moveHistory: room.game ? room.game.moveHistory : [],
-                initialBoardState: room.game
-                  ? room.game.initialBoardState
-                  : null,
-              });
-            } catch (e) {}
-
-            if (updatedWinner && finalWinnerData.socketId) {
-              const ws = io.sockets.sockets.get(finalWinnerData.socketId);
-              if (ws) ws.emit("updateSaldo", { newSaldo: updatedWinner.saldo });
-            }
-
-            // Salva histórico simplificado do match via fila para não bloquear o event-loop
-            try {
-              enqueue({
-                type: "saveMatchHistory",
-                payload: {
-                  player1: p1Email || "",
-                  player2: p2Email || "",
-                  winner: finalWinnerData.email,
-                  bet: room.bet,
-                  gameMode: room.gameMode,
-                  reason: finalReason,
+      // RELAXAMENTO DA VERIFICAÇÃO DE CONECTIVIDADE
+      // Como desabilitamos o sistema de disconnect/W.O., devemos confiar que os jogadores
+      // ainda estão na sala e tentar iniciar o jogo. Se realmente não estiverem,
+      // perderão por tempo depois.
+      
+      const p1Email = room.match && room.match.player1 && room.match.player1.email;
+      const p2Email = room.match && room.match.player2 && room.match.player2.email;
+      
+      /*
+      // CÓDIGO ANTIGO REMOVIDO: Verificação estrita de sockets conectados
+      // Isso estava impedindo o início do Jogo 2 se houvesse micro- desconexões
+      /*
+      // Resto do código removido...
                 },
               });
             } catch (mhErr) {
-              console.error(
-                "Erro enfileirando MatchHistory ao finalizar match por ausência:",
-                mhErr
-              );
+              console.error("Erro enfileirando MatchHistory:", mhErr);
             }
           } catch (e) {
-            console.error("Erro ao encerrar match por jogadores ausentes:", e);
+            console.error("Erro ao encerrar match:", e);
           }
         }
-
+        
         room.isGameConcluded = true;
-        // Prevent any other code path from attempting to start new games
-        room._noFurtherGames = true;
-        room.cleanupTimeout = setTimeout(() => {
-          if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
-        }, 60000);
         return;
       }
+      */
+      
+      console.log(`[Tablita] Validando início do jogo 2 para room=${roomCode}. P1=${p1Email} P2=${p2Email}`);
+      
+      if (!room.match.player1 || !room.match.player2) {
+          console.error(`[Tablita] Jogadores insuficientes na struct match para iniciar jogo 2.`);
+          return;
+      }
+      /* 
+       * (Bloco de código morto removido: room._noFurtherGames e cleanupTimeout) 
+       */
     } catch (err) {
       console.error(
         "Erro verificando conectividade antes de startNextTablitaGame:",
