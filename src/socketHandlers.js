@@ -1889,10 +1889,10 @@ function initializeSocket(ioInstance) {
             if (room && room._connectionPaused) {
               room._connectionPaused = false;
               
-              // Retoma timer se jogo estava ativo
+              // REINICIA timer do começo (não continua de onde parou)
               if (room.game && room.game.timerActive && !room._latencyPaused) {
                 try {
-                  startTimer(roomCode);
+                  resetTimer(roomCode);
                 } catch (e) {}
               }
               
@@ -1975,9 +1975,9 @@ function initializeSocket(ioInstance) {
                     roomCode: r.roomCode,
                     latency: last,
                   });
-                  // Reinicia timer se o jogo estava ativo
+                  // REINICIA timer do começo (não continua de onde parou)
                   try {
-                    if (r.game && r.game.timerActive) startTimer(r.roomCode);
+                    if (r.game && r.game.timerActive) resetTimer(r.roomCode);
                   } catch (e) {}
                 } catch (e) {}
               }
@@ -2679,6 +2679,28 @@ function initializeSocket(ioInstance) {
         }
 
         if (room.game) {
+          // CORREÇÃO: Se o jogo já terminou (ex: perdeu por W.O. enquanto desconectado),
+          // envia gameOver para desbloquear a tela ao invés de gameResumed
+          if (room.isGameConcluded) {
+            // Determina quem ganhou para enviar o evento correto
+            const playerColor = room.game.users.white === user.email ? "b" : "p";
+            const opponentColor = playerColor === "b" ? "p" : "b";
+            
+            // Assume que se o jogo terminou e o jogador está reconectando,
+            // provavelmente perdeu (W.O. ou timeout). Envia gameOver.
+            socket.emit("gameOver", {
+              winner: opponentColor, // Oponente ganhou
+              reason: "Você perdeu por desconexão ou tempo esgotado",
+              moveHistory: room.game.moveHistory || [],
+              initialBoardState: room.game.initialBoardState || null,
+            });
+            
+            console.log(
+              `[Socket] rejoinActiveGame: jogo já concluído, enviando gameOver para socket=${socket.id} room=${roomCode}`
+            );
+            return; // Não continua com gameResumed
+          }
+          
           // Garantir timerActive explícito e logar estado de resumir jogo
           const gameResumedPayload = {
             gameState: room.game,
@@ -3297,9 +3319,12 @@ function initializeSocket(ioInstance) {
                   connectedPlayer.user.email === r.game?.users?.white
                     ? "b"
                     : "p";
+                // Corrigido: safeProcessEndOfGame recebe (winnerColor, loserColor, room, reason)
+                const loserColor = winnerColor === "b" ? "p" : "b";
                 safeProcessEndOfGame(
-                  roomCode,
                   winnerColor,
+                  loserColor,
+                  r,
                   "Vitória por W.O. - Oponente desconectou"
                 );
               } catch (e) {
