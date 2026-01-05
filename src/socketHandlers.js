@@ -1889,10 +1889,10 @@ function initializeSocket(ioInstance) {
             if (room && room._connectionPaused) {
               room._connectionPaused = false;
               
-              // REINICIA timer do começo (não continua de onde parou)
+              // CORREÇÃO: Retoma timer de onde parou (não reseta!)
               if (room.game && room.game.timerActive && !room._latencyPaused) {
                 try {
-                  resetTimer(roomCode);
+                  startTimer(roomCode);
                 } catch (e) {}
               }
               
@@ -1975,9 +1975,9 @@ function initializeSocket(ioInstance) {
                     roomCode: r.roomCode,
                     latency: last,
                   });
-                  // REINICIA timer do começo (não continua de onde parou)
+                  // CORREÇÃO: Retoma timer de onde parou (não reseta!)
                   try {
-                    if (r.game && r.game.timerActive) resetTimer(r.roomCode);
+                    if (r.game && r.game.timerActive) startTimer(r.roomCode);
                   } catch (e) {}
                 } catch (e) {}
               }
