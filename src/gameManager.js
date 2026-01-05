@@ -106,6 +106,16 @@ function resetTimer(roomCode) {
     clearInterval(room.timerInterval);
 
     if (room.timeControl === "match") {
+      // CORREÇÃO: Resetar whiteTime e blackTime para o valor inicial
+      room.whiteTime = room.timerDuration;
+      room.blackTime = room.timerDuration;
+      io.to(roomCode).volatile.emit("timerUpdate", {
+        whiteTime: room.whiteTime,
+        blackTime: room.blackTime,
+        roomCode: roomCode,
+        currentPlayer: room.game && room.game.currentPlayer,
+        timerActive: room.game ? !!room.game.timerActive : true,
+      });
       startTimer(roomCode);
     } else {
       room.timeLeft = room.timerDuration;

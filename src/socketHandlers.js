@@ -3155,6 +3155,16 @@ function initializeSocket(ioInstance) {
                 clearTimeout(room.cleanupTimeout);
                 room.cleanupTimeout = null;
               }
+              // CORREÇÃO: Limpar timeout de reconexão do sistema de disconnect
+              if (room._reconnectTimeout) {
+                clearTimeout(room._reconnectTimeout);
+                room._reconnectTimeout = null;
+              }
+              // Limpar flags de conexão
+              room._connectionPaused = false;
+              room._disconnectedPlayer = null;
+              room._disconnectTime = null;
+              
               // clear any leftover timers to avoid interference
               try {
                 if (room.timerInterval) clearInterval(room.timerInterval);
