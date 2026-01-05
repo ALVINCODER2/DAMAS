@@ -1471,16 +1471,16 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         const nextPlayer = game.currentPlayer; // Já foi trocado no executeMove
         if (nextPlayer === "b") {
           gameRoom.whiteTime = gameRoom.timerDuration;
-          console.log(`[executeMove] Resetou timer das BRANCAS para ${gameRoom.whiteTime}s`);
         } else {
           gameRoom.blackTime = gameRoom.timerDuration;
-          console.log(`[executeMove] Resetou timer das PRETAS para ${gameRoom.blackTime}s`);
         }
+        
+        // Marca timestamp para pausar por 1.5s
+        gameRoom._lastMoveTime = Date.now();
       }
       
       // Garantir que timer está rodando
       if (gameRoom.game && gameRoom.game.timerActive && !gameRoom.timerInterval && !gameRoom._timerPaused) {
-        console.log(`[executeMove] Timer não está rodando, iniciando: room=${roomCode}`);
         startTimer(roomCode);
       }
       
@@ -1873,6 +1873,11 @@ function initializeSocket(ioInstance) {
             
             if (roomCode) {
               const room = gameRooms[roomCode];
+              
+              // SISTEMA DE HEARTBEAT DESABILITADO
+              // O jogo continua normalmente mesmo com conexão instável
+              return;
+              
               if (room && !room.isGameConcluded && !room._connectionPaused) {
                 // PROTEÇÃO: Só pausar por heartbeat em jogos muito rápidos (≤ 7s)
                 // Para jogos mais lentos, confiar apenas no disconnect do Socket.IO
@@ -3317,7 +3322,7 @@ function initializeSocket(ioInstance) {
       }
     });
 
-    // DISCONNECT HANDLER: Limpa heartbeat e pausa timer para evitar perda injusta
+    // DISCONNECT HANDLER: DESABILITADO
     socket.on("disconnect", (reason) => {
       try {
         // Limpa heartbeat check
@@ -3326,28 +3331,9 @@ function initializeSocket(ioInstance) {
           socket._heartbeatCheck = null;
         }
 
-        // Encontra a sala do jogador desconectado
-        const roomCode = Object.keys(gameRooms).find((rc) =>
-          gameRooms[rc].players.some((p) => p.socketId === socket.id)
-        );
-
-        if (!roomCode) return;
-
-        const room = gameRooms[roomCode];
-        if (!room || room.isGameConcluded) return;
-
-        // PROTEÇÃO: Desabilitar sistema de disconnect para jogos lentos (> 7s)
-        const timerDuration = room.timerDuration || 300;
-        if (timerDuration > 7) {
-          console.log(
-            `[Disconnect] Timer lento (${timerDuration}s), ignorando disconnect: socket=${socket.id} room=${roomCode}`
-          );
-          return;
-        }
-
-        console.log(
-          `[Disconnect] Jogador desconectou: socket=${socket.id} room=${roomCode} reason=${reason}`
-        );
+        // SISTEMA DE DISCONNECT DESABILITADO
+        // O jogo continua normalmente mesmo com desconexões
+        return;
 
         // Pausa o timer imediatamente para evitar perda por tempo
         if (room.timerInterval) {

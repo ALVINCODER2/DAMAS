@@ -30,34 +30,27 @@ function isMandatoryCapturePresent(game) {
 }
 
 function startTimer(roomCode) {
-  // Stack trace para debug - descobrir quem está chamando startTimer
-  const stack = new Error().stack.split('\n')[2].trim();
-  console.log(`[Timer] startTimer ENTRADA: roomCode=${roomCode} chamado de: ${stack}`);
   const room = gameRooms[roomCode];
-  if (!room) {
-    console.log(`[Timer] startTimer RETORNO: room não encontrado`);
-    return;
-  }
-  if (room.isGameConcluded) {
-    console.log(`[Timer] startTimer RETORNO: jogo já concluído`);
-    return;
-  }
-  
-  console.log(`[Timer] startTimer chamado: room=${roomCode} _timerPaused=${room._timerPaused} timerInterval=${room.timerInterval}`);
-  console.log(`[Timer] timeControl=${room.timeControl} whiteTime=${room.whiteTime} blackTime=${room.blackTime}`);
+  if (!room) return;
+  if (room.isGameConcluded) return;
   
   // PROTEÇÃO CRÍTICA: Se o timer está explicitamente pausado, NÃO iniciar
   if (room._timerPaused) {
-    console.log(`[Timer] Timer está PAUSADO para room=${roomCode}, ignorando chamada`);
+    return;
+  }
+  
+  // PROTEÇÃO CRÍTICA: Se já está iniciando, NÃO fazer nada
+  if (room._timerStarting) {
     return;
   }
   
   // PROTEÇÃO CRÍTICA: Se já existe um interval rodando, NÃO fazer nada
-  // Isso evita race conditions onde múltiplas chamadas tentam iniciar o timer
   if (room.timerInterval) {
-    console.log(`[Timer] Timer já está rodando para room=${roomCode}, ignorando chamada`);
     return;
   }
+  
+  // Marca que está iniciando
+  room._timerStarting = true;
 
   // CORREÇÃO CRÍTICA: Modos "match" e "move" usam whiteTime/blackTime
   // Apenas modo "total" (ou undefined) usa timeLeft
@@ -81,25 +74,30 @@ function startTimer(roomCode) {
         return;
       }
 
+      // MODO "MOVE": Pausa de 1.5s após cada movimento
+      if (room.timeControl === "move" && room._lastMoveTime) {
+        const timeSinceMove = Date.now() - room._lastMoveTime;
+        if (timeSinceMove < 1500) {
+          // Ainda dentro do período de pausa, não decrementa
+          return;
+        }
+      }
+
       // Lê o jogador atual AGORA, não quando o timer foi criado
       const currentPlayerColor = room.game.currentPlayer;
       let timeOver = false;
 
-      console.log(`[Timer] TICK: room=${roomCode} currentPlayer=${currentPlayerColor} whiteTime=${room.whiteTime} blackTime=${room.blackTime}`);
-
       if (currentPlayerColor === "b") {
         room.whiteTime--;
-        console.log(`[Timer] Decrementou BRANCAS: whiteTime agora é ${room.whiteTime}`);
         if (room.whiteTime <= 0) {
           timeOver = true;
-          console.log(`[Timer] Tempo esgotado para BRANCAS: room=${roomCode} whiteTime=${room.whiteTime}`);
+          console.log(`[Timer] Tempo esgotado para BRANCAS: room=${roomCode}`);
         }
       } else {
         room.blackTime--;
-        console.log(`[Timer] Decrementou PRETAS: blackTime agora é ${room.blackTime}`);
         if (room.blackTime <= 0) {
           timeOver = true;
-          console.log(`[Timer] Tempo esgotado para PRETAS: room=${roomCode} blackTime=${room.blackTime}`);
+          console.log(`[Timer] Tempo esgotado para PRETAS: room=${roomCode}`);
         }
       }
 
@@ -123,6 +121,8 @@ function startTimer(roomCode) {
       }
     }, 1000);
     
+    // Libera flag após criar interval
+    room._timerStarting = false;
     console.log(`[Timer] Iniciado para room=${roomCode} whiteTime=${room.whiteTime} blackTime=${room.blackTime} currentPlayer=${room.game.currentPlayer}`);
   } else {
     // PROTEÇÃO: Verificar se timeLeft é válido
@@ -156,6 +156,9 @@ function startTimer(roomCode) {
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
+    
+    // Libera flag após criar interval
+    room._timerStarting = false;
   }
 }
 
