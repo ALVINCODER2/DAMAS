@@ -1832,6 +1832,83 @@ function initializeSocket(ioInstance) {
   initializeManager(io, gameRooms);
 
   io.on("connection", (socket) => {
+    // HEARTBEAT SYSTEM: Inicializa tracking de ping para detecção de desconexão
+    socket._lastPingTime = Date.now();
+    socket._missedPings = 0;
+    
+    // Verifica heartbeat a cada 6 segundos
+    socket._heartbeatCheck = setInterval(() => {
+      try {
+        const timeSinceLastPing = Date.now() - socket._lastPingTime;
+        
+        // Se passou mais de 8s sem ping, considera possivelmente desconectado
+        if (timeSinceLastPing > 8000) {
+          socket._missedPings++;
+          
+          // Após 2 verificações sem ping (16s total), pausa o jogo preventivamente
+          if (socket._missedPings >= 2) {
+            // Encontra sala do jogador
+            const roomCode = Object.keys(gameRooms).find((rc) =>
+              gameRooms[rc].players.some((p) => p.socketId === socket.id)
+            );
+            
+            if (roomCode) {
+              const room = gameRooms[roomCode];
+              if (room && !room.isGameConcluded && !room._connectionPaused) {
+                // Pausa timer
+                if (room.timerInterval) {
+                  clearInterval(room.timerInterval);
+                  room.timerInterval = null;
+                }
+                
+                room._connectionPaused = true;
+                
+                io.to(roomCode).emit("connectionIssue", {
+                  message: "Conexão instável detectada. Timer pausado.",
+                });
+                
+                io.to(roomCode).emit("timerPaused", {
+                  reason: "connectionIssue",
+                });
+                
+                console.log(`[Heartbeat] Timer pausado por conexão instável: room=${roomCode} socket=${socket.id}`);
+              }
+            }
+          }
+        } else {
+          // Reset contador se recebeu ping
+          socket._missedPings = 0;
+          
+          // Retoma jogo se estava pausado por conexão
+          const roomCode = Object.keys(gameRooms).find((rc) =>
+            gameRooms[rc].players.some((p) => p.socketId === socket.id)
+          );
+          
+          if (roomCode) {
+            const room = gameRooms[roomCode];
+            if (room && room._connectionPaused) {
+              room._connectionPaused = false;
+              
+              // Retoma timer se jogo estava ativo
+              if (room.game && room.game.timerActive && !room._latencyPaused) {
+                try {
+                  startTimer(roomCode);
+                } catch (e) {}
+              }
+              
+              io.to(roomCode).emit("connectionRestored", {
+                message: "Conexão restaurada. Jogo retomado.",
+              });
+              
+              console.log(`[Heartbeat] Conexão restaurada: room=${roomCode} socket=${socket.id}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[Heartbeat] Erro no heartbeat check:", e);
+      }
+    }, 6000);
+    
     socket.on("enterLobby", (user) => {
       if (user) socket.userData = user;
       // send immediate lobby snapshot to this socket (non-batched)
@@ -1851,6 +1928,9 @@ function initializeSocket(ioInstance) {
     // Client telemetry: optionally receive client latency report
     socket.on("clientTelemetry", (payload) => {
       try {
+        // HEARTBEAT: Marca timestamp do último ping recebido para detecção de desconexão
+        socket._lastPingTime = Date.now();
+        
         // store last known RTT for diagnostics (not persisted)
         if (!socket.userData) socket.userData = {};
         socket.userData.lastLatency =
@@ -3144,6 +3224,92 @@ function initializeSocket(ioInstance) {
         } catch (e) {
           console.error("Error finding room by email on disconnect:", e);
         }
+      }
+    });
+
+    // DISCONNECT HANDLER: Limpa heartbeat e pausa timer para evitar perda injusta
+    socket.on("disconnect", (reason) => {
+      try {
+        // Limpa heartbeat check
+        if (socket._heartbeatCheck) {
+          clearInterval(socket._heartbeatCheck);
+          socket._heartbeatCheck = null;
+        }
+
+        // Encontra a sala do jogador desconectado
+        const roomCode = Object.keys(gameRooms).find((rc) =>
+          gameRooms[rc].players.some((p) => p.socketId === socket.id)
+        );
+
+        if (!roomCode) return;
+
+        const room = gameRooms[roomCode];
+        if (!room || room.isGameConcluded) return;
+
+        console.log(
+          `[Disconnect] Jogador desconectou: socket=${socket.id} room=${roomCode} reason=${reason}`
+        );
+
+        // Pausa o timer imediatamente para evitar perda por tempo
+        if (room.timerInterval) {
+          clearInterval(room.timerInterval);
+          room.timerInterval = null;
+        }
+
+        // Marca que está aguardando reconexão
+        room._disconnectedPlayer = socket.id;
+        room._disconnectTime = Date.now();
+
+        // Notifica o oponente
+        io.to(roomCode).emit("opponentDisconnected", {
+          message: "Oponente desconectou. Aguardando reconexão...",
+        });
+
+        io.to(roomCode).emit("timerPaused", {
+          reason: "disconnect",
+        });
+
+        // Timeout de reconexão (30 segundos) - após isso, declara W.O.
+        room._reconnectTimeout = setTimeout(() => {
+          const r = gameRooms[roomCode];
+          if (!r || r.isGameConcluded) return;
+
+          // Verifica se ainda está desconectado
+          const stillDisconnected = !r.players.some(
+            (p) =>
+              p.socketId === socket.id &&
+              io.sockets.sockets.get(p.socketId)?.connected
+          );
+
+          if (stillDisconnected) {
+            console.log(
+              `[Disconnect] Timeout de reconexão atingido: room=${roomCode} socket=${socket.id}`
+            );
+
+            // Declara vitória por W.O. para o jogador conectado
+            const connectedPlayer = r.players.find(
+              (p) => p.socketId !== socket.id
+            );
+
+            if (connectedPlayer) {
+              try {
+                const winnerColor =
+                  connectedPlayer.user.email === r.game?.users?.white
+                    ? "b"
+                    : "p";
+                safeProcessEndOfGame(
+                  roomCode,
+                  winnerColor,
+                  "Vitória por W.O. - Oponente desconectou"
+                );
+              } catch (e) {
+                console.error("Erro ao processar W.O.:", e);
+              }
+            }
+          }
+        }, 30000);
+      } catch (e) {
+        console.error("[Disconnect] Erro no handler de disconnect:", e);
       }
     });
   });

@@ -62,9 +62,10 @@ const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
 const io = socketIo(server, {
-  // OTIMIZAÇÃO: Aumentar intervalos de ping para reduzir overhead
-  pingInterval: 30000, // era 25000 (30s)
-  pingTimeout: 90000,  // era 60000 (90s)
+  // OTIMIZAÇÃO: Timeouts ultra-agressivos para detecção rápida de desconexão
+  // Essencial para jogos com timer de 5s - detecta desconexão em ~4-6 segundos
+  pingInterval: 2000,  // era 30000 (2s)
+  pingTimeout: 4000,   // era 90000 (4s)
   
   // Forçar uso de WebSocket para reduzir latência (evita polling)
   transports: ["websocket"],
