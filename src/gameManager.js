@@ -87,6 +87,9 @@ function startTimer(roomCode) {
       const currentPlayerColor = room.game.currentPlayer;
       let timeOver = false;
 
+      // LOG DEBUG TABLITA
+      console.log(`[Timer] TICK: room=${roomCode} mode=${room.timeControl} player=${currentPlayerColor} W=${room.whiteTime} B=${room.blackTime}`);
+
       if (currentPlayerColor === "b") {
         room.whiteTime--;
         if (room.whiteTime <= 0) {
@@ -151,7 +154,17 @@ function startTimer(roomCode) {
       if (room.timeLeft <= 0) {
         clearInterval(room.timerInterval);
         room.timerInterval = null;
-        const loserColor = room.game.currentPlayer;
+    
+    // CORREÇÃO: Limpar timeouts secundários para evitar que disparem após o fim do jogo
+    // (Crucial para Tablita, onde o jogo "continua" para a próxima partida)
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }    const loserColor = room.game.currentPlayer;
         const winnerColor = loserColor === "b" ? "p" : "b";
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
@@ -333,16 +346,31 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
   // mark processing and log entry stack to help debugging race conditions
   room._endProcessing = true;
   try {
-    // entry trace removed to reduce log noise
-    if (room.isGameConcluded) {
-      return;
-    }
+    if (room.isGameConcluded) return;
 
+    console.log(`[processEndOfGame] room=${room.roomCode} winner=${winnerColor} reason=${reason} isTablita=${room.isTablita}`);
+
+    // Marca como concluído para evitar re-entradas (exceto para Tablita que tem 2 jogos)
     // Em Tablita, só concluímos o jogo "oficialmente" no fim do Match (jogo 2)
     // Se for jogo 1, apenas pausamos para o próximo.
     // Marcamos isGameConcluded apenas se não for Tablita ou se for o fim do Match Tablita
 
-    if (room.timerInterval) clearInterval(room.timerInterval);
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    
+    // CORREÇÃO: Limpar timeouts secundários para evitar que disparem após o fim do jogo
+    // (Crucial para Tablita, onde o jogo "continua" para a próxima partida)
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+
     room.drawOfferBy = null;
     io.to(room.roomCode).emit("drawOfferCancelled");
 
@@ -615,9 +643,12 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       // --- FIM DO JOGO 1 (NÃO MOSTRAR REPLAY) ---
       // Apenas preparamos o próximo jogo. Não emitimos gameOver/gameDraw.
 
+      
       room.match.currentGame++; // Vai para 2
       const scoreArray = [p1Score, p2Score];
       const nextGameTitle = `Fim da 1ª Partida!`;
+
+      console.log(`[Tablita] Fim do jogo 1. Placar: ${p1Score}-${p2Score}. Preparando próximo jogo...`);
 
       // Emite aviso que o próximo jogo vai começar (apenas overlay informativo)
       io.to(room.roomCode).emit("nextGameStarting", {
@@ -626,13 +657,22 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       });
 
       setTimeout(() => {
-        // Import dinâmico para evitar dependência circular
-        const { startNextTablitaGame } = require("./socketHandlers");
-        if (startNextTablitaGame) {
-          startNextTablitaGame(room.roomCode);
+        try {
+          // Import dinâmico para evitar dependência circular
+          const { startNextTablitaGame } = require("./socketHandlers");
+          if (startNextTablitaGame) {
+            console.log(`[Tablita] Chamando startNextTablitaGame para room=${room.roomCode}`);
+            startNextTablitaGame(room.roomCode);
+          } else {
+            console.error(`[Tablita] startNextTablitaGame não encontrado!`);
+          }
+        } catch (e) {
+          console.error(`[Tablita] Erro ao iniciar próximo jogo:`, e);
         }
       }, 5000);
     }
+  } catch (err) {
+    console.error(`[Tablita] Erro fatal no processEndOfGame:`, err);
   } finally {
     try {
       room._endProcessing = false;
