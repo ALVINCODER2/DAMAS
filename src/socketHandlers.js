@@ -613,7 +613,9 @@ function sendGameState(roomCode, fullState, opts = {}) {
 
     // Throttle para espectadores: no máximo uma emissão a cada INTERVAL ms
     const INTERVAL =
-      typeof opts.spectatorInterval === "number" ? opts.spectatorInterval : 1000; // otimizado: 1000ms (era 350ms)
+      typeof opts.spectatorInterval === "number"
+        ? opts.spectatorInterval
+        : 1000; // otimizado: 1000ms (era 350ms)
     const now = Date.now();
     if (!room._lastSpectatorUpdate) room._lastSpectatorUpdate = 0;
     if (now - room._lastSpectatorUpdate < INTERVAL && !opts.forceSpectator)
@@ -652,7 +654,7 @@ function sendGameState(roomCode, fullState, opts = {}) {
   }
 }
 
-async function startGameLogic(room) {
+async function startGameLogic(room, forceStart = false) {
   if (!io) return;
   // Proteção contra starts concorrentes / caminhos indesejados
   try {
@@ -682,7 +684,7 @@ async function startGameLogic(room) {
         return false;
       }
     }).length;
-    if (connectedCount < 2) {
+    if (connectedCount < 2 && !forceStart) {
       console.log(
         `[startGameLogic] Menos de 2 jogadores conectados na sala ${room.roomCode} (connected=${connectedCount}). Abortando novo jogo.`
       );
@@ -718,8 +720,8 @@ async function startGameLogic(room) {
           try {
             const specRoom = `${room.roomCode}-spectators`;
             io.to(specRoom).emit("gameOver", {
-                gameMode: room.gameMode,
-                reason: finalReason,
+              gameMode: room.gameMode,
+              reason: finalReason,
               moveHistory: room.game ? room.game.moveHistory : [],
               initialBoardState: room.game ? room.game.initialBoardState : null,
             });
@@ -728,6 +730,10 @@ async function startGameLogic(room) {
         }
       }
       return;
+    } else if (connectedCount < 2 && forceStart) {
+      console.log(
+        `[startGameLogic] Forçando início apesar de connected=${connectedCount} (forceStart=true) para sala ${room.roomCode}`
+      );
     }
   } catch (e) {
     console.error("Erro nas checagens iniciais de startGameLogic:", e);
@@ -1362,7 +1368,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       game.mustCaptureWith = null;
       game.currentPlayer = game.currentPlayer === "b" ? "p" : "b";
       game.turnCapturedPieces = []; // Garante limpeza de peças fantasmas na troca de turno
-      
+
       // REMOVIDO: Verificação de turnValidation que causava indicadores incorretos
       // Os indicadores devem aparecer apenas quando o jogador clica na peça,
       // não automaticamente ao trocar de turno.
@@ -1464,7 +1470,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
           "Oponente bloqueado!"
         );
       }
-      
+
       // MODO "MOVE": Resetar timer do próximo jogador após cada movimento
       if (gameRoom.timeControl === "move") {
         // Após o movimento, o próximo jogador deve ter tempo resetado
@@ -1474,16 +1480,21 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         } else {
           gameRoom.blackTime = gameRoom.timerDuration;
         }
-        
+
         // Marca timestamp para pausar por 1.5s
         gameRoom._lastMoveTime = Date.now();
       }
-      
+
       // Garantir que timer está rodando
-      if (gameRoom.game && gameRoom.game.timerActive && !gameRoom.timerInterval && !gameRoom._timerPaused) {
+      if (
+        gameRoom.game &&
+        gameRoom.game.timerActive &&
+        !gameRoom.timerInterval &&
+        !gameRoom._timerPaused
+      ) {
         startTimer(roomCode);
       }
-      
+
       // Agenda verificação de inatividade para o próximo jogador (10s)
       try {
         scheduleTurnInactivity(roomCode);
@@ -1716,19 +1727,23 @@ async function startNextTablitaGame(roomCode) {
       // Como desabilitamos o sistema de disconnect/W.O., devemos confiar que os jogadores
       // ainda estão na sala e tentar iniciar o jogo. Se realmente não estiverem,
       // perderão por tempo depois.
-      
+
       // (Verificação de conectividade estrita removida para permitir reconexão e continuidade do jogo)
-      
+
       // (Verificação de conectividade estrita removida para permitir reconexão e continuidade do jogo)
-      
-      console.log(`[Tablita] Validando início do jogo 2 para room=${roomCode}. P1=${p1Email} P2=${p2Email}`);
-      
+
+      console.log(
+        `[Tablita] Validando início do jogo 2 para room=${roomCode}. P1=${p1Email} P2=${p2Email}`
+      );
+
       if (!room.match.player1 || !room.match.player2) {
-          console.error(`[Tablita] Jogadores insuficientes na struct match para iniciar jogo 2.`);
-          return;
+        console.error(
+          `[Tablita] Jogadores insuficientes na struct match para iniciar jogo 2.`
+        );
+        return;
       }
-      /* 
-       * (Bloco de código morto removido: room._noFurtherGames e cleanupTimeout) 
+      /*
+       * (Bloco de código morto removido: room._noFurtherGames e cleanupTimeout)
        */
     } catch (err) {
       console.error(
@@ -1737,7 +1752,7 @@ async function startNextTablitaGame(roomCode) {
       );
     }
 
-    await startGameLogic(room);
+    await startGameLogic(room, true);
   } else {
     console.log(
       `[Tablita] Sala ${roomCode} não encontrada para próxima partida.`
@@ -1758,7 +1773,7 @@ function initializeSocket(ioInstance) {
     // HEARTBEAT SYSTEM: Inicializa tracking de ping para detecção de desconexão
     socket._lastPingTime = Date.now();
     socket._missedPings = 0;
-    
+
     // Verifica heartbeat a cada 6 segundos
     // Heartbeat removido a pedido do usuário
     /* socket._heartbeatCheck = setInterval(() => {
@@ -1867,7 +1882,7 @@ function initializeSocket(ioInstance) {
         console.error("[Heartbeat] Erro no heartbeat check:", e);
       }
     }, 6000); */
-    
+
     socket.on("enterLobby", (user) => {
       if (user) socket.userData = user;
       // send immediate lobby snapshot to this socket (non-batched)
@@ -1889,7 +1904,7 @@ function initializeSocket(ioInstance) {
       try {
         // HEARTBEAT: Marca timestamp do último ping recebido para detecção de desconexão
         socket._lastPingTime = Date.now();
-        
+
         // store last known RTT for diagnostics (not persisted)
         if (!socket.userData) socket.userData = {};
         socket.userData.lastLatency =
@@ -2595,16 +2610,17 @@ function initializeSocket(ioInstance) {
           // CORREÇÃO: Se o jogo já terminou (ex: perdeu por W.O. enquanto desconectado),
           // envia gameOver para desbloquear a tela ao invés de gameResumed
           // MAS: não enviar se há uma revanche em andamento (race condition)
-          const bothAcceptedRevanche = 
-            room.revancheRequests && 
+          const bothAcceptedRevanche =
+            room.revancheRequests &&
             room.revancheRequests.size === 2 &&
             room.players.length === 2;
-          
+
           if (room.isGameConcluded && !bothAcceptedRevanche) {
             // Determina quem ganhou para enviar o evento correto
-            const playerColor = room.game.users.white === user.email ? "b" : "p";
+            const playerColor =
+              room.game.users.white === user.email ? "b" : "p";
             const opponentColor = playerColor === "b" ? "p" : "b";
-            
+
             // Assume que se o jogo terminou e o jogador está reconectando,
             // provavelmente perdeu (W.O. ou timeout). Envia gameOver.
             socket.emit("gameOver", {
@@ -2613,13 +2629,13 @@ function initializeSocket(ioInstance) {
               moveHistory: room.game.moveHistory || [],
               initialBoardState: room.game.initialBoardState || null,
             });
-            
+
             console.log(
               `[Socket] rejoinActiveGame: jogo já concluído, enviando gameOver para socket=${socket.id} room=${roomCode}`
             );
             return; // Não continua com gameResumed
           }
-          
+
           // Garantir timerActive explícito e logar estado de resumir jogo
           const gameResumedPayload = {
             gameState: room.game,
@@ -3083,7 +3099,7 @@ function initializeSocket(ioInstance) {
               room._connectionPaused = false;
               room._disconnectedPlayer = null;
               room._disconnectTime = null;
-              
+
               // clear any leftover timers to avoid interference
               try {
                 if (room.timerInterval) clearInterval(room.timerInterval);
