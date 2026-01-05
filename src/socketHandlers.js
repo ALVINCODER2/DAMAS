@@ -47,8 +47,9 @@ const LOBBY_UPDATE_DEBOUNCE = 2000; // Lobby: 2000ms (era 300ms)
 
 // Latency thresholds (ms)
 const LATENCY_WARNING_MS = 1000; // apenas aviso
-const LATENCY_PAUSE_MS = 3000; // pausar partida quando alcançado
-const LATENCY_RESUME_MS = 1500; // retomar quando abaixo deste valor
+const LATENCY_PAUSE_MS = 200; // pausar partida quando alcançado
+const LATENCY_RESUME_MS = 150; // retomar quando abaixo deste valor
+
 // ============================================================================
 
 // Monitor simples do event-loop: loga se o loop ficar bloqueado além de um limiar.

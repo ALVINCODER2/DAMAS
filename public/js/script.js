@@ -305,7 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function startPingChecks() {
     if (__pingInterval) return;
     createPingIndicator();
-    // reduz para 15s para menos amostragem e menos tráfego
+    // verifica a cada 5s para detecção mais rápida de problemas de latência
     __pingInterval = setInterval(() => {
       try {
         const t = Date.now();
@@ -331,7 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
           } catch (e) {}
         });
       } catch (e) {}
-    }, 15000);
+    }, 5000);
   }
 
   // Start ping checks once connected (or when already connected)
