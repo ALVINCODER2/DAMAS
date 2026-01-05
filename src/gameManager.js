@@ -30,15 +30,50 @@ function isMandatoryCapturePresent(game) {
 }
 
 function startTimer(roomCode) {
+  // Stack trace para debug - descobrir quem está chamando startTimer
+  const stack = new Error().stack.split('\n')[2].trim();
+  console.log(`[Timer] startTimer ENTRADA: roomCode=${roomCode} chamado de: ${stack}`);
   const room = gameRooms[roomCode];
-  if (!room) return;
-  if (room.isGameConcluded) return;
-  // startTimer called for room (timerActive state respected)
-  if (room.timerInterval) clearInterval(room.timerInterval);
+  if (!room) {
+    console.log(`[Timer] startTimer RETORNO: room não encontrado`);
+    return;
+  }
+  if (room.isGameConcluded) {
+    console.log(`[Timer] startTimer RETORNO: jogo já concluído`);
+    return;
+  }
+  
+  console.log(`[Timer] startTimer chamado: room=${roomCode} _timerPaused=${room._timerPaused} timerInterval=${room.timerInterval}`);
+  console.log(`[Timer] timeControl=${room.timeControl} whiteTime=${room.whiteTime} blackTime=${room.blackTime}`);
+  
+  // PROTEÇÃO CRÍTICA: Se o timer está explicitamente pausado, NÃO iniciar
+  if (room._timerPaused) {
+    console.log(`[Timer] Timer está PAUSADO para room=${roomCode}, ignorando chamada`);
+    return;
+  }
+  
+  // PROTEÇÃO CRÍTICA: Se já existe um interval rodando, NÃO fazer nada
+  // Isso evita race conditions onde múltiplas chamadas tentam iniciar o timer
+  if (room.timerInterval) {
+    console.log(`[Timer] Timer já está rodando para room=${roomCode}, ignorando chamada`);
+    return;
+  }
 
-  if (room.timeControl === "match") {
+  // CORREÇÃO CRÍTICA: Modos "match" e "move" usam whiteTime/blackTime
+  // Apenas modo "total" (ou undefined) usa timeLeft
+  if (room.timeControl === "match" || room.timeControl === "move") {
     // CORREÇÃO CRÍTICA: NÃO capturar currentPlayerColor aqui!
     // Deve ser lido DENTRO do interval para pegar o jogador correto após troca de turno
+    
+    // PROTEÇÃO: Verificar se os tempos são válidos antes de iniciar
+    if (typeof room.whiteTime !== 'number' || room.whiteTime < 0) {
+      console.error(`[Timer] whiteTime inválido: ${room.whiteTime}, resetando para timerDuration`);
+      room.whiteTime = room.timerDuration || 7;
+    }
+    if (typeof room.blackTime !== 'number' || room.blackTime < 0) {
+      console.error(`[Timer] blackTime inválido: ${room.blackTime}, resetando para timerDuration`);
+      room.blackTime = room.timerDuration || 7;
+    }
 
     room.timerInterval = setInterval(() => {
       if (!gameRooms[roomCode]) {
@@ -50,12 +85,22 @@ function startTimer(roomCode) {
       const currentPlayerColor = room.game.currentPlayer;
       let timeOver = false;
 
+      console.log(`[Timer] TICK: room=${roomCode} currentPlayer=${currentPlayerColor} whiteTime=${room.whiteTime} blackTime=${room.blackTime}`);
+
       if (currentPlayerColor === "b") {
         room.whiteTime--;
-        if (room.whiteTime <= 0) timeOver = true;
+        console.log(`[Timer] Decrementou BRANCAS: whiteTime agora é ${room.whiteTime}`);
+        if (room.whiteTime <= 0) {
+          timeOver = true;
+          console.log(`[Timer] Tempo esgotado para BRANCAS: room=${roomCode} whiteTime=${room.whiteTime}`);
+        }
       } else {
         room.blackTime--;
-        if (room.blackTime <= 0) timeOver = true;
+        console.log(`[Timer] Decrementou PRETAS: blackTime agora é ${room.blackTime}`);
+        if (room.blackTime <= 0) {
+          timeOver = true;
+          console.log(`[Timer] Tempo esgotado para PRETAS: room=${roomCode} blackTime=${room.blackTime}`);
+        }
       }
 
       // Timer updates são frequentes e podem criar backlog em redes lentas;
@@ -70,12 +115,22 @@ function startTimer(roomCode) {
 
       if (timeOver) {
         clearInterval(room.timerInterval);
+        room.timerInterval = null;
         const loserColor = currentPlayerColor;
         const winnerColor = loserColor === "b" ? "p" : "b";
+        console.log(`[Timer] Processando fim de jogo: winner=${winnerColor} loser=${loserColor} room=${roomCode}`);
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
+    
+    console.log(`[Timer] Iniciado para room=${roomCode} whiteTime=${room.whiteTime} blackTime=${room.blackTime} currentPlayer=${room.game.currentPlayer}`);
   } else {
+    // PROTEÇÃO: Verificar se timeLeft é válido
+    if (typeof room.timeLeft !== 'number' || room.timeLeft < 0) {
+      console.error(`[Timer] timeLeft inválido: ${room.timeLeft}, resetando para timerDuration`);
+      room.timeLeft = room.timerDuration || 300;
+    }
+    
     io.to(roomCode).volatile.emit("timerUpdate", {
       timeLeft: room.timeLeft,
       roomCode: roomCode,
@@ -95,6 +150,7 @@ function startTimer(roomCode) {
       });
       if (room.timeLeft <= 0) {
         clearInterval(room.timerInterval);
+        room.timerInterval = null;
         const loserColor = room.game.currentPlayer;
         const winnerColor = loserColor === "b" ? "p" : "b";
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
@@ -104,6 +160,8 @@ function startTimer(roomCode) {
 }
 
 function resetTimer(roomCode) {
+  const stack = new Error().stack.split('\n')[2].trim();
+  console.log(`[Timer] resetTimer chamado: roomCode=${roomCode} de: ${stack}`);
   const room = gameRooms[roomCode];
   if (room) {
     clearInterval(room.timerInterval);

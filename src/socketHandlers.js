@@ -1464,7 +1464,26 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
           "Oponente bloqueado!"
         );
       }
-      resetTimer(roomCode);
+      
+      // MODO "MOVE": Resetar timer do próximo jogador após cada movimento
+      if (gameRoom.timeControl === "move") {
+        // Após o movimento, o próximo jogador deve ter tempo resetado
+        const nextPlayer = game.currentPlayer; // Já foi trocado no executeMove
+        if (nextPlayer === "b") {
+          gameRoom.whiteTime = gameRoom.timerDuration;
+          console.log(`[executeMove] Resetou timer das BRANCAS para ${gameRoom.whiteTime}s`);
+        } else {
+          gameRoom.blackTime = gameRoom.timerDuration;
+          console.log(`[executeMove] Resetou timer das PRETAS para ${gameRoom.blackTime}s`);
+        }
+      }
+      
+      // Garantir que timer está rodando
+      if (gameRoom.game && gameRoom.game.timerActive && !gameRoom.timerInterval && !gameRoom._timerPaused) {
+        console.log(`[executeMove] Timer não está rodando, iniciando: room=${roomCode}`);
+        startTimer(roomCode);
+      }
+      
       // Agenda verificação de inatividade para o próximo jogador (10s)
       try {
         scheduleTurnInactivity(roomCode);
@@ -1855,10 +1874,22 @@ function initializeSocket(ioInstance) {
             if (roomCode) {
               const room = gameRooms[roomCode];
               if (room && !room.isGameConcluded && !room._connectionPaused) {
+                // PROTEÇÃO: Só pausar por heartbeat em jogos muito rápidos (≤ 7s)
+                // Para jogos mais lentos, confiar apenas no disconnect do Socket.IO
+                const timerDuration = room.timerDuration || 300;
+                if (timerDuration > 7) {
+                  console.log(`[Heartbeat] Timer lento (${timerDuration}s), não pausando por heartbeat: room=${roomCode}`);
+                  return;
+                }
+                
                 // Pausa timer
+                room._timerPaused = true; // BLOQUEIA startTimer
                 if (room.timerInterval) {
                   clearInterval(room.timerInterval);
                   room.timerInterval = null;
+                  console.log(`[Heartbeat] Timer LIMPO (interval=null) para room=${roomCode}`);
+                } else {
+                  console.log(`[Heartbeat] Timer JÁ estava null para room=${roomCode}`);
                 }
                 
                 room._connectionPaused = true;
@@ -1889,11 +1920,29 @@ function initializeSocket(ioInstance) {
             if (room && room._connectionPaused) {
               room._connectionPaused = false;
               
+              // PROTEÇÃO: Se o jogo já terminou (ex: W.O.), não tentar retomar timer
+              if (room.isGameConcluded) {
+                console.log(`[Heartbeat] Jogo já concluído, não retomando timer: room=${roomCode}`);
+                return;
+              }
+              
+              console.log(`[Heartbeat] Tentando retomar timer: room=${roomCode} timerActive=${room.game?.timerActive} latencyPaused=${room._latencyPaused} timerInterval=${room.timerInterval}`);
+              
+              // LIBERA o timer para poder ser iniciado
+              room._timerPaused = false;
+              
               // CORREÇÃO: Retoma timer de onde parou (não reseta!)
               if (room.game && room.game.timerActive && !room._latencyPaused) {
                 try {
+                  console.log(`[Heartbeat] Chamando startTimer para room=${roomCode}`);
+                  console.log(`[Heartbeat] ANTES de startTimer: _timerPaused=${room._timerPaused} timerInterval=${room.timerInterval}`);
                   startTimer(roomCode);
-                } catch (e) {}
+                  console.log(`[Heartbeat] DEPOIS de startTimer`);
+                } catch (e) {
+                  console.error(`[Heartbeat] Erro ao chamar startTimer:`, e);
+                }
+              } else {
+                console.log(`[Heartbeat] NÃO chamou startTimer: timerActive=${room.game?.timerActive} latencyPaused=${room._latencyPaused}`);
               }
               
               io.to(roomCode).emit("connectionRestored", {
@@ -1956,6 +2005,9 @@ function initializeSocket(ioInstance) {
                   if (r.timerInterval) {
                     clearInterval(r.timerInterval);
                     r.timerInterval = null;
+                    console.log(`[Latency] Timer LIMPO (interval=null) para room=${r.roomCode}`);
+                  } else {
+                    console.log(`[Latency] Timer JÁ estava null para room=${r.roomCode}`);
                   }
                   io.to(r.roomCode).emit("opponentHighLatency", {
                     roomCode: r.roomCode,
@@ -3283,6 +3335,15 @@ function initializeSocket(ioInstance) {
 
         const room = gameRooms[roomCode];
         if (!room || room.isGameConcluded) return;
+
+        // PROTEÇÃO: Desabilitar sistema de disconnect para jogos lentos (> 7s)
+        const timerDuration = room.timerDuration || 300;
+        if (timerDuration > 7) {
+          console.log(
+            `[Disconnect] Timer lento (${timerDuration}s), ignorando disconnect: socket=${socket.id} room=${roomCode}`
+          );
+          return;
+        }
 
         console.log(
           `[Disconnect] Jogador desconectou: socket=${socket.id} room=${roomCode} reason=${reason}`
