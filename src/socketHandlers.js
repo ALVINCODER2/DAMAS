@@ -1760,7 +1760,8 @@ function initializeSocket(ioInstance) {
     socket._missedPings = 0;
     
     // Verifica heartbeat a cada 6 segundos
-    socket._heartbeatCheck = setInterval(() => {
+    // Heartbeat removido a pedido do usuário
+    /* socket._heartbeatCheck = setInterval(() => {
       try {
         const timeSinceLastPing = Date.now() - socket._lastPingTime;
         
@@ -1865,7 +1866,7 @@ function initializeSocket(ioInstance) {
       } catch (e) {
         console.error("[Heartbeat] Erro no heartbeat check:", e);
       }
-    }, 6000);
+    }, 6000); */
     
     socket.on("enterLobby", (user) => {
       if (user) socket.userData = user;
@@ -1894,57 +1895,8 @@ function initializeSocket(ioInstance) {
         socket.userData.lastLatency =
           payload && payload.rtt ? payload.rtt : null;
         // Se o cliente reportou latência muito alta, tente pausar a partida
-        try {
-          const last = socket.userData.lastLatency;
-          if (typeof last === "number") {
-            // Identifica sala em que o socket participa (se jogador)
-            const roomCode = Object.keys(gameRooms).find((rc) =>
-              gameRooms[rc].players.some((p) => p.socketId === socket.id)
-            );
-            if (roomCode) {
-              const r = gameRooms[roomCode];
-              if (
-                last >= LATENCY_PAUSE_MS &&
-                !r._latencyPaused &&
-                !r.isGameConcluded
-              ) {
-                try {
-                  r._latencyPaused = true;
-                  // pause server-side timer to avoid penalizar jogador com ping alto
-                  if (r.timerInterval) {
-                    clearInterval(r.timerInterval);
-                    r.timerInterval = null;
-                    console.log(`[Latency] Timer LIMPO (interval=null) para room=${r.roomCode}`);
-                  } else {
-                    console.log(`[Latency] Timer JÁ estava null para room=${r.roomCode}`);
-                  }
-                  io.to(r.roomCode).emit("opponentHighLatency", {
-                    roomCode: r.roomCode,
-                    latency: last,
-                  });
-                  io.to(r.roomCode).emit("timerPaused", {
-                    reason: "highLatency",
-                  });
-                } catch (e) {}
-              }
-
-              // Se a latência caiu abaixo do limiar de retomada e a sala estava pausada, retome
-              if (last < LATENCY_RESUME_MS && r._latencyPaused) {
-                try {
-                  r._latencyPaused = false;
-                  io.to(r.roomCode).emit("latencyResolved", {
-                    roomCode: r.roomCode,
-                    latency: last,
-                  });
-                  // CORREÇÃO: Retoma timer de onde parou (não reseta!)
-                  try {
-                    if (r.game && r.game.timerActive) startTimer(r.roomCode);
-                  } catch (e) {}
-                } catch (e) {}
-              }
-            }
-          }
-        } catch (e) {}
+        // Lógica de pausa por latência removida a pedido do usuário
+        // O jogo não será mais pausado automaticamente devido ao ping alto
       } catch (e) {}
     });
 
