@@ -1707,33 +1707,19 @@ async function startNextTablitaGame(roomCode) {
         // match já decidido; não iniciar próxima partida
         room.isGameConcluded = true;
         room.cleanupTimeout = setTimeout(() => {
+          if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
+        }, 60000);
+        return;
+      }
+
       // RELAXAMENTO DA VERIFICAÇÃO DE CONECTIVIDADE
       // Como desabilitamos o sistema de disconnect/W.O., devemos confiar que os jogadores
       // ainda estão na sala e tentar iniciar o jogo. Se realmente não estiverem,
       // perderão por tempo depois.
       
-      const p1Email = room.match && room.match.player1 && room.match.player1.email;
-      const p2Email = room.match && room.match.player2 && room.match.player2.email;
+      // (Verificação de conectividade estrita removida para permitir reconexão e continuidade do jogo)
       
-      /*
-      // CÓDIGO ANTIGO REMOVIDO: Verificação estrita de sockets conectados
-      // Isso estava impedindo o início do Jogo 2 se houvesse micro- desconexões
-      /*
-      // Resto do código removido...
-                },
-              });
-            } catch (mhErr) {
-              console.error("Erro enfileirando MatchHistory:", mhErr);
-            }
-          } catch (e) {
-            console.error("Erro ao encerrar match:", e);
-          }
-        }
-        
-        room.isGameConcluded = true;
-        return;
-      }
-      */
+      // (Verificação de conectividade estrita removida para permitir reconexão e continuidade do jogo)
       
       console.log(`[Tablita] Validando início do jogo 2 para room=${roomCode}. P1=${p1Email} P2=${p2Email}`);
       
