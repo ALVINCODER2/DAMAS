@@ -728,19 +728,11 @@ window.initLobby = function (socket, UI) {
       }
     }
     if (e.target.classList.contains("watch-game-btn")) {
-      const roomCode = e.target.dataset.roomCode;
-      if (!window.currentUser) return alert("Faça login para assistir.");
-      if (!window.currentUser.username) {
-        if (window.enforceUsernameRequirement)
-          window.enforceUsernameRequirement();
-        return;
-      }
+      // Temporariamente desabilitado: assistir partidas em manutenção
       try {
-        localStorage.setItem("spectateRoom", roomCode);
-        localStorage.setItem("spectatePending", "1");
+        // Mensagem simples ao usuário; pode ser substituída por um modal personalizado
+        alert("Assistir partidas está em manutenção no momento.");
       } catch (e) {}
-      // Emit request to server to join as spectator; server will emit spectatorJoined or joinError
-      socket.emit("joinAsSpectator", { roomCode });
       return;
     }
   });
