@@ -244,7 +244,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const row = document.createElement("tr");
       const date = new Date(w.createdAt).toLocaleString();
       const amountRequested = w.amount;
-      const amountToSend = amountRequested * 0.7; // 30% de taxa
+      const amountToSend = amountRequested * 0.8; // 20% de taxa
 
       row.innerHTML = `
             <td>${date}</td>
@@ -275,11 +275,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (target.classList.contains("approve-btn")) {
       const amount = parseFloat(target.dataset.amount);
-      const amountToSend = (amount * 0.7).toFixed(2);
+      const amountToSend = (amount * 0.8).toFixed(2);
 
       if (
         confirm(
-          `Confirma que enviou R$ ${amountToSend} (já descontado 30%) para o usuário? O sistema removerá R$ ${amount.toFixed(
+          `Confirma que enviou R$ ${amountToSend} (já descontado 20%) para o usuário? O sistema removerá R$ ${amount.toFixed(
             2
           )} do saldo dele.`
         )
