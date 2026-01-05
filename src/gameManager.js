@@ -37,7 +37,8 @@ function startTimer(roomCode) {
   if (room.timerInterval) clearInterval(room.timerInterval);
 
   if (room.timeControl === "match") {
-    const currentPlayerColor = room.game.currentPlayer;
+    // CORREÇÃO CRÍTICA: NÃO capturar currentPlayerColor aqui!
+    // Deve ser lido DENTRO do interval para pegar o jogador correto após troca de turno
 
     room.timerInterval = setInterval(() => {
       if (!gameRooms[roomCode]) {
@@ -45,6 +46,8 @@ function startTimer(roomCode) {
         return;
       }
 
+      // Lê o jogador atual AGORA, não quando o timer foi criado
+      const currentPlayerColor = room.game.currentPlayer;
       let timeOver = false;
 
       if (currentPlayerColor === "b") {

@@ -2681,7 +2681,13 @@ function initializeSocket(ioInstance) {
         if (room.game) {
           // CORREÇÃO: Se o jogo já terminou (ex: perdeu por W.O. enquanto desconectado),
           // envia gameOver para desbloquear a tela ao invés de gameResumed
-          if (room.isGameConcluded) {
+          // MAS: não enviar se há uma revanche em andamento (race condition)
+          const bothAcceptedRevanche = 
+            room.revancheRequests && 
+            room.revancheRequests.size === 2 &&
+            room.players.length === 2;
+          
+          if (room.isGameConcluded && !bothAcceptedRevanche) {
             // Determina quem ganhou para enviar o evento correto
             const playerColor = room.game.users.white === user.email ? "b" : "p";
             const opponentColor = playerColor === "b" ? "p" : "b";
