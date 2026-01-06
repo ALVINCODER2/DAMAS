@@ -1115,7 +1115,14 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
   // Debug logs removed for production
   const gameRoom = gameRooms[roomCode];
   if (!gameRoom || !gameRoom.game) return;
-  if (gameRoom.isGameConcluded) return;
+  
+  // CRÍTICO: Bloquear TODOS os movimentos se jogo já concluído
+  // Previne race condition onde movimento é enviado após timeout
+  if (gameRoom.isGameConcluded) {
+    console.log(`[executeMove] Movimento bloqueado: jogo já concluído room=${roomCode}`);
+    return;
+  }
+  
   const game = gameRoom.game;
 
   // Clear any per-turn inactivity timer when a move is being processed
@@ -1148,21 +1155,34 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     if (socketPlayerColor && socketPlayerColor !== playerColor) return;
   }
 
-  // CORREÇÃO: Validar se o jogador ainda tem tempo antes de permitir movimento
+  // CORREÇÃO CRÍTICA: Validar se o jogador ainda tem tempo antes de permitir movimento
+  // Bloqueamos se tempo < 1 (não <= 0) para prevenir race conditions
   if (gameRoom.timeControl === "match" || gameRoom.timeControl === "move") {
     const currentTime =
       playerColor === "b" ? gameRoom.whiteTime : gameRoom.blackTime;
-    if (typeof currentTime === "number" && currentTime <= 0) {
+    if (typeof currentTime === "number" && currentTime < 1) {
       console.log(
-        `[executeMove] Movimento bloqueado: tempo esgotado para ${playerColor} (${currentTime}s)`
+        `[executeMove] Movimento bloqueado: tempo insuficiente para ${playerColor} (${currentTime}s)`
       );
+      // Marca como concluído e declara derrota imediatamente se ainda não foi marcado
+      if (!gameRoom.isGameConcluded) {
+        gameRoom.isGameConcluded = true;
+        const winnerColor = playerColor === "b" ? "p" : "b";
+        safeProcessEndOfGame(winnerColor, playerColor, gameRoom, "Tempo esgotado!");
+      }
       return; // Tempo esgotado, não permitir movimento
     }
   } else if (gameRoom.timeControl === "total") {
-    if (typeof gameRoom.timeLeft === "number" && gameRoom.timeLeft <= 0) {
+    if (typeof gameRoom.timeLeft === "number" && gameRoom.timeLeft < 1) {
       console.log(
-        `[executeMove] Movimento bloqueado: tempo total esgotado (${gameRoom.timeLeft}s)`
+        `[executeMove] Movimento bloqueado: tempo total insuficiente (${gameRoom.timeLeft}s)`
       );
+      // Marca como concluído e declara derrota imediatamente
+      if (!gameRoom.isGameConcluded) {
+        gameRoom.isGameConcluded = true;
+        const winnerColor = playerColor === "b" ? "p" : "b";
+        safeProcessEndOfGame(winnerColor, playerColor, gameRoom, "Tempo esgotado!");
+      }
       return;
     }
   }

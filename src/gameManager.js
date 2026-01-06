@@ -122,6 +122,10 @@ function startTimer(roomCode) {
       }
 
       if (timeOver) {
+        // CRÍTICO: Marcar como concluído IMEDIATAMENTE para bloquear movimentos
+        // Isso previne race condition onde jogador envia movimento após tempo acabar
+        room.isGameConcluded = true;
+        
         clearInterval(room.timerInterval);
         room.timerInterval = null;
         const loserColor = currentPlayerColor;
