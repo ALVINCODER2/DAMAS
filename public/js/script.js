@@ -677,6 +677,38 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (e) {}
       GameCore.state.drawMovesCounter = 0;
 
+      // MODAL DE AGUARDE: Mostra por 5 segundos quando revanche é aceita
+      try {
+        const rematchOverlay = document.getElementById("rematch-loading-overlay");
+        const countdownEl = document.getElementById("rematch-countdown");
+        
+        if (rematchOverlay && countdownEl) {
+          // Mostra o modal
+          rematchOverlay.classList.remove("hidden");
+          
+          let countdown = 5;
+          countdownEl.textContent = countdown;
+          
+          // Atualiza contador a cada segundo
+          const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdown > 0) {
+              countdownEl.textContent = countdown;
+            } else {
+              clearInterval(countdownInterval);
+              rematchOverlay.classList.add("hidden");
+            }
+          }, 1000);
+          
+          // Garante que esconde após 5 segundos mesmo se interval falhar
+          setTimeout(() => {
+            rematchOverlay.classList.add("hidden");
+          }, 5000);
+        }
+      } catch (e) {
+        console.error("Erro ao mostrar modal de aguarde:", e);
+      }
+
       document.getElementById("game-over-overlay").classList.add("hidden");
       document.getElementById("next-game-overlay").classList.add("hidden");
 
@@ -1391,15 +1423,76 @@ document.addEventListener("DOMContentLoaded", () => {
   // Quando ambos aceitarem revanche, grava pausa de 3s e recarrega a página
   socket.on("revancheAccepted", () => {
     try {
-      // limpa room salvo para evitar rejoin automático inconsistente
-      localStorage.removeItem("checkersCurrentRoom");
+      // manter `checkersCurrentRoom` para permitir rejoin automático após reload
+      // (não remover aqui — evita criar nova sala durante revanche)
     } catch (e) {}
     try {
-      // define timestamp até quando bloquear (3 segundos)
-      localStorage.setItem("revanchePausedUntil", String(Date.now() + 3000));
+      // define timestamp até quando bloquear (5 segundos)
+      localStorage.setItem("revanchePausedUntil", String(Date.now() + 5000));
     } catch (e) {}
-    // reload para que ambos clientes sincronizem e então a página aplicará a pausa
-    window.location.reload();
+
+    // Mostra modal de contagem regressiva de 5s, após isso recarrega a página
+    try {
+      if (!document.getElementById("revanche-countdown-overlay")) {
+        const ov = document.createElement("div");
+        ov.id = "revanche-countdown-overlay";
+        ov.style.cssText =
+          "position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:2147483647;color:#fff;font-size:28px;font-weight:800;";
+        const box = document.createElement("div");
+        box.style.cssText =
+          "background:rgba(10,24,40,0.95);padding:24px 32px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:12px;";
+        const msg = document.createElement("div");
+        msg.textContent = "Revanche aceita! Preparando partida...";
+        msg.style.fontSize = "18px";
+        const counter = document.createElement("div");
+        counter.id = "revanche-countdown-value";
+        counter.textContent = "5";
+        counter.style.fontSize = "48px";
+        counter.style.color = "#2ecc71";
+        box.appendChild(msg);
+        box.appendChild(counter);
+        ov.appendChild(box);
+        document.body.appendChild(ov);
+
+        // Desabilita botões críticos durante a contagem
+        try {
+          document
+            .querySelectorAll(".revanche-btn, .exit-lobby-btn, .replay-btn")
+            .forEach((b) => (b.disabled = true));
+        } catch (e) {}
+
+        let sec = 5;
+        const iv = setInterval(() => {
+          try {
+            sec -= 1;
+            const el = document.getElementById("revanche-countdown-value");
+            if (el) el.textContent = String(sec);
+            if (sec <= 0) {
+              clearInterval(iv);
+              try {
+                const ovEl = document.getElementById(
+                  "revanche-countdown-overlay"
+                );
+                if (ovEl) ovEl.remove();
+              } catch (e) {}
+              try {
+                document
+                  .querySelectorAll(
+                    ".revanche-btn, .exit-lobby-btn, .replay-btn"
+                  )
+                  .forEach((b) => (b.disabled = false));
+              } catch (e) {}
+              // reload para que ambos clientes sincronizem
+              try {
+                window.location.reload();
+              } catch (e) {
+                window.location.href = window.location.href;
+              }
+            }
+          } catch (e) {}
+        }, 1000);
+      }
+    } catch (e) {}
   });
 
   // Aggressive handler: ensure user is ejected to lobby immediately

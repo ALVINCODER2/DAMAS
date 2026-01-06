@@ -64,15 +64,16 @@ const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 const io = socketIo(server, {
   // OTIMIZAÇÃO: Timeouts ultra-agressivos para detecção rápida de desconexão
   // Essencial para jogos com timer de 5s - detecta desconexão em ~4-6 segundos
-  pingInterval: 2000,  // era 30000 (2s)
-  pingTimeout: 4000,   // era 90000 (4s)
-  
-  // Forçar uso de WebSocket para reduzir latência (evita polling)
-  transports: ["websocket"],
-  
+  pingInterval: 2000, // era 30000 (2s)
+  pingTimeout: 4000, // era 90000 (4s)
+
+  // Permitir fallback para polling caso WebSocket não se estabeleça
+  // (a ordem permite polling primeiro, depois tentativa de upgrade para websocket)
+  transports: ["polling", "websocket"],
+
   // Compatibilidade com clients Engine.IO v3 quando necessário
   allowEIO3: true,
-  
+
   // OTIMIZAÇÃO CRÍTICA: Habilitar compressão WebSocket (redução de 40-60%)
   // Ajustado threshold e level para balancear CPU vs compressão
   perMessageDeflate: {
@@ -90,7 +91,7 @@ const io = socketIo(server, {
     serverMaxWindowBits: 10,
     concurrencyLimit: 10,
   },
-  
+
   cors: {
     origin: "*",
     methods: ["GET", "POST"],

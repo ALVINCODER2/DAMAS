@@ -385,6 +385,15 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       room.firstMoveTimeout = null;
     }
 
+    // CORREÇÃO CRÍTICA: Resetar valores de tempo para evitar que sejam carregados na revanche
+    // Isso previne que movimentos sejam bloqueados por tempo esgotado após revanche
+    if (room.timeControl === "match" || room.timeControl === "move") {
+      room.whiteTime = room.timerDuration || 7;
+      room.blackTime = room.timerDuration || 7;
+    } else {
+      room.timeLeft = room.timerDuration || 300;
+    }
+
     room.drawOfferBy = null;
     io.to(room.roomCode).emit("drawOfferCancelled");
 

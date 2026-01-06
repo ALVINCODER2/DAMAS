@@ -664,7 +664,7 @@ function sendGameState(roomCode, fullState, opts = {}) {
 function updateSpectatorCount(roomCode) {
   const room = gameRooms[roomCode];
   if (!room) return;
-  
+
   clearTimeout(room._spectatorCountTimeout);
   room._spectatorCountTimeout = setTimeout(() => {
     const count = room.spectators ? room.spectators.size : 0;
@@ -829,11 +829,11 @@ async function startGameLogic(room, forceStart = false) {
       boardSize = 8;
     } else {
       // Primeira partida: sorteia abertura evitando as últimas 3 usadas nesta sala
-      const history = tablitaOpeningHistory.get(roomCode) || [];
+      const history = tablitaOpeningHistory.get(room.roomCode) || [];
       let randomIndex;
       let attempts = 0;
       const maxAttempts = 10;
-      
+
       do {
         randomIndex = Math.floor(Math.random() * idfTablitaOpenings.length);
         attempts++;
@@ -846,9 +846,13 @@ async function startGameLogic(room, forceStart = false) {
       // Atualiza histórico (mantém últimas 3)
       history.push(randomIndex);
       if (history.length > 3) history.shift(); // Remove mais antiga
-      tablitaOpeningHistory.set(roomCode, history);
-      
-      console.log(`[Tablita] Sorteio: índice=${randomIndex} nome="${idfTablitaOpenings[randomIndex].name}" histórico=[${history.join(',')}]`);
+      tablitaOpeningHistory.set(room.roomCode, history);
+
+      console.log(
+        `[Tablita] Sorteio: índice=${randomIndex} nome="${
+          idfTablitaOpenings[randomIndex].name
+        }" histórico=[${history.join(",")}]`
+      );
 
       const selectedOpening = idfTablitaOpenings[randomIndex];
       boardState = JSON.parse(JSON.stringify(selectedOpening.board));
@@ -914,11 +918,16 @@ async function startGameLogic(room, forceStart = false) {
     );
   }
 
-  if (room.timeControl === "match") {
-    room.whiteTime = room.timerDuration;
-    room.blackTime = room.timerDuration;
+  // CORREÇÃO: Garantir que os valores de tempo estejam limpos antes de resetar
+  // Isso previne race conditions onde valores antigos (0s) são mantidos
+  if (room.timeControl === "match" || room.timeControl === "move") {
+    // Força reset completo dos valores de tempo
+    room.whiteTime = room.timerDuration || 7;
+    room.blackTime = room.timerDuration || 7;
+    console.log(`[startGameLogic] Timer reset: W=${room.whiteTime}s B=${room.blackTime}s room=${room.roomCode}`);
   } else {
-    room.timeLeft = room.timerDuration;
+    room.timeLeft = room.timerDuration || 300;
+    console.log(`[startGameLogic] Timer reset: timeLeft=${room.timeLeft}s room=${room.roomCode}`);
   }
 
   const bestCaptures = timedFindBestCaptureMoves(
@@ -933,6 +942,10 @@ async function startGameLogic(room, forceStart = false) {
     roomCode: room.roomCode,
     mandatoryPieces,
   };
+  // Include optional suppress timestamp to block first moves until that time
+  try {
+    gameState.suppressMoveUntil = room._suppressMoveUntil || null;
+  } catch (e) {}
   // Inicializa/garante sequência da sala para detecção de dessincronização
   try {
     room.seq = room.seq || 0;
@@ -1137,14 +1150,19 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
   // CORREÇÃO: Validar se o jogador ainda tem tempo antes de permitir movimento
   if (gameRoom.timeControl === "match" || gameRoom.timeControl === "move") {
-    const currentTime = playerColor === "b" ? gameRoom.whiteTime : gameRoom.blackTime;
+    const currentTime =
+      playerColor === "b" ? gameRoom.whiteTime : gameRoom.blackTime;
     if (typeof currentTime === "number" && currentTime <= 0) {
-      console.log(`[executeMove] Movimento bloqueado: tempo esgotado para ${playerColor} (${currentTime}s)`);
+      console.log(
+        `[executeMove] Movimento bloqueado: tempo esgotado para ${playerColor} (${currentTime}s)`
+      );
       return; // Tempo esgotado, não permitir movimento
     }
   } else if (gameRoom.timeControl === "total") {
     if (typeof gameRoom.timeLeft === "number" && gameRoom.timeLeft <= 0) {
-      console.log(`[executeMove] Movimento bloqueado: tempo total esgotado (${gameRoom.timeLeft}s)`);
+      console.log(
+        `[executeMove] Movimento bloqueado: tempo total esgotado (${gameRoom.timeLeft}s)`
+      );
       return;
     }
   }
@@ -2963,23 +2981,94 @@ function initializeSocket(ioInstance) {
             } catch (e) {}
             if (rm) {
               if (rm.cleanupTimeout) clearTimeout(rm.cleanupTimeout);
-              rm.cleanupTimeout = setTimeout(() => {
+              // Add retry logic: if both players are momentarily disconnected
+              // (e.g. due to fast reload), retry a couple times before removing.
+              rm._acceptDrawCleanupRetries = rm._acceptDrawCleanupRetries || 0;
+              const doCleanupCheck = () => {
                 try {
-                  if (gameRooms[roomCode]) {
-                    // Apenas remove se a sala ainda estiver concluída (não foi reiniciada)
-                    if (gameRooms[roomCode].isGameConcluded) {
-                      delete gameRooms[roomCode];
-                      scheduleLobbyUpdate();
-                      console.log(
-                        `[${new Date().toISOString()}] [acceptDraw] Removido room ${roomCode} após agendamento`
-                      );
-                    } else {
-                      console.log(
-                        `[${new Date().toISOString()}] [acceptDraw] Skip removal for room ${roomCode} because isGameConcluded=${
-                          gameRooms[roomCode].isGameConcluded
-                        }`
-                      );
+                  const current = gameRooms[roomCode];
+                  if (!current) return;
+
+                  // Conta quantos jogadores realmente conectados existem.
+                  // Em vez de confiar apenas em `socketId` (pode ter mudado
+                  // após reload), contamos sockets atualmente conectados cujo
+                  // `userData.email` corresponde aos jogadores da sala.
+                  let connectedCount = 0;
+                  try {
+                    const emails = (current.players || [])
+                      .map((p) => (p && p.user ? p.user.email : null))
+                      .filter(Boolean);
+
+                    // Iterate over connected sockets in this server instance
+                    try {
+                      for (const s of io.sockets.sockets.values()) {
+                        try {
+                          if (!s || !s.connected) continue;
+                          const em = s.userData && s.userData.email;
+                          if (em && emails.includes(em)) connectedCount++;
+                        } catch (e) {}
+                      }
+                    } catch (e) {
+                      // Fallback: try Map-style iteration
+                      try {
+                        for (const [, s] of io.sockets.sockets) {
+                          try {
+                            if (!s || !s.connected) continue;
+                            const em = s.userData && s.userData.email;
+                            if (em && emails.includes(em)) connectedCount++;
+                          } catch (e) {}
+                        }
+                      } catch (ee) {
+                        connectedCount = current.players
+                          ? current.players.length
+                          : 0;
+                      }
                     }
+
+                    // Cap to number of players (avoid overcount if same email present twice)
+                    connectedCount = Math.min(connectedCount, emails.length);
+                  } catch (e) {
+                    connectedCount = current.players
+                      ? current.players.length
+                      : 0;
+                  }
+
+                  // Removemos a sala se ela ainda estiver concluída OU se houver menos
+                  // de 2 jogadores conectados (ex: oponente saiu durante o overlay).
+                  // If nobody is connected, give a small extra grace period
+                  if (
+                    connectedCount === 0 &&
+                    current._acceptDrawCleanupRetries < 2
+                  ) {
+                    current._acceptDrawCleanupRetries =
+                      (current._acceptDrawCleanupRetries || 0) + 1;
+                    console.log(
+                      `[${new Date().toISOString()}] [acceptDraw] connected=0 — retrying cleanup for room ${roomCode} (retry=${
+                        current._acceptDrawCleanupRetries
+                      })`
+                    );
+                    // schedule another quick re-check in 3s
+                    current.cleanupTimeout = setTimeout(
+                      doCleanupCheck,
+                      3 * 1000
+                    );
+                    return;
+                  }
+
+                  if (current.isGameConcluded || connectedCount < 2) {
+                    delete gameRooms[roomCode];
+                    scheduleLobbyUpdate();
+                    console.log(
+                      `[${new Date().toISOString()}] [acceptDraw] Removido room ${roomCode} após agendamento (isGameConcluded=${
+                        current.isGameConcluded
+                      } connected=${connectedCount})`
+                    );
+                  } else {
+                    console.log(
+                      `[${new Date().toISOString()}] [acceptDraw] Skip removal for room ${roomCode} because isGameConcluded=${
+                        current.isGameConcluded
+                      } connected=${connectedCount}`
+                    );
                   }
                 } catch (e) {
                   console.error(
@@ -2987,7 +3076,8 @@ function initializeSocket(ioInstance) {
                     e
                   );
                 }
-              }, 10 * 1000);
+              };
+              rm.cleanupTimeout = setTimeout(doCleanupCheck, 10 * 1000);
             }
           } catch (e) {
             console.error("Error scheduling removal after draw accepted:", e);
@@ -3080,76 +3170,37 @@ function initializeSocket(ioInstance) {
               return;
             }
 
-            // Avisa clientes que a revanche foi aceita (para eles cancelarem timers UI)
-            try {
-              if (player1.socketId)
-                io.to(player1.socketId).emit("revancheAccepted");
-              if (player2.socketId)
-                io.to(player2.socketId).emit("revancheAccepted");
-            } catch (e) {
-              console.error("Erro emitindo revancheAccepted:", e);
-            }
-
-            // Limpa pedidos pendentes para evitar races com spectate/limpeza
-            try {
-              room.revancheRequests = new Set();
-            } catch (e) {}
-
-            // FIX: Reset match state for Tablita to force new opening on rematch
-            // Preserve object shape to avoid races where other code expects
-            // `room.match` to exist right after a revanche is accepted.
-            if (room.gameMode === "tablita") {
-              try {
-                const p1 = room.players[0];
-                const p2 = room.players[1];
-                room.match = {
-                  score: {
-                    [p1.user.email]: 0,
-                    [p2.user.email]: 0,
-                  },
-                  currentGame: 1,
-                  opening: null,
-                  openingBoard: null,
-                  player1: { email: p1.user.email, socketId: p1.socketId },
-                  player2: { email: p2.user.email, socketId: p2.socketId },
-                };
-              } catch (e) {
-                room.match = null;
-              }
-            }
-
-            // Allow starting a new game: clear concluded flag and pending cleanup/timeouts
+            // A revanche foi aceita — no modo clássico, se ambos apertarem
+            // em até 5s, resetamos a sala e iniciamos nova partida. Não
+            // fazemos verificação de conectividade aqui; aplicamos uma
+            // supressão do primeiro movimento (`_suppressMoveUntil`) de 5s
+            // quando aplicável.
             try {
               room.isGameConcluded = false;
-              room._noFurtherGames = false;
-              // clear any scheduled cleanup that would delete the room
-              if (room.cleanupTimeout) {
-                clearTimeout(room.cleanupTimeout);
-                room.cleanupTimeout = null;
-              }
-              // CORREÇÃO: Limpar timeout de reconexão do sistema de disconnect
-              if (room._reconnectTimeout) {
-                clearTimeout(room._reconnectTimeout);
-                room._reconnectTimeout = null;
-              }
-              // Limpar flags de conexão
-              room._connectionPaused = false;
-              room._disconnectedPlayer = null;
-              room._disconnectTime = null;
+            } catch (e) {}
 
-              // clear any leftover timers to avoid interference
-              try {
-                if (room.timerInterval) clearInterval(room.timerInterval);
-              } catch (e) {}
-              try {
-                if (room.turnInactivityTimeout)
-                  clearTimeout(room.turnInactivityTimeout);
-                room.turnInactivityTimeout = null;
-              } catch (e) {}
-              try {
-                if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
-                room.firstMoveTimeout = null;
-              } catch (e) {}
+            // CORREÇÃO TABLITA: Resetar match para criar novo sorteio na revanche
+            if (room.isTablita && room.match) {
+              console.log(`[Revanche Tablita] Resetando match para novo sorteio: room=${room.roomCode}`);
+              room.match = null; // Força criação de novo match com novo sorteio
+            }
+
+            try {
+              const BOTH_WINDOW_MS = 5000;
+              const firstTs = room._firstRevancheTs || 0;
+              const bothWithinWindow = Date.now() - firstTs <= BOTH_WINDOW_MS;
+              // Reset timestamp for next time
+              room._firstRevancheTs = null;
+
+              if (!room.isTablita && bothWithinWindow) {
+                try {
+                  room._suppressMoveUntil = Date.now() + BOTH_WINDOW_MS;
+                } catch (e) {}
+              } else {
+                try {
+                  room._suppressMoveUntil = null;
+                } catch (e) {}
+              }
             } catch (e) {}
 
             await startGameLogic(room);
