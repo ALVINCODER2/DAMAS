@@ -679,6 +679,15 @@ body {
   }
 }
 
+@keyframes bounce {
+  0%, 100% { 
+    transform: translateY(0); 
+  }
+  50% { 
+    transform: translateY(-10px); 
+  }
+}
+
 /* Responsividade adicional */
 @media (min-width: 768px) {
   #main-container {

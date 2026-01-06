@@ -98,6 +98,21 @@
         </div>
       </div>
 
+      <!-- Seção de Download APK -->
+      <div class="apk-download-section"
+        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; padding: 20px; margin: 20px 0; display: flex; align-items: center; gap: 20px; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); border: 2px solid rgba(255, 255, 255, 0.1);">
+        <div class="apk-icon" style="font-size: 60px; animation: bounce 2s infinite;">📱</div>
+        <div class="apk-content" style="flex: 1;">
+          <h3 style="color: white; margin: 0 0 5px 0; font-size: 20px;">Jogue pelo Aplicativo Android</h3>
+          <p style="color: rgba(255, 255, 255, 0.9); margin: 0 0 15px 0; font-size: 14px;">Baixe nosso APK para uma
+            experiência otimizada!</p>
+          <a href="/downloads/damas-arena.apk" download class="btn-download-apk"
+            style="display: inline-block; background: white; color: #667eea; padding: 12px 25px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);">
+            📥 BAIXAR APK
+          </a>
+        </div>
+      </div>
+
       <!-- Menu de Ações Rápidas (RECUPERADO WHATSAPP) -->
       <div class="action-grid">
         <div class="action-card red-gradient" id="btn-toggle-create-room">
@@ -520,6 +535,27 @@
     </div>
   </div>
 
+  <!-- Modal de Confirmação de Idade -->
+  <div id="age-verification-modal" class="modal-overlay"
+    style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); align-items: center; justify-content: center; z-index: 999999; backdrop-filter: blur(10px);">
+    <div class="age-modal-content"
+      style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px; border-radius: 20px; text-align: center; max-width: 500px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8); border: 2px solid rgba(255, 255, 255, 0.1);">
+      <div class="age-modal-icon" style="font-size: 80px; margin-bottom: 20px;">🔞</div>
+      <h2 style="color: #fff; font-size: 28px; margin-bottom: 15px;">Confirmação de Idade</h2>
+      <p style="color: #ccc; font-size: 16px; margin-bottom: 10px;">Este site contém jogos com apostas em dinheiro.</p>
+      <p style="color: #ccc; font-size: 16px; margin-bottom: 10px;"><strong>Você confirma ter 18 anos ou mais?</strong>
+      </p>
+      <div class="age-modal-buttons" style="display: flex; gap: 15px; margin-top: 30px; justify-content: center;">
+        <button id="age-confirm-yes" class="btn-age-yes"
+          style="padding: 15px 30px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; transition: all 0.3s ease; min-width: 180px; background: linear-gradient(135deg, #2ecc71, #27ae60); color: white;">✓
+          SIM, TENHO +18</button>
+        <button id="age-confirm-no" class="btn-age-no"
+          style="padding: 15px 30px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; transition: all 0.3s ease; min-width: 180px; background: linear-gradient(135deg, #e74c3c, #c0392b); color: white;">✗
+          NÃO</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ÁUDIOS -->
   <audio id="join-sound" src="/sounds/join.mp3"></audio>
 
@@ -542,6 +578,49 @@
       else body.style.display = "block";
     }
   </script>
+
+  <!-- Script de Verificação de Idade -->
+  <script>
+    // Verificação de idade - executar ANTES de tudo
+    (function () {
+      const AGE_VERIFIED_KEY = 'ageVerified18Plus';
+
+      function checkAgeVerification() {
+        const verified = localStorage.getItem(AGE_VERIFIED_KEY);
+
+        if (verified === 'true') {
+          // Já verificado, não mostra modal
+          return;
+        }
+
+        // Mostra modal
+        const modal = document.getElementById('age-verification-modal');
+        if (modal) {
+          modal.style.display = 'flex';
+
+          // Botão SIM
+          document.getElementById('age-confirm-yes').addEventListener('click', () => {
+            localStorage.setItem(AGE_VERIFIED_KEY, 'true');
+            modal.style.display = 'none';
+          });
+
+          // Botão NÃO
+          document.getElementById('age-confirm-no').addEventListener('click', () => {
+            // Redireciona para fora do site
+            window.location.href = 'https://www.google.com';
+          });
+        }
+      }
+
+      // Executar assim que DOM carregar
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAgeVerification);
+      } else {
+        checkAgeVerification();
+      }
+    })();
+  </script>
+
   <script src="js/script.js?t=1767721000"></script>
 </body>
 
