@@ -122,15 +122,16 @@ function startTimer(roomCode) {
       }
 
       if (timeOver) {
-        // CRÍTICO: Marcar como concluído IMEDIATAMENTE para bloquear movimentos
-        // Isso previne race condition onde jogador envia movimento após tempo acabar
-        room.isGameConcluded = true;
-        
+        // Limpar timer para evitar ticks adicionais
         clearInterval(room.timerInterval);
         room.timerInterval = null;
+        
         const loserColor = currentPlayerColor;
         const winnerColor = loserColor === "b" ? "p" : "b";
         console.log(`[Timer] Processando fim de jogo: winner=${winnerColor} loser=${loserColor} room=${roomCode}`);
+        
+        // IMPORTANTE: NÃO marcar isGameConcluded aqui!
+        // processEndOfGame fará isso APÓS emitir os eventos gameOver
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
@@ -170,9 +171,7 @@ function startTimer(roomCode) {
         room._lastTimerEmit = now;
       }
       if (room.timeLeft <= 0) {
-        // CRÍTICO: Marcar como concluído IMEDIATAMENTE para bloquear movimentos
-        room.isGameConcluded = true;
-        
+        // Limpar timer para evitar ticks adicionais
         clearInterval(room.timerInterval);
         room.timerInterval = null;
     
@@ -190,6 +189,9 @@ function startTimer(roomCode) {
         const loserColor = room.game.currentPlayer;
         const winnerColor = loserColor === "b" ? "p" : "b";
         console.log(`[Timer] Processando fim de jogo (modo total): winner=${winnerColor} loser=${loserColor} room=${roomCode}`);
+        
+        // IMPORTANTE: NÃO marcar isGameConcluded aqui!
+        // processEndOfGame fará isso APÓS emitir os eventos gameOver
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
