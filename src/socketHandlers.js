@@ -567,11 +567,62 @@ function cleanupPreviousRooms(userEmail) {
   }
 }
 
+// OTIMIZAÇÃO: Calcula delta do boardState para reduzir payload
+// Envia apenas as células que mudaram em vez do tabuleiro completo
+function calculateBoardDelta(roomCode, newBoardState) {
+  try {
+    const room = gameRooms[roomCode];
+    if (!room) return { fullBoard: newBoardState, delta: null };
+    
+    // Se não houver estado anterior, envia tabuleiro completo
+    if (!room._lastSentBoardState) {
+      room._lastSentBoardState = JSON.parse(JSON.stringify(newBoardState));
+      return { fullBoard: newBoardState, delta: null };
+    }
+    
+    const oldBoard = room._lastSentBoardState;
+    const delta = [];
+    
+    // Compara célula por célula
+    for (let row = 0; row < newBoardState.length; row++) {
+      for (let col = 0; col < newBoardState[row].length; col++) {
+        const oldCell = oldBoard[row] && oldBoard[row][col];
+        const newCell = newBoardState[row][col];
+        
+        // Se a célula mudou, adiciona ao delta
+        if (JSON.stringify(oldCell) !== JSON.stringify(newCell)) {
+          delta.push({ row, col, value: newCell });
+        }
+      }
+    }
+    
+    // Atualiza estado armazenado
+    room._lastSentBoardState = JSON.parse(JSON.stringify(newBoardState));
+    
+    // Se mudou mais de 30% do tabuleiro, envia completo (mais eficiente)
+    const totalCells = newBoardState.length * newBoardState[0].length;
+    if (delta.length > totalCells * 0.3) {
+      return { fullBoard: newBoardState, delta: null };
+    }
+    
+    // Retorna delta se houver mudanças
+    return delta.length > 0 
+      ? { fullBoard: null, delta } 
+      : { fullBoard: null, delta: null };
+  } catch (e) {
+    console.error("calculateBoardDelta error:", e);
+    return { fullBoard: newBoardState, delta: null };
+  }
+}
+
 // Helper: envia estado completo para jogadores e versão reduzida/throttled para espectadores
 function sendGameState(roomCode, fullState, opts = {}) {
   try {
     const room = gameRooms[roomCode];
     if (!room) return;
+
+    // OTIMIZAÇÃO: Calcula delta do boardState
+    const { fullBoard, delta } = calculateBoardDelta(roomCode, fullState.boardState);
 
     // Envia para os jogadores: por padrão um payload reduzido (para economizar
     // banda). Se o chamador explicitamente passar `opts.fullForPlayers = true`
@@ -588,7 +639,9 @@ function sendGameState(roomCode, fullState, opts = {}) {
           // Payload enxuto para players — inclui tudo o necessário para
           // atualizar o tabuleiro e timers sem enviar campos extras.
           const playerPayload = {
-            boardState: fullState.boardState,
+            // OTIMIZAÇÃO: Envia delta ou fullBoard conforme calculado
+            boardState: fullBoard,
+            boardDelta: delta,
             boardSize: fullState.boardSize,
             currentPlayer: fullState.currentPlayer || fullState.turn || null,
             lastMove: fullState.lastMove || null,

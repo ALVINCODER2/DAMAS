@@ -1487,8 +1487,39 @@ window.GameCore = (function () {
 
   // --- PROCESSAMENTO DO JOGO (UPDATE) ---
   async function processGameUpdate(gameState, suppressSound = false) {
-    if (!gameState || !gameState.boardState) return;
+    if (!gameState) return;
     state.lastPacketTime = Date.now();
+
+    // OTIMIZAÇÃO: Processa delta do boardState se disponível
+    if (gameState.boardDelta && Array.isArray(gameState.boardDelta)) {
+      // Aplica delta: atualiza apenas células que mudaram
+      try {
+        if (!state.boardState || !Array.isArray(state.boardState)) {
+          // Se não temos estado local, solicita estado completo
+          console.warn("[Delta] No local board state, requesting full sync");
+          state.socket.emit("requestGameSync", { roomCode: state.currentRoom });
+          return;
+        }
+        
+        // Aplica cada mudança do delta
+        gameState.boardDelta.forEach(change => {
+          if (state.boardState[change.row]) {
+            state.boardState[change.row][change.col] = change.value;
+          }
+        });
+        
+        // Usa o boardState local atualizado
+        gameState.boardState = state.boardState;
+      } catch (e) {
+        console.error("[Delta] Error applying delta:", e);
+        // Em caso de erro, solicita estado completo
+        state.socket.emit("requestGameSync", { roomCode: state.currentRoom });
+        return;
+      }
+    } else if (!gameState.boardState) {
+      // Se não há nem delta nem boardState completo, retorna
+      return;
+    }
 
     // Atualiza nomes e badges/teams se o payload trouxer informações de users
     try {
