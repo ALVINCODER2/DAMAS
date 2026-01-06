@@ -462,7 +462,7 @@ window.UI = {
         clone.style.opacity = "1";
         clone.style.boxShadow = "0 24px 48px rgba(0,0,0,0.26)";
         // Use a simple slide animation (only translate)
-        clone.style.transition = "transform 220ms ease";
+        clone.style.transition = "transform 150ms ease";
         clone.style.pointerEvents = "none";
 
         document.body.appendChild(clone);
@@ -493,7 +493,7 @@ window.UI = {
         requestAnimationFrame(() => {
           try {
             // start slide transition (no opacity change)
-            clone.style.transition = "transform 220ms ease";
+            clone.style.transition = "transform 150ms ease";
 
             // Apenas desliza sem rotação/elevação
             clone.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
@@ -615,13 +615,13 @@ window.UI = {
           cleanUp();
         };
         clone.addEventListener("transitionend", tEnd);
-        // Fallback timeout: 220ms animation + 180ms margin (optimized from dual 360ms+800ms)
+        // Fallback timeout: 150ms animation + 150ms margin (optimized for faster response)
         setTimeout(() => {
           try {
             clone.removeEventListener("transitionend", tEnd);
           } catch (e) {}
           cleanUp();
-        }, 400);
+        }, 300);
       } catch (err) {
         try {
           console.error("animatePieceMove error", err);
