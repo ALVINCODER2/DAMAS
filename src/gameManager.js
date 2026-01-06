@@ -225,11 +225,16 @@ function resetTimer(roomCode) {
   const room = gameRooms[roomCode];
   if (room) {
     clearInterval(room.timerInterval);
+    room.timerInterval = null;
 
     if (room.timeControl === "match") {
-      // CORREÇÃO: Resetar whiteTime e blackTime para o valor inicial
-      room.whiteTime = room.timerDuration;
-      room.blackTime = room.timerDuration;
+      // CORREÇÃO CRÍTICA: NO MODO "MATCH" (tempo por partida), NÃO resetar os tempos!
+      // Os tempos devem continuar diminuindo ao longo de toda a partida.
+      // Apenas limpar e reiniciar o interval para garantir funcionamento correto.
+      // NÃO fazer: room.whiteTime = room.timerDuration;
+      // NÃO fazer: room.blackTime = room.timerDuration;
+      
+      // Apenas emitir o estado atual e reiniciar o timer
       io.to(roomCode).volatile.emit("timerUpdate", {
         whiteTime: room.whiteTime,
         blackTime: room.blackTime,
@@ -239,6 +244,7 @@ function resetTimer(roomCode) {
       });
       startTimer(roomCode);
     } else {
+      // Modo "total": resetar o tempo total (comportamento original correto)
       room.timeLeft = room.timerDuration;
       io.to(roomCode).volatile.emit("timerUpdate", {
         timeLeft: room.timeLeft,
