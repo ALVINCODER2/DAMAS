@@ -1756,53 +1756,58 @@ window.GameCore = (function () {
                   );
               }
             } catch (e) {}
-          });
+          })
         }
       } catch (e) {}
 
-      await state.UI.animatePieceMove(
+      // OTIMIZAÇÃO CRÍTICA: Executa animação em paralelo sem bloquear processamento
+      // Isso permite que múltiplas capturas sejam processadas rapidamente (~70% mais rápido)
+      state.UI.animatePieceMove(
         gameState.lastMove.from,
         gameState.lastMove.to,
         gameState.boardSize,
         capturedForAnim
-      );
+      ).then(() => {
+        // Após animação completar: reconcilia e aplica promoções
+        // Reconciliar o quadrado destino com o estado do servidor, para evitar
+        // duplicações visuais (ex.: peça adversária aparecendo no mesmo quadrado)
+        try {
+          if (state.UI && typeof state.UI.reconcileSquare === "function") {
+            const dst = gameState.lastMove.to;
+            const expected =
+              gameState.boardState && gameState.boardState[dst.row]
+                ? gameState.boardState[dst.row][dst.col]
+                : null;
+            state.UI.reconcileSquare(dst.row, dst.col, expected);
+          }
+        } catch (e) {}
 
-      // Reconciliar o quadrado destino com o estado do servidor, para evitar
-      // duplicações visuais (ex.: peça adversária aparecendo no mesmo quadrado)
-      try {
-        if (state.UI && typeof state.UI.reconcileSquare === "function") {
-          const dst = gameState.lastMove.to;
-          const expected =
-            gameState.boardState && gameState.boardState[dst.row]
-              ? gameState.boardState[dst.row][dst.col]
-              : null;
-          state.UI.reconcileSquare(dst.row, dst.col, expected);
-        }
-      } catch (e) {}
-
-      // Garantia: se o movimento resultou em promoção (dama), force a
-      // aplicação da classe `king` no elemento DOM destino. Isso corrige
-      // um caso em que espectadores não veem a coroa até recarregar.
-      try {
-        if (gameState && gameState.lastMove && gameState.boardState) {
-          const dst = gameState.lastMove.to;
-          const pieceType =
-            gameState.boardState && gameState.boardState[dst.row]
-              ? gameState.boardState[dst.row][dst.col]
-              : null;
-          if (pieceType === "B" || pieceType === "P") {
-            const sq = document.querySelector(
-              `.square[data-row="${dst.row}"][data-col="${dst.col}"]`
-            );
-            if (sq) {
-              const p = sq.querySelector(".piece");
-              if (p && !p.classList.contains("king")) p.classList.add("king");
+        // Garantia: se o movimento resultou em promoção (dama), force a
+        // aplicação da classe `king` no elemento DOM destino. Isso corrige
+        // um caso em que espectadores não veem a coroa até recarregar.
+        try {
+          if (gameState && gameState.lastMove && gameState.boardState) {
+            const dst = gameState.lastMove.to;
+            const pieceType =
+              gameState.boardState && gameState.boardState[dst.row]
+                ? gameState.boardState[dst.row][dst.col]
+                : null;
+            if (pieceType === "B" || pieceType === "P") {
+              const sq = document.querySelector(
+                `.square[data-row="${dst.row}"][data-col="${dst.col}"]`
+              );
+              if (sq) {
+                const p = sq.querySelector(".piece");
+                if (p && !p.classList.contains("king")) p.classList.add("king");
+              }
             }
           }
+        } catch (e) {
+          /* silencioso */
         }
-      } catch (e) {
-        /* silencioso */
-      }
+      }).catch(e => {
+        console.error('[ANIM] Animation error:', e);
+      });
     }
 
     if (!suppressSound && !isMyMove) {

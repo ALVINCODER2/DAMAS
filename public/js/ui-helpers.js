@@ -155,7 +155,9 @@ window.UI = {
       if (this.audioCtx && this.audioCtx.state === "suspended") {
         try {
           await this.audioCtx.resume();
-        } catch (e) {}
+        } catch (e) {
+          // Expected: browsers prevent AudioContext resume without user gesture
+        }
       }
 
       // Tenta tocar um som de confirmação: primeiro elemento, depois WebAudio buzzer
@@ -281,9 +283,11 @@ window.UI = {
               const removalPromises = [];
               list.forEach((p) => {
                 try {
-                  const sq = document.querySelector(
-                    `.square[data-row="${p.row}"][data-col="${p.col}"]`
-                  );
+                  // Optimized: Use cache first to reduce DOM queries
+                  const sq = this.boardCache[p.row]?.[p.col] || 
+                           document.querySelector(
+                             `.square[data-row="${p.row}"][data-col="${p.col}"]`
+                           );
                   if (!sq) return;
                   const pieces = Array.from(sq.querySelectorAll(".piece"));
                   pieces.forEach((el) => {
@@ -319,13 +323,13 @@ window.UI = {
                         };
                         el.addEventListener("transitionend", tEnd);
 
-                        // fallback timeout
+                        // fallback timeout (optimized from 420ms to 250ms)
                         setTimeout(() => {
                           try {
                             el.removeEventListener("transitionend", tEnd);
                           } catch (er) {}
                           clean();
-                        }, 420);
+                        }, 250);
                       });
                       removalPromises.push(pr);
                     } catch (e) {
@@ -611,19 +615,13 @@ window.UI = {
           cleanUp();
         };
         clone.addEventListener("transitionend", tEnd);
-        // Fallback timeout (slightly larger than transition duration)
+        // Fallback timeout: 220ms animation + 180ms margin (optimized from dual 360ms+800ms)
         setTimeout(() => {
           try {
             clone.removeEventListener("transitionend", tEnd);
           } catch (e) {}
           cleanUp();
-        }, 360);
-        // Safety additional timeout in case of slow devices
-        setTimeout(() => {
-          try {
-            cleanUp();
-          } catch (e) {}
-        }, 800);
+        }, 400);
       } catch (err) {
         try {
           console.error("animatePieceMove error", err);
