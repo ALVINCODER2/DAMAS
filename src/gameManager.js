@@ -170,20 +170,26 @@ function startTimer(roomCode) {
         room._lastTimerEmit = now;
       }
       if (room.timeLeft <= 0) {
+        // CRÍTICO: Marcar como concluído IMEDIATAMENTE para bloquear movimentos
+        room.isGameConcluded = true;
+        
         clearInterval(room.timerInterval);
         room.timerInterval = null;
     
-    // CORREÇÃO: Limpar timeouts secundários para evitar que disparem após o fim do jogo
-    // (Crucial para Tablita, onde o jogo "continua" para a próxima partida)
-    if (room.turnInactivityTimeout) {
-      clearTimeout(room.turnInactivityTimeout);
-      room.turnInactivityTimeout = null;
-    }
-    if (room.firstMoveTimeout) {
-      clearTimeout(room.firstMoveTimeout);
-      room.firstMoveTimeout = null;
-    }    const loserColor = room.game.currentPlayer;
+        // CORREÇÃO: Limpar timeouts secundários para evitar que disparem após o fim do jogo
+        // (Crucial para Tablita, onde o jogo "continua" para a próxima partida)
+        if (room.turnInactivityTimeout) {
+          clearTimeout(room.turnInactivityTimeout);
+          room.turnInactivityTimeout = null;
+        }
+        if (room.firstMoveTimeout) {
+          clearTimeout(room.firstMoveTimeout);
+          room.firstMoveTimeout = null;
+        }
+        
+        const loserColor = room.game.currentPlayer;
         const winnerColor = loserColor === "b" ? "p" : "b";
+        console.log(`[Timer] Processando fim de jogo (modo total): winner=${winnerColor} loser=${loserColor} room=${roomCode}`);
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
