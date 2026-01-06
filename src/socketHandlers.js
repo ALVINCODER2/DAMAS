@@ -577,6 +577,7 @@ function calculateBoardDelta(roomCode, newBoardState) {
     // Se não houver estado anterior, envia tabuleiro completo
     if (!room._lastSentBoardState) {
       room._lastSentBoardState = JSON.parse(JSON.stringify(newBoardState));
+      console.log(`[DELTA] ${roomCode}: First send - using FULL board (${newBoardState.length}x${newBoardState[0].length})`);
       return { fullBoard: newBoardState, delta: null };
     }
     
@@ -601,16 +602,27 @@ function calculateBoardDelta(roomCode, newBoardState) {
     
     // Se mudou mais de 30% do tabuleiro, envia completo (mais eficiente)
     const totalCells = newBoardState.length * newBoardState[0].length;
+    const changePercent = (delta.length / totalCells * 100).toFixed(1);
+    
     if (delta.length > totalCells * 0.3) {
+      const fullSize = JSON.stringify(newBoardState).length;
+      console.log(`[DELTA] ${roomCode}: ${changePercent}% changed (${delta.length}/${totalCells}) - using FULL board (~${fullSize} bytes)`);
       return { fullBoard: newBoardState, delta: null };
     }
     
     // Retorna delta se houver mudanças
-    return delta.length > 0 
-      ? { fullBoard: null, delta } 
-      : { fullBoard: null, delta: null };
+    if (delta.length > 0) {
+      const deltaSize = JSON.stringify(delta).length;
+      const fullSize = JSON.stringify(newBoardState).length;
+      const savings = ((1 - deltaSize / fullSize) * 100).toFixed(1);
+      console.log(`[DELTA] ${roomCode}: ${changePercent}% changed (${delta.length}/${totalCells}) - using DELTA (~${deltaSize} bytes, ${savings}% savings)`);
+      return { fullBoard: null, delta };
+    }
+    
+    console.log(`[DELTA] ${roomCode}: No changes - skipping update`);
+    return { fullBoard: null, delta: null };
   } catch (e) {
-    console.error("calculateBoardDelta error:", e);
+    console.error("[DELTA] calculateBoardDelta error:", e);
     return { fullBoard: newBoardState, delta: null };
   }
 }

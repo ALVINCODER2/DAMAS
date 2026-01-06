@@ -1496,10 +1496,13 @@ window.GameCore = (function () {
       try {
         if (!state.boardState || !Array.isArray(state.boardState)) {
           // Se não temos estado local, solicita estado completo
-          console.warn("[Delta] No local board state, requesting full sync");
+          console.warn("[DELTA CLIENT] No local board state, requesting full sync");
           state.socket.emit("requestGameSync", { roomCode: state.currentRoom });
           return;
         }
+        
+        const deltaSize = JSON.stringify(gameState.boardDelta).length;
+        console.log(`[DELTA CLIENT] Received delta: ${gameState.boardDelta.length} changes (~${deltaSize} bytes)`);
         
         // Aplica cada mudança do delta
         gameState.boardDelta.forEach(change => {
@@ -1511,12 +1514,16 @@ window.GameCore = (function () {
         // Usa o boardState local atualizado
         gameState.boardState = state.boardState;
       } catch (e) {
-        console.error("[Delta] Error applying delta:", e);
+        console.error("[DELTA CLIENT] Error applying delta:", e);
         // Em caso de erro, solicita estado completo
         state.socket.emit("requestGameSync", { roomCode: state.currentRoom });
         return;
       }
-    } else if (!gameState.boardState) {
+    } else if (gameState.boardState) {
+      // Recebeu boardState completo
+      const fullSize = JSON.stringify(gameState.boardState).length;
+      console.log(`[DELTA CLIENT] Received FULL board (~${fullSize} bytes)`);
+    } else {
       // Se não há nem delta nem boardState completo, retorna
       return;
     }
