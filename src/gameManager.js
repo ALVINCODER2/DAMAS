@@ -104,15 +104,22 @@ function startTimer(roomCode) {
         }
       }
 
-      // Timer updates são frequentes e podem criar backlog em redes lentas;
-      // emitir como `volatile` reduz chance de crescimento na fila do socket
-      io.to(roomCode).volatile.emit("timerUpdate", {
-        whiteTime: room.whiteTime,
-        blackTime: room.blackTime,
-        roomCode: roomCode,
-        currentPlayer: room.game && room.game.currentPlayer,
-        timerActive: room.game ? !!room.game.timerActive : true,
-      });
+      // OTIMIZAÇÃO: Emitir timerUpdate apenas a cada 2s (reduz 50% do tráfego)
+      // Timer visual atualiza a cada 2s, mas lógica interna continua a cada 1s
+      const now = Date.now();
+      if (!room._lastTimerEmit) room._lastTimerEmit = 0;
+      if (now - room._lastTimerEmit >= 2000) {
+        // Timer updates são frequentes e podem criar backlog em redes lentas;
+        // emitir como `volatile` reduz chance de crescimento na fila do socket
+        io.to(roomCode).volatile.emit("timerUpdate", {
+          whiteTime: room.whiteTime,
+          blackTime: room.blackTime,
+          roomCode: roomCode,
+          currentPlayer: room.game && room.game.currentPlayer,
+          timerActive: room.game ? !!room.game.timerActive : true,
+        });
+        room._lastTimerEmit = now;
+      }
 
       if (timeOver) {
         clearInterval(room.timerInterval);
@@ -147,10 +154,17 @@ function startTimer(roomCode) {
         return;
       }
       room.timeLeft--;
-      io.to(roomCode).volatile.emit("timerUpdate", {
-        timeLeft: room.timeLeft,
-        roomCode: roomCode,
-      });
+      
+      // OTIMIZAÇÃO: Emitir timerUpdate apenas a cada 2s (reduz 50% do tráfego)
+      const now = Date.now();
+      if (!room._lastTimerEmit) room._lastTimerEmit = 0;
+      if (now - room._lastTimerEmit >= 2000) {
+        io.to(roomCode).volatile.emit("timerUpdate", {
+          timeLeft: room.timeLeft,
+          roomCode: roomCode,
+        });
+        room._lastTimerEmit = now;
+      }
       if (room.timeLeft <= 0) {
         clearInterval(room.timerInterval);
         room.timerInterval = null;

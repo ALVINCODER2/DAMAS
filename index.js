@@ -74,12 +74,13 @@ const io = socketIo(server, {
   allowEIO3: true,
   
   // OTIMIZAÇÃO CRÍTICA: Habilitar compressão WebSocket (redução de 40-60%)
+  // Ajustado threshold e level para balancear CPU vs compressão
   perMessageDeflate: {
-    threshold: 512, // comprimir apenas mensagens > 512 bytes
+    threshold: 1024, // comprimir apenas mensagens > 1KB (era 512)
     zlibDeflateOptions: {
       chunkSize: 1024,
       memLevel: 7,
-      level: 6, // balanço entre compressão e CPU
+      level: 4, // balanço entre compressão e CPU (era 6)
     },
     zlibInflateOptions: {
       chunkSize: 10 * 1024,

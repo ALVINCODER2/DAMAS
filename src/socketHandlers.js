@@ -8,6 +8,10 @@ const {
   standardOpening10x10,
 } = require("../utils/constants");
 
+// CORREÇÃO: Tracking global de aberturas Tablita para evitar repetição entre revanches
+// Mapeia roomCode -> array dos últimos 3 índices usados
+const tablitaOpeningHistory = new Map();
+
 // Importa a lógica de jogo compartilhada
 const {
   isMoveValid,
@@ -611,11 +615,12 @@ function sendGameState(roomCode, fullState, opts = {}) {
       }
     }
 
-    // Throttle para espectadores: no máximo uma emissão a cada INTERVAL ms
+    // OTIMIZAÇÃO: Throttle para espectadores aumentado de 1s para 3s
+    // Espectadores não precisam de atualizações tão frequentes quanto jogadores
     const INTERVAL =
       typeof opts.spectatorInterval === "number"
         ? opts.spectatorInterval
-        : 1000; // otimizado: 1000ms (era 350ms)
+        : 3000; // otimizado: 3000ms (era 1000ms) - reduz 66% do tráfego
     const now = Date.now();
     if (!room._lastSpectatorUpdate) room._lastSpectatorUpdate = 0;
     if (now - room._lastSpectatorUpdate < INTERVAL && !opts.forceSpectator)
@@ -652,6 +657,20 @@ function sendGameState(roomCode, fullState, opts = {}) {
   } catch (e) {
     console.error("sendGameState error:", e);
   }
+}
+
+// OTIMIZAÇÃO: Função debounced para atualizar contador de espectadores
+// Evita emissões duplicadas agrupando múltiplas chamadas em 500ms
+function updateSpectatorCount(roomCode) {
+  const room = gameRooms[roomCode];
+  if (!room) return;
+  
+  clearTimeout(room._spectatorCountTimeout);
+  room._spectatorCountTimeout = setTimeout(() => {
+    const count = room.spectators ? room.spectators.size : 0;
+    io.to(roomCode).volatile.emit("spectatorCount", { count });
+    io.to(`${roomCode}-spectators`).volatile.emit("spectatorCount", { count });
+  }, 500);
 }
 
 async function startGameLogic(room, forceStart = false) {
@@ -809,19 +828,28 @@ async function startGameLogic(room, forceStart = false) {
       openingName = room.match.opening.name;
       boardSize = 8;
     } else {
-      // Primeira partida: sorteia abertura
+      // Primeira partida: sorteia abertura evitando as últimas 3 usadas nesta sala
+      const history = tablitaOpeningHistory.get(roomCode) || [];
       let randomIndex;
       let attempts = 0;
+      const maxAttempts = 10;
+      
       do {
         randomIndex = Math.floor(Math.random() * idfTablitaOpenings.length);
         attempts++;
       } while (
-        randomIndex === room.lastOpeningIndex &&
-        idfTablitaOpenings.length > 1 &&
-        attempts < 5
+        history.includes(randomIndex) && // Evita últimas 3 aberturas
+        idfTablitaOpenings.length > 3 && // Só se houver mais de 3 opções
+        attempts < maxAttempts
       );
 
-      room.lastOpeningIndex = randomIndex;
+      // Atualiza histórico (mantém últimas 3)
+      history.push(randomIndex);
+      if (history.length > 3) history.shift(); // Remove mais antiga
+      tablitaOpeningHistory.set(roomCode, history);
+      
+      console.log(`[Tablita] Sorteio: índice=${randomIndex} nome="${idfTablitaOpenings[randomIndex].name}" histórico=[${history.join(',')}]`);
+
       const selectedOpening = idfTablitaOpenings[randomIndex];
       boardState = JSON.parse(JSON.stringify(selectedOpening.board));
       openingName = selectedOpening.name;
@@ -936,9 +964,8 @@ async function startGameLogic(room, forceStart = false) {
     );
   } catch (e) {}
   // notify current spectator count to all in room
-  io.to(room.roomCode).volatile.emit("spectatorCount", {
-    count: room.spectators ? room.spectators.size : 0,
-  });
+  // OTIMIZAÇÃO: Usar função debounced para evitar emissões duplicadas
+  updateSpectatorCount(room.roomCode);
 
   // clear the starting lock shortly after starting to allow future legitimate starts
   try {
@@ -1106,6 +1133,20 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       }
     }
     if (socketPlayerColor && socketPlayerColor !== playerColor) return;
+  }
+
+  // CORREÇÃO: Validar se o jogador ainda tem tempo antes de permitir movimento
+  if (gameRoom.timeControl === "match" || gameRoom.timeControl === "move") {
+    const currentTime = playerColor === "b" ? gameRoom.whiteTime : gameRoom.blackTime;
+    if (typeof currentTime === "number" && currentTime <= 0) {
+      console.log(`[executeMove] Movimento bloqueado: tempo esgotado para ${playerColor} (${currentTime}s)`);
+      return; // Tempo esgotado, não permitir movimento
+    }
+  } else if (gameRoom.timeControl === "total") {
+    if (typeof gameRoom.timeLeft === "number" && gameRoom.timeLeft <= 0) {
+      console.log(`[executeMove] Movimento bloqueado: tempo total esgotado (${gameRoom.timeLeft}s)`);
+      return;
+    }
   }
 
   // Bloqueio de 1s pós-movimento: evita que o jogador responda instantaneamente
@@ -2690,12 +2731,8 @@ function initializeSocket(ioInstance) {
           room.spectators.delete(socket.id);
           // Notify players and remaining spectators
           const specRoomName = `${specRoomCode}-spectators`;
-          io.to(specRoomCode).volatile.emit("spectatorCount", {
-            count: room.spectators ? room.spectators.size : 0,
-          });
-          io.to(specRoomName).volatile.emit("spectatorCount", {
-            count: room.spectators ? room.spectators.size : 0,
-          });
+          // OTIMIZAÇÃO: Usar função debounced para evitar emissões duplicadas
+          updateSpectatorCount(roomCode);
         } catch (e) {
           console.warn("Error removing spectator on disconnect:", e);
         }
