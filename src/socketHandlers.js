@@ -1701,9 +1701,9 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
 
     // (lock de 1s removido)
 
-    // CORREÇÃO: Restaurado sendGameState para jogadores (necessário para sincronização)
-    // Mantemos payload otimizado e throttling para espectadores.
-    // O pieceMoved sozinho não é suficiente - cliente precisa do boardState completo.
+    // OTIMIZAÇÃO: sendGameState agora usa delta updates automaticamente
+    // A função calculateBoardDelta envia apenas células que mudaram (70-90% redução)
+    // Mantemos a chamada aqui para garantir sincronização completa
     sendGameState(
       roomCode,
       {
