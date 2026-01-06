@@ -1511,8 +1511,21 @@ window.GameCore = (function () {
           }
         });
         
-        // Usa o boardState local atualizado
-        gameState.boardState = state.boardState;
+        // CORREÇÃO: Usa cópia profunda em vez de referência para evitar problemas de sincronização
+        gameState.boardState = JSON.parse(JSON.stringify(state.boardState));
+        
+        // Validação: Verifica se delta foi aplicado corretamente
+        const validationFailed = gameState.boardDelta.some(change => {
+          const applied = state.boardState[change.row] && 
+                         JSON.stringify(state.boardState[change.row][change.col]) === JSON.stringify(change.value);
+          return !applied;
+        });
+        
+        if (validationFailed) {
+          console.error("[DELTA CLIENT] Delta validation failed! Requesting full sync.");
+          state.socket.emit("requestGameSync", { roomCode: state.currentRoom });
+          return;
+        }
       } catch (e) {
         console.error("[DELTA CLIENT] Error applying delta:", e);
         // Em caso de erro, solicita estado completo
