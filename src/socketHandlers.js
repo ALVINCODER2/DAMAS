@@ -570,6 +570,10 @@ function cleanupPreviousRooms(userEmail) {
 // OTIMIZAÇÃO: Calcula delta do boardState para reduzir payload
 // Envia apenas as células que mudaram em vez do tabuleiro completo
 function calculateBoardDelta(roomCode, newBoardState) {
+  // DELTA DESABILITADO: Sempre retorna board completo para evitar bugs visuais
+  console.log(`[DELTA] ${roomCode}: DISABLED - sending FULL board`);
+  return { fullBoard: newBoardState, delta: null };
+  
   try {
     const room = gameRooms[roomCode];
     if (!room) return { fullBoard: newBoardState, delta: null };
