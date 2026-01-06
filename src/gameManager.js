@@ -676,8 +676,19 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       }, 60000);
     } else {
       // --- FIM DO JOGO 1 (NÃO MOSTRAR REPLAY) ---
-      // Apenas preparamos o próximo jogo. Não emitimos gameOver/gameDraw.
+      // CORREÇÃO: Emitir gameOver para mostrar quem ganhou o Jogo 1!
 
+      const game1WinnerColor = winnerColor;
+      const game1Reason = `Jogo 1: ${reason}`;
+      
+      // Emite gameOver para mostrar resultado do Jogo 1
+      io.to(room.roomCode).emit("gameOver", {
+        winner: game1WinnerColor,
+        reason: game1Reason,
+        moveHistory: room.game.moveHistory,
+        initialBoardState: room.game.initialBoardState,
+        isTablitaGame1: true,
+      });
       
       room.match.currentGame++; // Vai para 2
       const scoreArray = [p1Score, p2Score];
