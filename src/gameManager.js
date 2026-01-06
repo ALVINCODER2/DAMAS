@@ -126,9 +126,19 @@ function startTimer(roomCode) {
         clearInterval(room.timerInterval);
         room.timerInterval = null;
         
+        // CORREÇÃO AGRESSIVA: Limpar TODOS os timeouts
+        if (room.turnInactivityTimeout) {
+          clearTimeout(room.turnInactivityTimeout);
+          room.turnInactivityTimeout = null;
+        }
+        if (room.firstMoveTimeout) {
+          clearTimeout(room.firstMoveTimeout);
+          room.firstMoveTimeout = null;
+        }
+        
         const loserColor = currentPlayerColor;
         const winnerColor = loserColor === "b" ? "p" : "b";
-        console.log(`[Timer] Processando fim de jogo: winner=${winnerColor} loser=${loserColor} room=${roomCode}`);
+        console.log(`[Timer] TEMPO ESGOTADO! winner=${winnerColor} loser=${loserColor} room=${roomCode} isTablita=${room.isTablita} isGameConcluded=${room.isGameConcluded}`);
         
         // IMPORTANTE: NÃO marcar isGameConcluded aqui!
         // processEndOfGame fará isso APÓS emitir os eventos gameOver
