@@ -1065,11 +1065,23 @@ async function startGameLogic(room, forceStart = false) {
     } catch (e) {}
   }
 
-  // If no move is made within 20 seconds from game start, refund both players and remove the room
+  // If no move is made within specified time from game start, take action based on game mode
   try {
     if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
-    // Ajusta duração do watchdog para o primeiro lance: torneio=20s, não-torneio=60s
-    const firstMoveDuration = room.isTournament ? 20 * 1000 : 60 * 1000;
+    
+    // CORREÇÃO TABLITA: Na segunda partida, usar timeout de 20s e declarar vencedor
+    // ao invés de reembolsar (evita exploits de jogadores forçando reembolso)
+    let firstMoveDuration;
+    const isTablitaGame2 = room.isTablita && room.match && room.match.currentGame === 2;
+    
+    if (room.isTournament) {
+      firstMoveDuration = 20 * 1000; // Torneio: 20s
+    } else if (isTablitaGame2) {
+      firstMoveDuration = 20 * 1000; // Tablita jogo 2: 20s (novo comportamento)
+    } else {
+      firstMoveDuration = 60 * 1000; // Outros modos: 60s
+    }
+    
     room.firstMoveTimeout = setTimeout(async () => {
       try {
         const currentRoom = gameRooms[room.roomCode];
@@ -1086,6 +1098,92 @@ async function startGameLogic(room, forceStart = false) {
             );
             scheduleTurnInactivity(currentRoom.roomCode);
             return;
+          }
+
+          // NOVO: Se for SEGUNDA PARTIDA do Tablita, declarar vencedor baseado no placar
+          // ao invés de reembolsar (previne exploit de jogadores forçando reembolso)
+          if (currentRoom.isTablita && currentRoom.match && currentRoom.match.currentGame === 2) {
+            console.log(
+              `[GameWatchdog Tablita] Jogo 2 sem movimento em 20s na sala ${room.roomCode}. Declarando vencedor pelo placar.`
+            );
+            
+            try {
+              const p1Email = currentRoom.match.player1?.email;
+              const p2Email = currentRoom.match.player2?.email;
+              const p1Score = currentRoom.match.score?.[p1Email] || 0;
+              const p2Score = currentRoom.match.score?.[p2Email] || 0;
+              
+              console.log(`[GameWatchdog Tablita] Placar antes do Jogo 2: ${p1Email}=${p1Score} vs ${p2Email}=${p2Score}`);
+              
+              // Identifica o vencedor da primeira partida
+              let winnerEmail = null;
+              let loserEmail = null;
+              if (p1Score > p2Score) {
+                winnerEmail = p1Email;
+                loserEmail = p2Email;
+              } else if (p2Score > p1Score) {
+                winnerEmail = p2Email;
+                loserEmail = p1Email;
+              } else {
+                // Empate improvável, mas trata como empate geral
+                console.warn(`[GameWatchdog Tablita] Placar empatado no Jogo 2 sem jogadas. Reembolsando.`);
+                // Fallback para reembolso se placar está empatado
+                const playersEmails = currentRoom.players.map((x) => x.user.email);
+                for (const p of currentRoom.players) {
+                  try {
+                    const updated = await User.findOneAndUpdate(
+                      { email: p.user.email },
+                      { $inc: { saldo: currentRoom.bet } },
+                      { new: true }
+                    );
+                    if (updated && io && p.socketId) {
+                      io.to(p.socketId).emit("balanceUpdate", {
+                        email: updated.email,
+                        newSaldo: updated.saldo,
+                      });
+                      io.to(p.socketId).emit("refundAndReturn", {
+                        message: "Partida inativa: reembolso efetuado.",
+                        roomCode: currentRoom.roomCode,
+                      });
+                    }
+                  } catch (userErr) {
+                    console.error("Error refunding user:", userErr);
+                  }
+                }
+                if (currentRoom.timerInterval) clearInterval(currentRoom.timerInterval);
+                delete gameRooms[room.roomCode];
+                scheduleLobbyUpdate();
+                return;
+              }
+              
+              // Declara o vencedor (quem ganhou o Jogo 1) como vencedor por W.O. no Jogo 2
+              console.log(`[GameWatchdog Tablita] Vencedor da primeira partida: ${winnerEmail}. Declarando vitória por timeout.`);
+              
+              // Identifica a cor do jogador atual (quem deveria estar jogando)
+              const currentPlayerColor = g.currentPlayer; // "b" ou "p"
+              const currentPlayerEmail = currentPlayerColor === "b" 
+                ? g.users?.white 
+                : g.users?.black;
+              
+              console.log(`[GameWatchdog Tablita] Jogador atual (inativo): ${currentPlayerEmail} (cor=${currentPlayerColor})`);
+              
+              // O jogador atual (inativo) perde
+              const loserColor = currentPlayerColor;
+              const winnerColor = loserColor === "b" ? "p" : "b";
+              
+              // Chama processEndOfGame para finalizar o match
+              await safeProcessEndOfGame(
+                winnerColor,
+                loserColor,
+                currentRoom,
+                "Oponente não realizou nenhuma jogada (timeout)"
+              );
+              
+              return;
+            } catch (tablitaErr) {
+              console.error("[GameWatchdog Tablita] Erro ao processar timeout do Jogo 2:", tablitaErr);
+              // Fallback para reembolso em caso de erro
+            }
           }
 
           console.log(
@@ -1172,7 +1270,7 @@ async function startGameLogic(room, forceStart = false) {
       } catch (err) {
         console.error("Error in firstMove timeout handler:", err);
       }
-    }, 20 * 1000);
+    }, firstMoveDuration);
   } catch (err) {
     console.error("Error scheduling firstMove timeout:", err);
   }
