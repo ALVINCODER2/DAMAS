@@ -213,6 +213,31 @@ try {
 // Debounced/Throttled lobby update to avoid emitting too frequentemente
 let _lobbyUpdateTimer = null;
 let _lastLobbyPayload = null;
+
+// ============================================================================
+// OTIMIZAÇÃO: Cache para getLobbyInfo() - Reduz bloqueio do event loop
+// ============================================================================
+let _lobbyInfoCache = null;
+let _lobbyInfoCacheHash = null;
+let _lastLobbyCalculation = 0;
+const LOBBY_CACHE_TTL = 1000; // cache válido por 1 segundo
+
+// Gera hash rápido do estado atual de gameRooms para detecção de mudanças
+function generateLobbyHash() {
+  try {
+    const keys = Object.keys(gameRooms);
+    // Hash baseado em: número de rooms + primeiros caracteres dos IDs
+    return keys.length + ':' + keys.slice(0, 20).join(',').substring(0, 50);
+  } catch (e) {
+    return Date.now().toString(); // fallback: força recálculo
+  }
+}
+
+// Invalida cache do lobby (chamar quando gameRooms muda)
+function invalidateLobbyCache() {
+  _lobbyInfoCacheHash = null;
+  _lobbyInfoCache = null;
+}
 function scheduleLobbyUpdate(force) {
   try {
     const processStartTs = Date.now();
@@ -229,49 +254,79 @@ function scheduleLobbyUpdate(force) {
       } catch (e) {}
       _lobbyUpdateTimer = null;
       _lastLobbyPayload = null;
-    }, 2000); // debounce 2000ms (otimizado para reduzir latência)
+    }, 3000); // debounce 3000ms (otimizado para reduzir ping spikes)
   } catch (e) {}
 }
 
 function getLobbyInfo() {
-  const waitingRooms = Object.values(gameRooms)
-    .filter(
-      (room) =>
-        room.players.length === 1 && !room.isGameConcluded && !room.isPrivate
-    )
-    .map((room) => {
-      const p1 = room.players[0].user;
-      return {
-        roomCode: room.roomCode,
-        bet: room.bet,
-        gameMode: room.gameMode,
-        timeControl: room.timeControl,
-        creatorEmail: p1.username || p1.email,
-        creatorAvatar: p1.avatar,
-        timerDuration: room.timerDuration,
-      };
-    });
-
-  const activeRooms = Object.values(gameRooms)
-    .filter(
-      (room) =>
-        room.players.length === 2 && !room.isGameConcluded && !room.isPrivate
-    )
-    .map((room) => {
-      const p1 = room.players[0].user;
-      const p2 = room.players[1].user;
-      return {
-        roomCode: room.roomCode,
-        bet: room.bet,
-        gameMode: room.gameMode,
-        timeControl: room.timeControl,
-        player1Email: p1.username || p1.email,
-        player2Email: p2.username || p2.email,
-        timerDuration: room.timerDuration,
-      };
-    });
-
-  return { waiting: waitingRooms, active: activeRooms };
+  try {
+    const now = Date.now();
+    const currentHash = generateLobbyHash();
+    
+    // OTIMIZAÇÃO: Retorna cache se válido (nada mudou ou TTL não expirou)
+    if (_lobbyInfoCache && 
+        _lobbyInfoCacheHash === currentHash && 
+        (now - _lastLobbyCalculation) < LOBBY_CACHE_TTL) {
+      return _lobbyInfoCache;
+    }
+    
+    // OTIMIZAÇÃO: Iteração única em vez de dupla (reduz 50% do trabalho)
+    const waitingRooms = [];
+    const activeRooms = [];
+    
+    // Uma única passagem por todos os rooms
+    for (const room of Object.values(gameRooms)) {
+      // Skip salas irrelevantes rapidamente
+      if (room.isGameConcluded || room.isPrivate) continue;
+      
+      const playerCount = room.players.length;
+      
+      // Salas esperando (1 jogador)
+      if (playerCount === 1) {
+        try {
+          const p1 = room.players[0].user;
+          waitingRooms.push({
+            roomCode: room.roomCode,
+            bet: room.bet,
+            gameMode: room.gameMode,
+            timeControl: room.timeControl,
+            creatorEmail: p1.username || p1.email,
+            creatorAvatar: p1.avatar,
+            timerDuration: room.timerDuration,
+          });
+        } catch (e) {}
+      }
+      // Salas ativas (2 jogadores)
+      else if (playerCount === 2) {
+        try {
+          const p1 = room.players[0].user;
+          const p2 = room.players[1].user;
+          activeRooms.push({
+            roomCode: room.roomCode,
+            bet: room.bet,
+            gameMode: room.gameMode,
+            timeControl: room.timeControl,
+            player1Email: p1.username || p1.email,
+            player2Email: p2.username || p2.email,
+            timerDuration: room.timerDuration,
+          });
+        } catch (e) {}
+      }
+    }
+    
+    const result = { waiting: waitingRooms, active: activeRooms };
+    
+    // Atualiza cache
+    _lobbyInfoCache = result;
+    _lobbyInfoCacheHash = currentHash;
+    _lastLobbyCalculation = now;
+    
+    return result;
+  } catch (e) {
+    console.error('[getLobbyInfo] Erro:', e);
+    // Fallback: retorna estrutura vazia
+    return { waiting: [], active: [] };
+  }
 }
 
 // Agenda e gerencia timeout de inatividade por turno (10s)
@@ -563,6 +618,7 @@ function cleanupPreviousRooms(userEmail) {
   });
 
   if (roomsToRemove.length > 0 && io) {
+    invalidateLobbyCache(); // Invalida cache pois salas foram removidas
     scheduleLobbyUpdate();
   }
 }
@@ -835,8 +891,15 @@ async function startGameLogic(room, forceStart = false) {
       clearTimeout(room.firstMoveTimeout);
       room.firstMoveTimeout = null;
     }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
     // Reset contador de auto-pass para evitar transportar estados da partida anterior
     room._autoPassCount = 0;
+    // Limpa flags de primeiro movimento
+    room._firstMoveByWhite = false;
+    room._firstMoveByBlack = false;
     // Limpa timestamp de encerramento anterior para permitir novo fluxo
     try {
       room._lastEndTimestamp = null;
@@ -1069,17 +1132,15 @@ async function startGameLogic(room, forceStart = false) {
   try {
     if (room.firstMoveTimeout) clearTimeout(room.firstMoveTimeout);
     
-    // CORREÇÃO TABLITA: Na segunda partida, usar timeout de 20s e declarar vencedor
-    // ao invés de reembolsar (evita exploits de jogadores forçando reembolso)
+    // Timeout padrão de 20 segundos para jogos normais (não-torneio)
+    // Torneios usam sistema de inatividade por turno ao invés de reembolso
     let firstMoveDuration;
     const isTablitaGame2 = room.isTablita && room.match && room.match.currentGame === 2;
     
     if (room.isTournament) {
-      firstMoveDuration = 20 * 1000; // Torneio: 20s
-    } else if (isTablitaGame2) {
-      firstMoveDuration = 20 * 1000; // Tablita jogo 2: 20s (novo comportamento)
+      firstMoveDuration = 20 * 1000; // Torneio: 20s mas sem reembolso (usa scheduleTurnInactivity)
     } else {
-      firstMoveDuration = 60 * 1000; // Outros modos: 60s
+      firstMoveDuration = 20 * 1000; // Outros modos: 20s com reembolso
     }
     
     room.firstMoveTimeout = setTimeout(async () => {
@@ -1142,7 +1203,7 @@ async function startGameLogic(room, forceStart = false) {
                         newSaldo: updated.saldo,
                       });
                       io.to(p.socketId).emit("refundAndReturn", {
-                        message: "Partida inativa: reembolso efetuado.",
+                        message: "Nenhum lance em 20 segundos: reembolso efetuado.",
                         roomCode: currentRoom.roomCode,
                       });
                     }
@@ -1225,7 +1286,7 @@ async function startGameLogic(room, forceStart = false) {
                   newSaldo: updated.saldo,
                 });
                 io.to(p.socketId).emit("refundAndReturn", {
-                  message: "Partida inativa: reembolso efetuado.",
+                  message: "Nenhum lance em 20 segundos: reembolso efetuado.",
                   roomCode: currentRoom.roomCode,
                 });
               }
@@ -1234,24 +1295,27 @@ async function startGameLogic(room, forceStart = false) {
             }
           }
 
+
           // Save a single MatchHistory entry marking the refund
-          if (typeof MatchHistory !== "undefined") {
-            try {
-              // Enfileira a gravação serializável para não bloquear o watchdog
-              enqueue({
-                type: "saveMatchHistory",
-                payload: {
-                  player1: playersEmails[0] || "",
-                  player2: playersEmails[1] || "",
-                  winner: null,
-                  bet: currentRoom.bet,
-                  gameMode: currentRoom.gameMode || "classic",
-                  reason: "Partida inativa (nenhum lance) - reembolso",
-                },
-              });
-            } catch (eh) {
-              console.error("Failed to enqueue refund MatchHistory:", eh);
-            }
+          try {
+            console.log(`[Refund] Registrando reembolso no histórico: room=${room.roomCode} players=[${playersEmails.join(", ")}] bet=${currentRoom.bet}`);
+            
+            // Enfileira a gravação serializável para não bloquear o watchdog
+            enqueue({
+              type: "saveMatchHistory",
+              payload: {
+                player1: playersEmails[0] || "",
+                player2: playersEmails[1] || "",
+                winner: null,
+                bet: currentRoom.bet,
+                gameMode: currentRoom.gameMode || "classic",
+                reason: "Nenhum lance em 20 segundos - reembolso",
+              },
+            });
+            
+            console.log(`[Refund] Reembolso enfileirado com sucesso para histórico`);
+          } catch (eh) {
+            console.error(`[Refund] ERRO ao enfileirar reembolso no histórico:`, eh);
           }
 
           // Clean up timers and room
@@ -1365,10 +1429,116 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       gameRoom.firstMoveTimeout = null;
     }
     game.isFirstMove = false;
+    
+    // NOVO: Inicia timeout de 6 segundos para o oponente responder ao primeiro lance
+    // Apenas para jogos não-torneio
+    if (!gameRoom.isTournament) {
+      gameRoom._firstMoveByWhite = playerColor === "b";
+      gameRoom._firstMoveByBlack = playerColor === "p";
+      
+      // Timeout de 6 segundos para o oponente fazer seu primeiro lance
+      gameRoom.firstMoveResponseTimeout = setTimeout(async () => {
+        try {
+          const currentRoom = gameRooms[roomCode];
+          if (!currentRoom || currentRoom.isGameConcluded) return;
+          
+          // Verifica se o oponente ainda não fez seu primeiro lance
+          const opponentColor = playerColor === "b" ? "p" : "b";
+          const opponentMadeMove = opponentColor === "b" 
+            ? currentRoom._firstMoveByWhite 
+            : currentRoom._firstMoveByBlack;
+          
+          if (!opponentMadeMove) {
+            console.log(
+              `[FirstMoveResponse] Oponente não respondeu em 6s na sala ${roomCode}. Reembolsando...`
+            );
+            
+            // Reembolsar ambos os jogadores
+            const playersEmails = currentRoom.players.map((x) => x.user.email);
+            for (const p of currentRoom.players) {
+              try {
+                const updated = await User.findOneAndUpdate(
+                  { email: p.user.email },
+                  { $inc: { saldo: currentRoom.bet } },
+                  { new: true }
+                );
+                if (updated && io && p.socketId) {
+                  io.to(p.socketId).emit("balanceUpdate", {
+                    email: updated.email,
+                    newSaldo: updated.saldo,
+                  });
+                  io.to(p.socketId).emit("refundAndReturn", {
+                    message: "Oponente não respondeu ao primeiro lance: reembolso efetuado.",
+                    roomCode: currentRoom.roomCode,
+                  });
+                }
+              } catch (userErr) {
+                console.error("Error refunding user:", userErr);
+              }
+            }
+            
+            // Salvar no histórico
+            try {
+              console.log(`[Refund] Registrando reembolso (sem resposta) no histórico: room=${roomCode} players=[${playersEmails.join(", ")}] bet=${currentRoom.bet}`);
+              
+              enqueue({
+                type: "saveMatchHistory",
+                payload: {
+                  player1: playersEmails[0] || "",
+                  player2: playersEmails[1] || "",
+                  winner: null,
+                  bet: currentRoom.bet,
+                  gameMode: currentRoom.gameMode || "classic",
+                  reason: "Oponente não respondeu ao primeiro lance - reembolso",
+                },
+              });
+              
+              console.log(`[Refund] Reembolso (sem resposta) enfileirado com sucesso para histórico`);
+            } catch (eh) {
+              console.error(`[Refund] ERRO ao enfileirar reembolso (sem resposta) no histórico:`, eh);
+            }
+            
+            // Limpar timers e sala
+            if (currentRoom.timerInterval) clearInterval(currentRoom.timerInterval);
+            currentRoom.isGameConcluded = true;
+            delete gameRooms[roomCode];
+            invalidateLobbyCache();
+            scheduleLobbyUpdate();
+          }
+        } catch (err) {
+          console.error("Error in firstMoveResponse timeout handler:", err);
+        }
+      }, 6000); // 6 segundos
+    }
+    
     // Marca que o timer está oficialmente ativo (será enviado no estado do jogo)
     game.timerActive = true;
     // Inicia o timer no servidor
     startTimer(roomCode);
+  } else {
+    // NOVO: Se não é o primeiro movimento do jogo, mas é o primeiro movimento deste jogador
+    // Cancela o timeout de resposta ao primeiro lance
+    if (gameRoom.firstMoveResponseTimeout) {
+      const opponentColor = playerColor;
+      const opponentMadeFirstMove = opponentColor === "b" 
+        ? gameRoom._firstMoveByWhite 
+        : gameRoom._firstMoveByBlack;
+      
+      if (!opponentMadeFirstMove) {
+        // Este é o primeiro lance do oponente - cancela o timeout
+        clearTimeout(gameRoom.firstMoveResponseTimeout);
+        gameRoom.firstMoveResponseTimeout = null;
+        
+        // Marca que este jogador fez seu primeiro lance
+        if (playerColor === "b") {
+          gameRoom._firstMoveByWhite = true;
+        } else {
+          gameRoom._firstMoveByBlack = true;
+        }
+        
+        console.log(`[FirstMoveResponse] Oponente respondeu a tempo na sala ${roomCode}. Jogo continua.`);
+      }
+    }
   }
 
   // Validação agora considera peças capturadas (fantasmas)
@@ -2412,6 +2582,7 @@ function initializeSocket(ioInstance) {
       };
 
       socket.emit("roomCreated", { roomCode });
+      invalidateLobbyCache(); // Invalida cache pois nova sala foi criada
       scheduleLobbyUpdate();
     });
 
@@ -2600,6 +2771,7 @@ function initializeSocket(ioInstance) {
       }
 
       await startGameLogic(room);
+      invalidateLobbyCache(); // Invalida cache pois jogador entrou na sala
       scheduleLobbyUpdate();
     });
 
@@ -2921,7 +3093,7 @@ function initializeSocket(ioInstance) {
     });
 
     socket.on("disconnect", (reason) => {
-      const WAIT_TIME = 60;
+      const WAIT_TIME = 25;
 
       // First, check if this socket was a spectator in any room. Prioritize
       // spectator removal to avoid mis-classifying spectator disconnects
@@ -3007,12 +3179,13 @@ function initializeSocket(ioInstance) {
               winnerColor,
               loserColor,
               room,
-              "Oponente desconectou e não retornou."
+              "Oponente desconectou e não retornou em 25 segundos."
             );
             // Immediately remove room after declaring victory due to disconnect
             try {
               if (gameRooms[roomCode]) {
                 delete gameRooms[roomCode];
+                invalidateLobbyCache(); // Invalida cache pois sala foi removida
                 scheduleLobbyUpdate();
               }
             } catch (e) {

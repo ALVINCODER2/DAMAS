@@ -62,6 +62,9 @@ async function handleSaveMatchHistory(payload) {
           createdAt: createdAt || undefined,
         });
         const saved = await history.save();
+        
+        console.log(`[MatchHistory] Salvo com sucesso: ${player1} vs ${player2} | winner=${saved.winner || 'null (reembolso)'} | reason="${saved.reason}" | bet=${saved.bet}`);
+        
         // Publish to Redis channel so main server process(es) can react (update cache, emit)
         try {
           if (_redisPub) {
@@ -79,6 +82,7 @@ async function handleSaveMatchHistory(payload) {
           }
         } catch (e) {}
       } else {
+        console.log(`[MatchHistory] Registro duplicado detectado, pulando: ${player1} vs ${player2}`);
         // already exists — emit via Redis if possible so other processes update
         try {
           if (_redisPub) {

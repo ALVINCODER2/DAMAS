@@ -8,6 +8,11 @@ primary_region = 'gru'
 
 [build]
 
+# Processo principal (servidor web)
+[processes]
+  app = "node index.js"
+  worker = "node src/worker.js"
+
 [http_service]
   internal_port = 3000
   force_https = true
