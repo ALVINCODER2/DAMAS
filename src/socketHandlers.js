@@ -1161,11 +1161,10 @@ async function startGameLogic(room, forceStart = false) {
             return;
           }
 
-          // NOVO: Se for SEGUNDA PARTIDA do Tablita, declarar vencedor baseado no placar
-          // ao invés de reembolsar (previne exploit de jogadores forçando reembolso)
+          // NOVO: Se for SEGUNDA PARTIDA do Tablita, aplicar regras especiais
           if (currentRoom.isTablita && currentRoom.match && currentRoom.match.currentGame === 2) {
             console.log(
-              `[GameWatchdog Tablita] Jogo 2 sem movimento em 20s na sala ${room.roomCode}. Declarando vencedor pelo placar.`
+              `[GameWatchdog Tablita] Jogo 2 sem movimento em 20s na sala ${room.roomCode}. Verificando quem não jogou...`
             );
             
             try {
@@ -1174,21 +1173,20 @@ async function startGameLogic(room, forceStart = false) {
               const p1Score = currentRoom.match.score?.[p1Email] || 0;
               const p2Score = currentRoom.match.score?.[p2Email] || 0;
               
-              console.log(`[GameWatchdog Tablita] Placar antes do Jogo 2: ${p1Email}=${p1Score} vs ${p2Email}=${p2Score}`);
+              console.log(`[GameWatchdog Tablita] Placar do Jogo 1: ${p1Email}=${p1Score} vs ${p2Email}=${p2Score}`);
               
               // Identifica o vencedor da primeira partida
-              let winnerEmail = null;
-              let loserEmail = null;
+              let winnerGame1Email = null;
+              let loserGame1Email = null;
               if (p1Score > p2Score) {
-                winnerEmail = p1Email;
-                loserEmail = p2Email;
+                winnerGame1Email = p1Email;
+                loserGame1Email = p2Email;
               } else if (p2Score > p1Score) {
-                winnerEmail = p2Email;
-                loserEmail = p1Email;
+                winnerGame1Email = p2Email;
+                loserGame1Email = p1Email;
               } else {
-                // Empate improvável, mas trata como empate geral
-                console.warn(`[GameWatchdog Tablita] Placar empatado no Jogo 2 sem jogadas. Reembolsando.`);
-                // Fallback para reembolso se placar está empatado
+                // Empate improvável no jogo 1
+                console.warn(`[GameWatchdog Tablita] Placar empatado no Jogo 1. Reembolsando.`);
                 const playersEmails = currentRoom.players.map((x) => x.user.email);
                 for (const p of currentRoom.players) {
                   try {
@@ -1217,27 +1215,42 @@ async function startGameLogic(room, forceStart = false) {
                 return;
               }
               
-              // Declara o vencedor (quem ganhou o Jogo 1) como vencedor por W.O. no Jogo 2
-              console.log(`[GameWatchdog Tablita] Vencedor da primeira partida: ${winnerEmail}. Declarando vitória por timeout.`);
-              
-              // Identifica a cor do jogador atual (quem deveria estar jogando)
+              // Identifica quem deveria estar jogando (jogador atual)
               const currentPlayerColor = g.currentPlayer; // "b" ou "p"
               const currentPlayerEmail = currentPlayerColor === "b" 
                 ? g.users?.white 
                 : g.users?.black;
               
-              console.log(`[GameWatchdog Tablita] Jogador atual (inativo): ${currentPlayerEmail} (cor=${currentPlayerColor})`);
+              console.log(`[GameWatchdog Tablita] Jogador que não fez lance: ${currentPlayerEmail} | Vencedor Jogo 1: ${winnerGame1Email}`);
               
-              // O jogador atual (inativo) perde
-              const loserColor = currentPlayerColor;
-              const winnerColor = loserColor === "b" ? "p" : "b";
+              // REGRA: Se o VENCEDOR do Jogo 1 não jogou → EMPATE
+              if (currentPlayerEmail === winnerGame1Email) {
+                console.log(`[GameWatchdog Tablita] Vencedor do Jogo 1 não jogou em 20s. Declarando EMPATE.`);
+                
+                // Declara empate (ambos recebem metade da aposta de volta? ou empate sem prêmio?)
+                // Vou declarar empate chamando processEndOfGame com winner=null
+                await safeProcessEndOfGame(
+                  null,
+                  null,
+                  currentRoom,
+                  "Empate: vencedor do Jogo 1 não realizou lance em 20s (Tablita)"
+                );
+                
+                return;
+              }
               
-              // Chama processEndOfGame para finalizar o match
+              // REGRA: Se o PERDEDOR do Jogo 1 não jogou → VITÓRIA para vencedor do Jogo 1
+              // Nota: Este código só executa se não for o vencedor (já retornou acima)
+              console.log(`[GameWatchdog Tablita] Perdedor do Jogo 1 não jogou em 20s. Declarando vitória para ${winnerGame1Email}.`);
+              
+              const winnerColor = g.users?.white === winnerGame1Email ? "b" : "p";
+              const loserColor = winnerColor === "b" ? "p" : "b";
+              
               await safeProcessEndOfGame(
                 winnerColor,
                 loserColor,
                 currentRoom,
-                "Oponente não realizou nenhuma jogada (timeout)"
+                "Oponente não realizou lance em 20s (Tablita Jogo 2)"
               );
               
               return;
@@ -1430,13 +1443,46 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
     }
     game.isFirstMove = false;
     
-    // NOVO: Inicia timeout de 6 segundos para o oponente responder ao primeiro lance
+    // NOVO: Inicia timeout para o oponente responder ao primeiro lance
     // Apenas para jogos não-torneio
     if (!gameRoom.isTournament) {
       gameRoom._firstMoveByWhite = playerColor === "b";
       gameRoom._firstMoveByBlack = playerColor === "p";
       
-      // Timeout de 6 segundos para o oponente fazer seu primeiro lance
+      // Determina o timeout baseado no modo de jogo e quem fez o primeiro lance
+      const isTablitaGame2 = gameRoom.isTablita && gameRoom.match && gameRoom.match.currentGame === 2;
+      let responseTimeout = 6000; // Padrão: 6s
+      
+      // Para Tablita Jogo 2, determina timeout baseado em quem fez o primeiro lance
+      if (isTablitaGame2) {
+        try {
+          const p1Email = gameRoom.match.player1?.email;
+          const p2Email = gameRoom.match.player2?.email;
+          const p1Score = gameRoom.match.score?.[p1Email] || 0;
+          const p2Score = gameRoom.match.score?.[p2Email] || 0;
+          
+          let winnerGame1Email = null;
+          if (p1Score > p2Score) {
+            winnerGame1Email = p1Email;
+          } else if (p2Score > p1Score) {
+            winnerGame1Email = p2Email;
+          }
+          
+          // Quem fez o primeiro lance?
+          const firstMoverEmail = playerColor === "b" ? gameRoom.game.users?.white : gameRoom.game.users?.black;
+          
+          // Se o PERDEDOR do Jogo 1 fez o primeiro lance, usa 7s
+          // Se o VENCEDOR do Jogo 1 fez o primeiro lance, usa 6s (padrão)
+          if (winnerGame1Email && firstMoverEmail !== winnerGame1Email) {
+            responseTimeout = 7000; // Perdedor fez primeiro lance: 7s para vencedor responder
+            console.log(`[FirstMoveResponse Tablita] Perdedor do Jogo 1 fez primeiro lance. Timeout de 7s para resposta.`);
+          }
+        } catch (e) {
+          console.error("[FirstMoveResponse Tablita] Erro ao determinar timeout:", e);
+        }
+      }
+      
+      // Timeout para o oponente fazer seu primeiro lance
       gameRoom.firstMoveResponseTimeout = setTimeout(async () => {
         try {
           const currentRoom = gameRooms[roomCode];
@@ -1449,6 +1495,72 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
             : currentRoom._firstMoveByBlack;
           
           if (!opponentMadeMove) {
+            // TABLITA JOGO 2: Declara vencedor baseado no placar ao invés de reembolsar
+            if (isTablitaGame2) {
+              console.log(
+                `[FirstMoveResponse Tablita] Oponente não respondeu em ${responseTimeout/1000}s no Jogo 2 da sala ${roomCode}. Declarando vencedor...`
+              );
+              
+              try {
+                const p1Email = currentRoom.match.player1?.email;
+                const p2Email = currentRoom.match.player2?.email;
+                const p1Score = currentRoom.match.score?.[p1Email] || 0;
+                const p2Score = currentRoom.match.score?.[p2Email] || 0;
+                
+                console.log(`[FirstMoveResponse Tablita] Placar do Jogo 1: ${p1Email}=${p1Score} vs ${p2Email}=${p2Score}`);
+                
+                // Identifica o vencedor da primeira partida
+                let winnerGame1Email = null;
+                if (p1Score > p2Score) {
+                  winnerGame1Email = p1Email;
+                } else if (p2Score > p1Score) {
+                  winnerGame1Email = p2Email;
+                } else {
+                  // Empate improvável, declara vitória para quem FEZ o primeiro lance
+                  console.warn(`[FirstMoveResponse Tablita] Placar empatado no Jogo 1. Caso raro.`);
+                  winnerGame1Email = playerColor === "b" ? currentRoom.game.users?.white : currentRoom.game.users?.black;
+                }
+                
+                // Quem não respondeu?
+                const nonResponderEmail = opponentColor === "b" ? currentRoom.game.users?.white : currentRoom.game.users?.black;
+                
+                console.log(`[FirstMoveResponse Tablita] Jogador que não respondeu: ${nonResponderEmail} | Vencedor Jogo 1: ${winnerGame1Email}`);
+                
+                // Se o VENCEDOR do Jogo 1 não respondeu → EMPATE
+                if (nonResponderEmail === winnerGame1Email) {
+                  console.log(`[FirstMoveResponse Tablita] Vencedor do Jogo 1 não respondeu. Declarando EMPATE.`);
+                  
+                  await safeProcessEndOfGame(
+                    null,
+                    null,
+                    currentRoom,
+                    "Empate: vencedor do Jogo 1 não respondeu ao primeiro lance (Tablita)"
+                  );
+                  
+                  return;
+                }
+                
+                // Se o PERDEDOR do Jogo 1 não respondeu → VITÓRIA para vencedor do Jogo 1
+                console.log(`[FirstMoveResponse Tablita] Perdedor do Jogo 1 não respondeu. Declarando vitória para ${winnerGame1Email}.`);
+                
+                const winnerColor = currentRoom.game.users?.white === winnerGame1Email ? "b" : "p";
+                const loserColor = winnerColor === "b" ? "p" : "b";
+                
+                await safeProcessEndOfGame(
+                  winnerColor,
+                  loserColor,
+                  currentRoom,
+                  "Oponente não respondeu ao primeiro lance (Tablita Jogo 2)"
+                );
+                
+                return;
+              } catch (tablitaErr) {
+                console.error("[FirstMoveResponse Tablita] Erro ao processar timeout do Jogo 2:", tablitaErr);
+                // Fallback para reembolso em caso de erro
+              }
+            }
+            
+            // JOGOS NORMAIS: Reembolso
             console.log(
               `[FirstMoveResponse] Oponente não respondeu em 6s na sala ${roomCode}. Reembolsando...`
             );
@@ -1508,7 +1620,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         } catch (err) {
           console.error("Error in firstMoveResponse timeout handler:", err);
         }
-      }, 6000); // 6 segundos
+      }, responseTimeout);
     }
     
     // Marca que o timer está oficialmente ativo (será enviado no estado do jogo)
