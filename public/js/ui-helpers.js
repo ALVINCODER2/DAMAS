@@ -209,14 +209,10 @@ window.UI = {
     // Vibrations removed per user request — no-op
   },
 
-  // --- ANIMAÇÃO DE MOVIMENTO ---
+  // --- MOVIMENTO INSTANTÂNEO (SEM ANIMAÇÃO) ---
   animatePieceMove: function (from, to, boardSize, capturedPos) {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve) => {
       try {
-        const boardEl =
-          this.elements && this.elements.board
-            ? this.elements.board
-            : document.querySelector(".board");
         const fromSquare = document.querySelector(
           `.square[data-row="${from.row}"][data-col="${from.col}"]`
         );
@@ -225,403 +221,78 @@ window.UI = {
         );
 
         // Se não houver elementos DOM, resolve imediatamente
-        if (!boardEl || !fromSquare || !toSquare) return resolve();
+        if (!fromSquare || !toSquare) return resolve();
 
-        const pieceEl = fromSquare.querySelector(".piece");
-
-        // Se for captura (salto maior que 1), não anima: realiza troca instantânea
-        const distRow = Math.abs(to.row - from.row);
-        const distCol = Math.abs(to.col - from.col);
-        const isCapture = Math.max(distRow, distCol) > 1;
-        if (isCapture) {
-          try {
-            // DEBUG: log minimal quando em modo debug do cliente
-            if (window.__CLIENT_DEBUG) {
-              try {
-                console.log(
-                  "[ANIM] capture move from",
-                  from,
-                  "to",
-                  to,
-                  "capturedPos",
-                  capturedPos
-                );
-              } catch (e) {}
-            }
-
-            // Remove visual da(s) peça(s) capturada(s) com animação de fade
-            if (capturedPos) {
-              const list = Array.isArray(capturedPos)
-                ? capturedPos
-                : [capturedPos];
-              // DEBUG: inspeciona DOM antes da remoção
-              try {
-                if (window.__CLIENT_DEBUG) {
-                  list.forEach((p) => {
-                    try {
-                      const sq = document.querySelector(
-                        `.square[data-row="${p.row}"][data-col="${p.col}"]`
-                      );
-                      const count = sq
-                        ? sq.querySelectorAll(".piece").length
-                        : 0;
-                      console.log(
-                        "[ANIM DEBUG] captured square",
-                        p,
-                        "piecesCountBefore",
-                        count,
-                        "elem",
-                        sq
-                      );
-                    } catch (e) {}
-                  });
-                }
-              } catch (e) {}
-
-              // animação: adiciona classe de fade e espera transições antes de
-              // remover os elementos do DOM — evita overlap visual
-              const removalPromises = [];
-              list.forEach((p) => {
+        // Remove peças capturadas instantaneamente
+        if (capturedPos) {
+          const list = Array.isArray(capturedPos) ? capturedPos : [capturedPos];
+          list.forEach((p) => {
+            try {
+              const sq = this.boardCache[p.row]?.[p.col] || 
+                         document.querySelector(
+                           `.square[data-row="${p.row}"][data-col="${p.col}"]`
+                         );
+              if (!sq) return;
+              const pieces = Array.from(sq.querySelectorAll(".piece"));
+              pieces.forEach((el) => {
                 try {
-                  // Optimized: Use cache first to reduce DOM queries
-                  const sq = this.boardCache[p.row]?.[p.col] || 
-                           document.querySelector(
-                             `.square[data-row="${p.row}"][data-col="${p.col}"]`
-                           );
-                  if (!sq) return;
-                  const pieces = Array.from(sq.querySelectorAll(".piece"));
-                  pieces.forEach((el) => {
-                    try {
-                      const pr = new Promise((res) => {
-                        let done = false;
-                        const clean = () => {
-                          if (done) return;
-                          done = true;
-                          try {
-                            if (el.parentNode) el.parentNode.removeChild(el);
-                          } catch (er) {
-                            try {
-                              el.remove();
-                            } catch (er2) {
-                              el.style.display = "none";
-                            }
-                          }
-                          res();
-                        };
-
-                        // start fade-out
-                        try {
-                          el.classList.add("fade-out");
-                        } catch (er) {}
-
-                        const tEnd = (ev) => {
-                          if (ev && ev.target !== el) return;
-                          try {
-                            el.removeEventListener("transitionend", tEnd);
-                          } catch (er) {}
-                          clean();
-                        };
-                        el.addEventListener("transitionend", tEnd);
-
-                        // fallback timeout (optimized from 420ms to 250ms)
-                        setTimeout(() => {
-                          try {
-                            el.removeEventListener("transitionend", tEnd);
-                          } catch (er) {}
-                          clean();
-                        }, 250);
-                      });
-                      removalPromises.push(pr);
-                    } catch (e) {
-                      try {
-                        if (el.parentNode) el.parentNode.removeChild(el);
-                      } catch (er) {
-                        el.style.display = "none";
-                      }
-                    }
-                  });
-                } catch (e) {}
+                  el.remove();
+                } catch (e) {
+                  try {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                  } catch (er) {
+                    el.style.display = "none";
+                  }
+                }
               });
+            } catch (e) {}
+          });
+        }
 
-              // espera todas as remoções (fades) completarem antes de mover a peça
-              try {
-                await Promise.all(removalPromises);
-              } catch (e) {}
-
-              // DEBUG: inspeciona DOM depois da remoção
-              try {
-                if (window.__CLIENT_DEBUG) {
-                  list.forEach((p) => {
-                    try {
-                      const sq = document.querySelector(
-                        `.square[data-row="${p.row}"][data-col="${p.col}"]`
-                      );
-                      const count = sq
-                        ? sq.querySelectorAll(".piece").length
-                        : 0;
-                      console.log(
-                        "[ANIM DEBUG] captured square",
-                        p,
-                        "piecesCountAfter",
-                        count,
-                        "elem",
-                        sq
-                      );
-                    } catch (e) {}
-                  });
-                }
-              } catch (e) {}
+        // Move a peça instantaneamente (sem animação)
+        const pieceEl = fromSquare.querySelector(".piece");
+        if (pieceEl && toSquare) {
+          try {
+            // Remove do quadrado de origem
+            if (pieceEl.parentNode === fromSquare) {
+              fromSquare.removeChild(pieceEl);
             }
 
-            // Move elemento no DOM com fade-in após as peças capturadas desaparecerem
-            if (pieceEl && toSquare) {
+            // Remove peças existentes no destino
+            const existing = Array.from(toSquare.querySelectorAll(".piece"));
+            existing.forEach((el) => {
               try {
-                if (pieceEl.parentNode === fromSquare)
-                  fromSquare.removeChild(pieceEl);
-              } catch (e) {}
-
-              try {
-                // Remove quaisquer peças remanescentes no destino para evitar overlap
-                try {
-                  const existing = Array.from(
-                    toSquare.querySelectorAll(".piece")
-                  );
-                  existing.forEach((el) => {
-                    try {
-                      el.remove();
-                    } catch (e) {
-                      try {
-                        if (el.parentNode) el.parentNode.removeChild(el);
-                      } catch (er) {
-                        el.style.display = "none";
-                      }
-                    }
-                  });
-                } catch (e) {}
-
-                // Move piece directly without fade; avoid transparency
-                try {
-                  // clear any transition/opacity flags
-                  pieceEl.style.transition = "";
-                  pieceEl.style.opacity = "";
-                } catch (e) {}
-                toSquare.appendChild(pieceEl);
+                el.remove();
               } catch (e) {
                 try {
-                  const fallback = document.createElement("div");
-                  const cls =
-                    (pieceEl && pieceEl.className) || "piece black-piece";
-                  fallback.className = cls;
-                  toSquare.appendChild(fallback);
-                } catch (er) {}
-              }
-            } else if (!pieceEl) {
-              try {
-                const fallback = document.createElement("div");
-                fallback.className = "piece black-piece";
-                toSquare.appendChild(fallback);
-                try {
-                  fallback.style.transition = "";
-                  fallback.style.opacity = "";
-                } catch (e) {}
-              } catch (e) {}
-            }
-          } catch (e) {}
-          return resolve();
-        }
-
-        // Create a visual clone to animate
-        let clone = null;
-        if (pieceEl) {
-          clone = pieceEl.cloneNode(true);
-        } else {
-          // fallback: create a simple circle element
-          clone = document.createElement("div");
-          clone.className = "piece temp-clone";
-          clone.style.background =
-            window.getComputedStyle(fromSquare).background || "#fff";
-        }
-
-        // Get bounding rects
-        const fromRect = fromSquare.getBoundingClientRect();
-        const toRect = toSquare.getBoundingClientRect();
-
-        // Style clone for absolute positioning
-        clone.style.position = "fixed";
-        clone.style.left = `${fromRect.left}px`;
-        clone.style.top = `${fromRect.top}px`;
-        clone.style.width = `${fromRect.width}px`;
-        clone.style.height = `${fromRect.height}px`;
-        clone.style.margin = "0";
-        clone.style.zIndex = 2147483650;
-        // inicializa sem efeito de flutuar (sem translate/scale)
-        clone.style.transform = "translate3d(0, 0, 0) scale(1)";
-        clone.style.transformOrigin = "50% 50%";
-        // começar invisível para evitar 'pulo' quando escondemos o original
-        // keep clone fully opaque to avoid transparency during slide
-        clone.style.opacity = "1";
-        clone.style.boxShadow = "0 24px 48px rgba(0,0,0,0.26)";
-        // Use a simple slide animation (only translate)
-        clone.style.transition = "transform 150ms ease";
-        clone.style.pointerEvents = "none";
-
-        document.body.appendChild(clone);
-
-        // Preserve original piece class for fallback creation later
-        let originalPieceClass = null;
-        if (pieceEl) {
-          originalPieceClass = pieceEl.className;
-          // não oculta imediatamente; faremos fade-in do clone e só então
-          // esconderemos o original para evitar jump visual
-        }
-
-        // Calculate delta
-        const deltaX = toRect.left - fromRect.left;
-        const deltaY = toRect.top - fromRect.top;
-
-        // Force reflow before starting transition
-        // eslint-disable-next-line no-unused-expressions
-        clone.getBoundingClientRect();
-
-        // Start animation: ensure pieces do not change opacity during slide
-        try {
-          document.body.classList.add("no-piece-opacity");
-        } catch (e) {}
-
-        // Start animation: fade-in clone, then translate to destination
-        // Simular arrasto: adiciona leve rotação e deslocamento vertical
-        requestAnimationFrame(() => {
-          try {
-            // start slide transition (no opacity change)
-            clone.style.transition = "transform 150ms ease";
-
-            // Apenas desliza sem rotação/elevação
-            clone.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
-            // sombra leve
-            clone.style.boxShadow = "0 10px 20px rgba(0,0,0,0.12)";
-
-            // Esconder peça original rapidamente para evitar flicker
-            if (pieceEl) {
-              try {
-                pieceEl.style.visibility = "hidden";
-              } catch (e) {}
-            }
-          } catch (e) {}
-        });
-
-        let finished = false;
-        const cleanUp = () => {
-          if (finished) return;
-          finished = true;
-          try {
-            if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
-          } catch (e) {}
-          // restore original piece visibility if it still exists in DOM
-          try {
-            if (pieceEl && pieceEl.parentNode) pieceEl.style.visibility = "";
-          } catch (e) {}
-
-          // Normalize destination pieces: remove duplicates and ensure one
-          // visible piece matching the moving piece if possible. This avoids
-          // transient visual overlaps where uma peça adversária aparece
-          // juntamente com a peça em movimento.
-          try {
-            if (toSquare && toSquare.querySelector) {
-              const destPieces = Array.from(
-                toSquare.querySelectorAll(".piece")
-              );
-
-              if (destPieces.length > 1) {
-                let keep = null;
-                if (originalPieceClass) {
-                  keep = destPieces.find(
-                    (p) => p.className === originalPieceClass
-                  );
-                }
-                if (!keep) keep = destPieces[destPieces.length - 1];
-                destPieces.forEach((p) => {
-                  if (p !== keep) {
-                    try {
-                      p.remove();
-                    } catch (er) {
-                      try {
-                        if (p.parentNode) p.parentNode.removeChild(p);
-                      } catch (er2) {
-                        p.style.display = "none";
-                      }
-                    }
-                  }
-                });
-              } else if (destPieces.length === 0) {
-                const fallback = document.createElement("div");
-                fallback.className = originalPieceClass || "piece black-piece";
-                fallback.style.opacity = "1";
-                fallback.style.visibility = "";
-                toSquare.appendChild(fallback);
-              } else if (destPieces.length === 1 && originalPieceClass) {
-                const only = destPieces[0];
-                if (only.className !== originalPieceClass) {
-                  try {
-                    only.remove();
-                  } catch (er) {
-                    try {
-                      if (only.parentNode) only.parentNode.removeChild(only);
-                    } catch (er2) {
-                      only.style.display = "none";
-                    }
-                  }
-                  const np = document.createElement("div");
-                  np.className = originalPieceClass;
-                  np.style.opacity = "1";
-                  np.style.visibility = "";
-                  toSquare.appendChild(np);
+                  if (el.parentNode) el.parentNode.removeChild(el);
+                } catch (er) {
+                  el.style.display = "none";
                 }
               }
-            }
-          } catch (e) {}
-          try {
-            if (window.__CLIENT_DEBUG) {
-              const toPieces = toSquare
-                ? Array.from(toSquare.querySelectorAll(".piece")).map(
-                    (p) => p.outerHTML
-                  )
-                : [];
-              const fromPieces = fromSquare
-                ? Array.from(fromSquare.querySelectorAll(".piece")).map(
-                    (p) => p.outerHTML
-                  )
-                : [];
-              console.log(
-                "[ANIM DEBUG] cleanUp final - toPieces count",
-                toPieces.length,
-                toPieces
-              );
-              console.log(
-                "[ANIM DEBUG] cleanUp final - fromPieces count",
-                fromPieces.length,
-                fromPieces
-              );
-            }
-          } catch (e) {}
-          try {
-            document.body.classList.remove("no-piece-opacity");
-          } catch (e) {}
-          resolve();
-        };
+            });
 
-        // Transition end listener with timeout fallback
-        const tEnd = (e) => {
-          if (e && e.target !== clone) return;
-          cleanUp();
-        };
-        clone.addEventListener("transitionend", tEnd);
-        // Fallback timeout: 150ms animation + 150ms margin (optimized for faster response)
-        setTimeout(() => {
+            // Adiciona ao quadrado de destino
+            toSquare.appendChild(pieceEl);
+          } catch (e) {
+            // Fallback: cria nova peça se houver erro
+            try {
+              const fallback = document.createElement("div");
+              const cls = (pieceEl && pieceEl.className) || "piece black-piece";
+              fallback.className = cls;
+              toSquare.appendChild(fallback);
+            } catch (er) {}
+          }
+        } else if (!pieceEl) {
+          // Se não há peça no quadrado de origem, cria uma nova no destino
           try {
-            clone.removeEventListener("transitionend", tEnd);
+            const fallback = document.createElement("div");
+            fallback.className = "piece black-piece";
+            toSquare.appendChild(fallback);
           } catch (e) {}
-          cleanUp();
-        }, 300);
+        }
+
+        resolve();
       } catch (err) {
         try {
           console.error("animatePieceMove error", err);
