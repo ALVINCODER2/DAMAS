@@ -2008,10 +2008,8 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
         } else {
           gameRoom.blackTime = gameRoom.timerDuration;
         }
-
-        // Marca timestamp para pausar por 1.5s
-        gameRoom._lastMoveTime = Date.now();
       }
+
 
       // Garantir que timer está rodando
       if (
@@ -2029,11 +2027,13 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
       } catch (e) {}
     } else {
       game.mustCaptureWith = { row: to.row, col: to.col };
-      // Reinicia o cronômetro para cada tomada sequencial (auto-move),
-      // garantindo que o jogador tenha tempo suficiente para executar
-      // múltiplas capturas em salas com timers curtos (ex: 5s por jogada).
+      // CORREÇÃO: Reinicia o cronômetro APENAS no modo "move" (tempo por jogada).
+      // No modo "match" (clássico), o tempo deve continuar correndo sem reset.
+      // Isso corrige o bug onde o timer parecia "voltar" durante capturas sequenciais.
       try {
-        resetTimer(roomCode);
+        if (gameRoom.timeControl === "move") {
+          resetTimer(roomCode);
+        }
       } catch (e) {
         console.error("resetTimer failed on sequential capture:", e);
       }

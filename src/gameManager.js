@@ -74,22 +74,8 @@ function startTimer(roomCode) {
         return;
       }
 
-      // MODO "MOVE": Pausa de 1.5s após cada movimento
-      // CORREÇÃO CRÍTICA: Só aplica pausa se jogo já começou (moveHistory.length > 0)
-      // Isso corrige bug onde timer não decrementa no início do jogo Tablita
-      if (
-        room.timeControl === "move" && 
-        room._lastMoveTime && 
-        room.game && 
-        room.game.moveHistory && 
-        room.game.moveHistory.length > 0
-      ) {
-        const timeSinceMove = Date.now() - room._lastMoveTime;
-        if (timeSinceMove < 1500) {
-          // Ainda dentro do período de pausa, não decrementa
-          return;
-        }
-      }
+      // DELAY REMOVIDO: Timer agora começa a contar imediatamente após cada movimento
+      // para melhorar a responsividade e eliminar a percepção de "delay"
 
       // Lê o jogador atual AGORA, não quando o timer foi criado
       const currentPlayerColor = room.game.currentPlayer;
