@@ -989,7 +989,7 @@ initializeSocket(io);
 // Redis notifications are unavailable. This ensures eventual
 // consistency and that clients receive `matchRecorded` events.
 try {
-  const POLL_INTERVAL_MS = Number(process.env.RECENT_MATCHES_POLL_MS) || 15000;
+  const POLL_INTERVAL_MS = Number(process.env.RECENT_MATCHES_POLL_MS) || 60000;
   let _lastSeenTs = Date.now();
   try {
     if (
@@ -1004,6 +1004,9 @@ try {
 
   async function pollNewMatches() {
     try {
+      const hasClients = io && io.sockets && io.sockets.sockets.size > 0;
+      if (!hasClients) return;
+
       const cutoff = new Date(_lastSeenTs);
       const docs = await MatchHistory.find({ createdAt: { $gt: cutoff } })
         .sort({ createdAt: 1 })
@@ -1014,7 +1017,6 @@ try {
 
       for (const m of docs) {
         try {
-          // prepend to app.locals cache
           try {
             app.locals.recentMatchCache = app.locals.recentMatchCache || [];
             app.locals.recentMatchCache.unshift(m);
@@ -1022,7 +1024,6 @@ try {
               app.locals.recentMatchCache.length = 500;
           } catch (e) {}
 
-          // emit to clients and update io cache
           try {
             if (io) {
               io.emit("matchRecorded", m);
@@ -1045,12 +1046,11 @@ try {
     }
   }
 
-  // start poll shortly after boot
   setTimeout(() => {
     try {
       pollNewMatches();
-      setInterval(pollNewMatches, POLL_INTERVAL_MS).unref &&
-        setInterval(pollNewMatches, POLL_INTERVAL_MS).unref();
+      const pollInterval = setInterval(pollNewMatches, POLL_INTERVAL_MS);
+      if (pollInterval.unref) pollInterval.unref();
     } catch (e) {}
   }, 5000);
 } catch (e) {}
@@ -1060,8 +1060,11 @@ try {
   if (monitorEventLoopDelay) {
     eventLoopMonitorHandle = monitorEventLoopDelay({ resolution: 20 });
     eventLoopMonitorHandle.enable();
-    setInterval(() => {
+    const monitorInterval = setInterval(() => {
       try {
+        const hasClients = io && io.sockets && io.sockets.sockets.size > 0;
+        if (!hasClients) return;
+
         const meanMs = (eventLoopMonitorHandle.mean || 0) / 1e6;
         const maxMs = (eventLoopMonitorHandle.max || 0) / 1e6;
         serverMetrics.eventLoop.meanMs = meanMs;
@@ -1073,10 +1076,10 @@ try {
             )}ms`
           );
         }
-        // reset counters for next interval
         eventLoopMonitorHandle.reset();
       } catch (e) {}
-    }, 10000);
+    }, 30000);
+    if (monitorInterval.unref) monitorInterval.unref();
   }
 } catch (e) {}
 

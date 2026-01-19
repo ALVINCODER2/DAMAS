@@ -40,7 +40,111 @@ let io; // Variável global para instância do Socket.IO
 const disconnectReasonCounts = {};
 
 // ============================================================================
+
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+    if (room._lobbyUpdateTimer) {
+      clearTimeout(room._lobbyUpdateTimer);
+      room._lobbyUpdateTimer = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
+function deleteRoom(roomCode) {
+  const room = gameRooms[roomCode];
+  if (room) {
+    clearRoomTimers(room);
+    delete gameRooms[roomCode];
+    invalidateLobbyCache();
+  }
+}
+
+// ============================================================================
 // CONFIGURAÇÕES OTIMIZADAS PARA REDUÇÃO DE LATÊNCIA
+// ============================================================================
+
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+    if (room._lobbyUpdateTimer) {
+      clearTimeout(room._lobbyUpdateTimer);
+      room._lobbyUpdateTimer = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
+function deleteRoom(roomCode) {
+  const room = gameRooms[roomCode];
+  if (room) {
+    clearRoomTimers(room);
+    delete gameRooms[roomCode];
+    invalidateLobbyCache();
+  }
+}
+
 // ============================================================================
 // Estas configurações foram ajustadas para reduzir o tráfego Socket.IO
 // mantendo a funcionalidade completa do jogo.
@@ -56,14 +160,68 @@ const LATENCY_RESUME_MS = 150; // retomar quando abaixo deste valor
 
 // ============================================================================
 
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+    if (room._lobbyUpdateTimer) {
+      clearTimeout(room._lobbyUpdateTimer);
+      room._lobbyUpdateTimer = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
+function deleteRoom(roomCode) {
+  const room = gameRooms[roomCode];
+  if (room) {
+    clearRoomTimers(room);
+    delete gameRooms[roomCode];
+    invalidateLobbyCache();
+  }
+}
+
+// ============================================================================
+
 // Monitor simples do event-loop: loga se o loop ficar bloqueado além de um limiar.
 try {
-  const LAG_THRESHOLD_MS = 200; // warn se o loop atrasar mais que isso
+  const LAG_THRESHOLD_MS = 200;
   let _lastTick = Date.now();
-  setInterval(() => {
+  const lagInterval = setInterval(() => {
     try {
+      if (!io || !io.sockets || io.sockets.sockets.size === 0) return;
+
       const now = Date.now();
-      const drift = now - _lastTick - 500;
+      const drift = now - _lastTick - 1000;
       _lastTick = now;
       if (drift > LAG_THRESHOLD_MS) {
         try {
@@ -73,7 +231,8 @@ try {
         } catch (e) {}
       }
     } catch (e) {}
-  }, 500).unref();
+  }, 1000);
+  if (lagInterval.unref) lagInterval.unref();
 } catch (e) {}
 
 // Wrappers temporizados para funções de lógica que podem ser pesadas.
@@ -215,7 +374,111 @@ let _lobbyUpdateTimer = null;
 let _lastLobbyPayload = null;
 
 // ============================================================================
+
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+    if (room._lobbyUpdateTimer) {
+      clearTimeout(room._lobbyUpdateTimer);
+      room._lobbyUpdateTimer = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
+function deleteRoom(roomCode) {
+  const room = gameRooms[roomCode];
+  if (room) {
+    clearRoomTimers(room);
+    delete gameRooms[roomCode];
+    invalidateLobbyCache();
+  }
+}
+
+// ============================================================================
 // OTIMIZAÇÃO: Cache para getLobbyInfo() - Reduz bloqueio do event loop
+// ============================================================================
+
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+    if (room._lobbyUpdateTimer) {
+      clearTimeout(room._lobbyUpdateTimer);
+      room._lobbyUpdateTimer = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
+function deleteRoom(roomCode) {
+  const room = gameRooms[roomCode];
+  if (room) {
+    clearRoomTimers(room);
+    delete gameRooms[roomCode];
+    invalidateLobbyCache();
+  }
+}
+
 // ============================================================================
 let _lobbyInfoCache = null;
 let _lobbyInfoCacheHash = null;
@@ -240,21 +503,23 @@ function invalidateLobbyCache() {
 }
 function scheduleLobbyUpdate(force) {
   try {
+    if (!io || !io.sockets || io.sockets.sockets.size === 0) return;
+
     const processStartTs = Date.now();
     _lastLobbyPayload = getLobbyInfo();
     if (force) {
       if (io) io.volatile.emit("updateLobby", _lastLobbyPayload);
       return;
     }
-    if (_lobbyUpdateTimer) return; // já agendado
+    if (_lobbyUpdateTimer) return;
     _lobbyUpdateTimer = setTimeout(() => {
       try {
-        if (io && _lastLobbyPayload)
+        if (io && _lastLobbyPayload && io.sockets && io.sockets.sockets.size > 0)
           io.volatile.emit("updateLobby", _lastLobbyPayload);
       } catch (e) {}
       _lobbyUpdateTimer = null;
       _lastLobbyPayload = null;
-    }, 3000); // debounce 3000ms (otimizado para reduzir ping spikes)
+    }, 5000);
   } catch (e) {}
 }
 
@@ -593,7 +858,6 @@ function cleanupPreviousRooms(userEmail) {
   const roomsToRemove = [];
   Object.keys(gameRooms).forEach((code) => {
     const r = gameRooms[code];
-    // Remove se tiver apenas 1 jogador (criador) e for o mesmo email
     if (
       r.players.length === 1 &&
       !r.isGameConcluded &&
@@ -611,14 +875,47 @@ function cleanupPreviousRooms(userEmail) {
         }`
       );
     } catch (e) {}
-    delete gameRooms[code];
+    
+    const room = gameRooms[code];
+    if (room) {
+      if (room.timerInterval) {
+        clearInterval(room.timerInterval);
+        room.timerInterval = null;
+      }
+      if (room.turnInactivityTimeout) {
+        clearTimeout(room.turnInactivityTimeout);
+        room.turnInactivityTimeout = null;
+      }
+      if (room.firstMoveTimeout) {
+        clearTimeout(room.firstMoveTimeout);
+        room.firstMoveTimeout = null;
+      }
+      if (room.firstMoveResponseTimeout) {
+        clearTimeout(room.firstMoveResponseTimeout);
+        room.firstMoveResponseTimeout = null;
+      }
+      if (room.disconnectTimeout) {
+        clearTimeout(room.disconnectTimeout);
+        room.disconnectTimeout = null;
+      }
+      if (room.cleanupTimeout) {
+        clearTimeout(room.cleanupTimeout);
+        room.cleanupTimeout = null;
+      }
+      if (room._spectatorCountTimeout) {
+        clearTimeout(room._spectatorCountTimeout);
+        room._spectatorCountTimeout = null;
+      }
+    }
+    
+    deleteRoom(code);
     console.log(
       `[Limpeza] Sala ${code} excluída automaticamente pois o criador (${userEmail}) iniciou outra ação.`
     );
   });
 
   if (roomsToRemove.length > 0 && io) {
-    invalidateLobbyCache(); // Invalida cache pois salas foram removidas
+    invalidateLobbyCache();
     scheduleLobbyUpdate();
   }
 }
@@ -626,8 +923,6 @@ function cleanupPreviousRooms(userEmail) {
 // OTIMIZAÇÃO: Calcula delta do boardState para reduzir payload
 // Envia apenas as células que mudaram em vez do tabuleiro completo
 function calculateBoardDelta(roomCode, newBoardState) {
-  // DELTA DESABILITADO: Sempre retorna board completo para evitar bugs visuais
-  console.log(`[DELTA] ${roomCode}: DISABLED - sending FULL board`);
   return { fullBoard: newBoardState, delta: null };
   
   try {
@@ -792,10 +1087,11 @@ function updateSpectatorCount(roomCode) {
 
   clearTimeout(room._spectatorCountTimeout);
   room._spectatorCountTimeout = setTimeout(() => {
+    if (!io || !io.sockets) return;
     const count = room.spectators ? room.spectators.size : 0;
     io.to(roomCode).volatile.emit("spectatorCount", { count });
     io.to(`${roomCode}-spectators`).volatile.emit("spectatorCount", { count });
-  }, 500);
+  }, 1000);
 }
 
 async function startGameLogic(room, forceStart = false) {
@@ -1210,7 +1506,7 @@ async function startGameLogic(room, forceStart = false) {
                   }
                 }
                 if (currentRoom.timerInterval) clearInterval(currentRoom.timerInterval);
-                delete gameRooms[room.roomCode];
+                deleteRoom(room.roomCode);
                 scheduleLobbyUpdate();
                 return;
               }
@@ -1613,7 +1909,7 @@ async function executeMove(roomCode, from, to, socketId, clientMoveId = null) {
             // Limpar timers e sala
             if (currentRoom.timerInterval) clearInterval(currentRoom.timerInterval);
             currentRoom.isGameConcluded = true;
-            delete gameRooms[roomCode];
+            deleteRoom(roomCode);
             invalidateLobbyCache();
             scheduleLobbyUpdate();
           }
@@ -2782,7 +3078,7 @@ function initializeSocket(ioInstance) {
         if (!creatorSockObj || !creatorSockObj.connected) {
           // Criador ausente - remove a sala imediatamente para evitar cobranças indevidas
           try {
-            delete gameRooms[roomCode];
+            deleteRoom(roomCode);
           } catch (e) {}
           scheduleLobbyUpdate();
           socket.emit("joinError", {
@@ -2932,7 +3228,7 @@ function initializeSocket(ioInstance) {
         room.players[0].socketId === socket.id
       ) {
         // room cancel requested by creator (log removed)
-        delete gameRooms[roomCode];
+        deleteRoom(roomCode);
         socket.emit("roomCancelled");
         scheduleLobbyUpdate();
       }
@@ -3296,7 +3592,7 @@ function initializeSocket(ioInstance) {
             // Immediately remove room after declaring victory due to disconnect
             try {
               if (gameRooms[roomCode]) {
-                delete gameRooms[roomCode];
+                deleteRoom(roomCode);
                 invalidateLobbyCache(); // Invalida cache pois sala foi removida
                 scheduleLobbyUpdate();
               }
@@ -3320,7 +3616,7 @@ function initializeSocket(ioInstance) {
                     }`
                   );
                 } catch (e) {}
-                delete gameRooms[roomCode];
+                deleteRoom(roomCode);
                 scheduleLobbyUpdate();
               } catch (e) {
                 console.error("Error cleaning up private room:", e);
@@ -3340,7 +3636,7 @@ function initializeSocket(ioInstance) {
             room.cleanupTimeout = setTimeout(() => {
               try {
                 if (gameRooms[roomCode]) {
-                  delete gameRooms[roomCode];
+                  deleteRoom(roomCode);
                   scheduleLobbyUpdate();
                   console.log(
                     `[Socket] cleanup: removed room ${roomCode} after idle timeout`
@@ -3528,7 +3824,7 @@ function initializeSocket(ioInstance) {
                   }
 
                   if (current.isGameConcluded || connectedCount < 2) {
-                    delete gameRooms[roomCode];
+                    deleteRoom(roomCode);
                     scheduleLobbyUpdate();
                     console.log(
                       `[${new Date().toISOString()}] [acceptDraw] Removido room ${roomCode} após agendamento (isGameConcluded=${

@@ -1,7 +1,6 @@
 // src/gameManager.js
 const User = require("../models/User");
 const MatchHistory = require("../models/MatchHistory");
-// Certifique-se de que o caminho está correto conforme sua estrutura
 const { findBestCaptureMoves } = require("../public/js/gameLogic");
 
 let io;
@@ -18,7 +17,43 @@ function setTournamentManager(tm) {
   tournamentManager = tm;
 }
 
-// Verifica se existe captura obrigatória para o jogador atual no objeto game
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
 function isMandatoryCapturePresent(game) {
   try {
     const caps = findBestCaptureMoves(game.currentPlayer, game);
@@ -69,20 +104,13 @@ function startTimer(roomCode) {
     }
 
     room.timerInterval = setInterval(() => {
-      if (!gameRooms[roomCode]) {
+      if (!gameRooms[roomCode] || !io || !io.sockets || io.sockets.sockets.size === 0) {
         clearInterval(room.timerInterval);
         return;
       }
 
-      // DELAY REMOVIDO: Timer agora começa a contar imediatamente após cada movimento
-      // para melhorar a responsividade e eliminar a percepção de "delay"
-
-      // Lê o jogador atual AGORA, não quando o timer foi criado
       const currentPlayerColor = room.game.currentPlayer;
       let timeOver = false;
-
-      // LOG DEBUG TABLITA
-      console.log(`[Timer] TICK: room=${roomCode} mode=${room.timeControl} player=${currentPlayerColor} W=${room.whiteTime} B=${room.blackTime}`);
 
       if (currentPlayerColor === "b") {
         room.whiteTime--;
@@ -98,13 +126,9 @@ function startTimer(roomCode) {
         }
       }
 
-      // OTIMIZAÇÃO: Emitir timerUpdate apenas a cada 2s (reduz 50% do tráfego)
-      // Timer visual atualiza a cada 2s, mas lógica interna continua a cada 1s
       const now = Date.now();
       if (!room._lastTimerEmit) room._lastTimerEmit = 0;
       if (now - room._lastTimerEmit >= 2000) {
-        // Timer updates são frequentes e podem criar backlog em redes lentas;
-        // emitir como `volatile` reduz chance de crescimento na fila do socket
         io.to(roomCode).volatile.emit("timerUpdate", {
           whiteTime: room.whiteTime,
           blackTime: room.blackTime,
@@ -484,7 +508,11 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       }
 
       room.cleanupTimeout = setTimeout(() => {
-        if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
+        const r = gameRooms[room.roomCode];
+        if (r) {
+          clearRoomTimers(r);
+          delete gameRooms[room.roomCode];
+        }
       }, 10000);
       return;
     }
@@ -576,7 +604,11 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         }
       }
       room.cleanupTimeout = setTimeout(() => {
-        if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
+        const r = gameRooms[room.roomCode];
+        if (r) {
+          clearRoomTimers(r);
+          delete gameRooms[room.roomCode];
+        }
       }, 60000);
       return;
     }
@@ -682,7 +714,11 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         }
       }
       room.cleanupTimeout = setTimeout(() => {
-        if (gameRooms[room.roomCode]) delete gameRooms[room.roomCode];
+        const r = gameRooms[room.roomCode];
+        if (r) {
+          clearRoomTimers(r);
+          delete gameRooms[room.roomCode];
+        }
       }, 60000);
     } else {
       // --- FIM DO JOGO 1 (NÃO MOSTRAR REPLAY) ---
@@ -768,4 +804,5 @@ module.exports = {
   safeProcessEndOfGame,
   setTournamentManager,
   isMandatoryCapturePresent,
+  clearRoomTimers,
 };

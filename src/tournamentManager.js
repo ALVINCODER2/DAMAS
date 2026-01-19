@@ -1,27 +1,61 @@
 const Tournament = require("../models/Tournament");
 const User = require("../models/User");
-const MatchHistory = require("../models/MatchHistory"); // <--- IMPORTANTE: Adicionado para registrar o histórico
+const MatchHistory = require("../models/MatchHistory");
 const { enqueue } = require("./jobQueue");
 
-// Configurações
 const MIN_PLAYERS = 4;
-const MAX_PLAYERS = 4; // Limite máximo de inscritos
+const MAX_PLAYERS = 4;
 const ENTRY_FEE = 2.0;
 const TOURNAMENT_HOUR = 21;
 const TOURNAMENT_MINUTE = 0;
 
-let io; // Referência ao Socket.IO
-let gameRooms; // Referência aos quartos de jogo (Injeção de Dependência)
+let io;
+let gameRooms;
 let checkInterval;
 let isProcessingStart = false;
 
-// Recebe gameRooms na inicialização para evitar require circular
+function clearRoomTimers(room) {
+  if (!room) return;
+  
+  try {
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval);
+      room.timerInterval = null;
+    }
+    if (room.turnInactivityTimeout) {
+      clearTimeout(room.turnInactivityTimeout);
+      room.turnInactivityTimeout = null;
+    }
+    if (room.firstMoveTimeout) {
+      clearTimeout(room.firstMoveTimeout);
+      room.firstMoveTimeout = null;
+    }
+    if (room.firstMoveResponseTimeout) {
+      clearTimeout(room.firstMoveResponseTimeout);
+      room.firstMoveResponseTimeout = null;
+    }
+    if (room.disconnectTimeout) {
+      clearTimeout(room.disconnectTimeout);
+      room.disconnectTimeout = null;
+    }
+    if (room.cleanupTimeout) {
+      clearTimeout(room.cleanupTimeout);
+      room.cleanupTimeout = null;
+    }
+    if (room._spectatorCountTimeout) {
+      clearTimeout(room._spectatorCountTimeout);
+      room._spectatorCountTimeout = null;
+    }
+  } catch (e) {
+    console.error("Error clearing room timers:", e);
+  }
+}
+
 function initializeTournamentManager(ioInstance, gameRoomsInstance) {
   io = ioInstance;
   gameRooms = gameRoomsInstance;
 
-  // Verifica o horário a cada 10 segundos
-  checkInterval = setInterval(checkSchedule, 10 * 1000);
+  checkInterval = setInterval(checkSchedule, 30 * 1000);
   console.log(
     `[Torneio] Gerenciador iniciado. Agendado para ${TOURNAMENT_HOUR}:${TOURNAMENT_MINUTE.toString().padStart(
       2,
@@ -259,10 +293,13 @@ async function cancelTournamentAndRefund(tournament, reason) {
     }
   }
 
-  // Limpa salas de jogo da memória
   if (tournament.matches && gameRooms) {
     tournament.matches.forEach((m) => {
-      if (m.roomCode && gameRooms[m.roomCode]) delete gameRooms[m.roomCode];
+      if (m.roomCode && gameRooms[m.roomCode]) {
+        const room = gameRooms[m.roomCode];
+        clearRoomTimers(room);
+        delete gameRooms[m.roomCode];
+      }
     });
   }
 
@@ -552,7 +589,11 @@ async function handleTournamentGameEnd(winnerEmail, loserEmail, room) {
 
           await handleTournamentGameEnd(winner, null, r);
 
-          if (gameRooms[newRoomCode]) delete gameRooms[newRoomCode];
+          if (gameRooms[newRoomCode]) {
+            const room = gameRooms[newRoomCode];
+            clearRoomTimers(room);
+            delete gameRooms[newRoomCode];
+          }
         }
       }, 60 * 1000);
     }
