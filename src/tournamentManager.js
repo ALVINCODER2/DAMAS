@@ -246,24 +246,43 @@ async function unregisterPlayer(email) {
 }
 
 async function cancelTournamentAndRefund(tournament, reason) {
-  if (tournament.status === "cancelled") return;
+  const claimedTournament = await Tournament.findOneAndUpdate(
+    {
+      _id: tournament._id,
+      refundsProcessed: { $ne: true },
+      status: { $in: ["open", "active", "cancelled"] },
+    },
+    {
+      $set: {
+        status: "cancelled",
+        cancelledReason: reason,
+        cancelledAt: new Date(),
+        refundsProcessed: true,
+      },
+    },
+    { new: false }
+  );
+
+  if (!claimedTournament) {
+    console.log(
+      `[Torneio] Reembolso j· processado anteriormente para ${tournament._id}.`
+    );
+    return;
+  }
 
   console.log(
-    `[Torneio] Cancelando torneio ${tournament._id}. Motivo: ${reason}`
+    `[Torneio] Cancelando torneio ${claimedTournament._id}. Motivo: ${reason}`
   );
-  tournament.status = "cancelled";
-  await tournament.save();
 
-  // Reembolso em massa seguro e Registro no Hist√≥rico
-  for (const email of tournament.participants) {
+  // Reembolso em massa seguro e registro no histÛrico
+  for (const email of claimedTournament.participants || []) {
     const updatedUser = await User.findOneAndUpdate(
       { email },
-      { $inc: { saldo: tournament.entryFee } },
+      { $inc: { saldo: claimedTournament.entryFee } },
       { new: true }
     );
 
     if (updatedUser) {
-      // 1. Notifica via Socket
       if (io) {
         io.emit("balanceUpdate", {
           email: updatedUser.email,
@@ -271,7 +290,6 @@ async function cancelTournamentAndRefund(tournament, reason) {
         });
       }
 
-      // 2. Salva no Hist√≥rico do Usu√°rio
       try {
         enqueue({
           type: "saveMatchHistory",
@@ -279,22 +297,27 @@ async function cancelTournamentAndRefund(tournament, reason) {
             player1: email,
             player2: "Sistema (Reembolso)",
             winner: email,
-            bet: tournament.entryFee,
+            bet: claimedTournament.entryFee,
             gameMode: "Torneio",
             reason: `Cancelado: ${reason}`,
           },
         });
       } catch (histError) {
         console.error(
-          `Erro ao enfileirar hist√≥rico de reembolso para ${email}:`,
+          `Erro ao enfileirar histÛrico de reembolso para ${email}:`,
           histError
         );
       }
     }
   }
 
-  if (tournament.matches && gameRooms) {
-    tournament.matches.forEach((m) => {
+  await Tournament.updateOne(
+    { _id: claimedTournament._id },
+    { $set: { participants: [], prizePool: 0, matches: [] } }
+  );
+
+  if (claimedTournament.matches && gameRooms) {
+    claimedTournament.matches.forEach((m) => {
       if (m.roomCode && gameRooms[m.roomCode]) {
         const room = gameRooms[m.roomCode];
         clearRoomTimers(room);
@@ -303,9 +326,11 @@ async function cancelTournamentAndRefund(tournament, reason) {
     });
   }
 
-  if (io) io.emit("tournamentCancelled", { message: reason });
+  if (io) {
+    io.emit("tournamentUpdate", { participantsCount: 0, prizePool: 0 });
+    io.emit("tournamentCancelled", { message: reason });
+  }
 }
-
 async function startTournament(tournament) {
   console.log("[Torneio] Verificando presen√ßa...");
 
@@ -801,3 +826,4 @@ module.exports = {
   handleTournamentGameEnd,
   getTodaysTournament,
 };
+

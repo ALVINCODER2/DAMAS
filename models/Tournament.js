@@ -26,8 +26,11 @@ const TournamentSchema = new mongoose.Schema({
       },
     },
   ],
-  winner: String, // Campeão final
+  winner: String, // Campeao final
   runnerUp: String, // Vice
+  cancelledReason: { type: String, default: null },
+  cancelledAt: { type: Date, default: null },
+  refundsProcessed: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 
