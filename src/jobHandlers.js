@@ -7,7 +7,15 @@ try {
   if (REDIS_URL) {
     const { createClient } = require("redis");
     _redisPub = createClient({ url: REDIS_URL });
-    _redisPub.connect().catch(() => {});
+    _redisPub.on("error", (e) =>
+      console.warn("jobHandlers Redis publish error:", e),
+    );
+    _redisPub.on("end", () =>
+      console.warn("jobHandlers Redis publish client disconnected"),
+    );
+    _redisPub.connect().catch((e) => {
+      console.warn("jobHandlers: failed to connect Redis publish client:", e);
+    });
   }
 } catch (e) {}
 
@@ -29,7 +37,7 @@ async function handleSaveMatchHistory(payload) {
       try {
         console.warn(
           "handleSaveMatchHistory: missing player data, skipping save",
-          { player1, player2, payload }
+          { player1, player2, payload },
         );
       } catch (e) {}
       return;
@@ -62,9 +70,11 @@ async function handleSaveMatchHistory(payload) {
           createdAt: createdAt || undefined,
         });
         const saved = await history.save();
-        
-        console.log(`[MatchHistory] Salvo com sucesso: ${player1} vs ${player2} | winner=${saved.winner || 'null (reembolso)'} | reason="${saved.reason}" | bet=${saved.bet}`);
-        
+
+        console.log(
+          `[MatchHistory] Salvo com sucesso: ${player1} vs ${player2} | winner=${saved.winner || "null (reembolso)"} | reason="${saved.reason}" | bet=${saved.bet}`,
+        );
+
         // Publish to Redis channel so main server process(es) can react (update cache, emit)
         try {
           if (_redisPub) {
@@ -82,7 +92,9 @@ async function handleSaveMatchHistory(payload) {
           }
         } catch (e) {}
       } else {
-        console.log(`[MatchHistory] Registro duplicado detectado, pulando: ${player1} vs ${player2}`);
+        console.log(
+          `[MatchHistory] Registro duplicado detectado, pulando: ${player1} vs ${player2}`,
+        );
         // already exists — emit via Redis if possible so other processes update
         try {
           if (_redisPub) {
@@ -95,7 +107,7 @@ async function handleSaveMatchHistory(payload) {
       console.error(
         "handleSaveMatchHistory: first save attempt failed",
         firstErr,
-        { payload }
+        { payload },
       );
       // retry once after tiny delay
       await new Promise((r) => setTimeout(r, 200));
@@ -163,7 +175,7 @@ async function handleSaveMatchHistory(payload) {
     console.error(
       "handleSaveMatchHistory: fatal error for payload:",
       payload,
-      e
+      e,
     );
     throw e;
   }

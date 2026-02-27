@@ -30,6 +30,10 @@ async function main() {
     try {
       const { createClient } = require("redis");
       const rc = createClient({ url: REDIS_URL });
+      rc.on("error", (e) => console.warn("trigger_match_test Redis error:", e));
+      rc.on("end", () =>
+        console.warn("trigger_match_test Redis client disconnected"),
+      );
       await rc.connect();
       await rc.publish(
         "damas:matchSaved",
@@ -42,19 +46,19 @@ async function main() {
           gameMode: saved.gameMode,
           reason: saved.reason,
           createdAt: saved.createdAt,
-        })
+        }),
       );
       console.log("Published to Redis damas:matchSaved");
       await rc.disconnect();
     } catch (e) {
       console.warn(
         "Failed to publish to Redis:",
-        e && e.message ? e.message : e
+        e && e.message ? e.message : e,
       );
     }
   } else {
     console.log(
-      "No REDIS_URL configured; server will discover via DB poll shortly."
+      "No REDIS_URL configured; server will discover via DB poll shortly.",
     );
   }
   await mongoose.disconnect();

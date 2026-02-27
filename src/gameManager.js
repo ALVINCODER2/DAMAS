@@ -19,7 +19,7 @@ function setTournamentManager(tm) {
 
 function clearRoomTimers(room) {
   if (!room) return;
-  
+
   try {
     if (room.timerInterval) {
       clearInterval(room.timerInterval);
@@ -68,22 +68,22 @@ function startTimer(roomCode) {
   const room = gameRooms[roomCode];
   if (!room) return;
   if (room.isGameConcluded) return;
-  
+
   // PROTEÇÃO CRÍTICA: Se o timer está explicitamente pausado, NÃO iniciar
   if (room._timerPaused) {
     return;
   }
-  
+
   // PROTEÇÃO CRÍTICA: Se já está iniciando, NÃO fazer nada
   if (room._timerStarting) {
     return;
   }
-  
+
   // PROTEÇÃO CRÍTICA: Se já existe um interval rodando, NÃO fazer nada
   if (room.timerInterval) {
     return;
   }
-  
+
   // Marca que está iniciando
   room._timerStarting = true;
 
@@ -92,19 +92,28 @@ function startTimer(roomCode) {
   if (room.timeControl === "match" || room.timeControl === "move") {
     // CORREÇÃO CRÍTICA: NÃO capturar currentPlayerColor aqui!
     // Deve ser lido DENTRO do interval para pegar o jogador correto após troca de turno
-    
+
     // PROTEÇÃO: Verificar se os tempos são válidos antes de iniciar
-    if (typeof room.whiteTime !== 'number' || room.whiteTime < 0) {
-      console.error(`[Timer] whiteTime inválido: ${room.whiteTime}, resetando para timerDuration`);
+    if (typeof room.whiteTime !== "number" || room.whiteTime < 0) {
+      console.error(
+        `[Timer] whiteTime inválido: ${room.whiteTime}, resetando para timerDuration`,
+      );
       room.whiteTime = room.timerDuration || 7;
     }
-    if (typeof room.blackTime !== 'number' || room.blackTime < 0) {
-      console.error(`[Timer] blackTime inválido: ${room.blackTime}, resetando para timerDuration`);
+    if (typeof room.blackTime !== "number" || room.blackTime < 0) {
+      console.error(
+        `[Timer] blackTime inválido: ${room.blackTime}, resetando para timerDuration`,
+      );
       room.blackTime = room.timerDuration || 7;
     }
 
     room.timerInterval = setInterval(() => {
-      if (!gameRooms[roomCode] || !io || !io.sockets || io.sockets.sockets.size === 0) {
+      if (
+        !gameRooms[roomCode] ||
+        !io ||
+        !io.sockets ||
+        io.sockets.sockets.size === 0
+      ) {
         clearInterval(room.timerInterval);
         return;
       }
@@ -143,7 +152,7 @@ function startTimer(roomCode) {
         // Limpar timer para evitar ticks adicionais
         clearInterval(room.timerInterval);
         room.timerInterval = null;
-        
+
         // CORREÇÃO AGRESSIVA: Limpar TODOS os timeouts
         if (room.turnInactivityTimeout) {
           clearTimeout(room.turnInactivityTimeout);
@@ -153,27 +162,33 @@ function startTimer(roomCode) {
           clearTimeout(room.firstMoveTimeout);
           room.firstMoveTimeout = null;
         }
-        
+
         const loserColor = currentPlayerColor;
         const winnerColor = loserColor === "b" ? "p" : "b";
-        console.log(`[Timer] TEMPO ESGOTADO! winner=${winnerColor} loser=${loserColor} room=${roomCode} isTablita=${room.isTablita} isGameConcluded=${room.isGameConcluded}`);
-        
+        console.log(
+          `[Timer] TEMPO ESGOTADO! winner=${winnerColor} loser=${loserColor} room=${roomCode} isTablita=${room.isTablita} isGameConcluded=${room.isGameConcluded}`,
+        );
+
         // IMPORTANTE: NÃO marcar isGameConcluded aqui!
         // processEndOfGame fará isso APÓS emitir os eventos gameOver
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
-    
+
     // Libera flag após criar interval
     room._timerStarting = false;
-    console.log(`[Timer] Iniciado para room=${roomCode} whiteTime=${room.whiteTime} blackTime=${room.blackTime} currentPlayer=${room.game.currentPlayer}`);
+    console.log(
+      `[Timer] Iniciado para room=${roomCode} whiteTime=${room.whiteTime} blackTime=${room.blackTime} currentPlayer=${room.game.currentPlayer}`,
+    );
   } else {
     // PROTEÇÃO: Verificar se timeLeft é válido
-    if (typeof room.timeLeft !== 'number' || room.timeLeft < 0) {
-      console.error(`[Timer] timeLeft inválido: ${room.timeLeft}, resetando para timerDuration`);
+    if (typeof room.timeLeft !== "number" || room.timeLeft < 0) {
+      console.error(
+        `[Timer] timeLeft inválido: ${room.timeLeft}, resetando para timerDuration`,
+      );
       room.timeLeft = room.timerDuration || 300;
     }
-    
+
     io.to(roomCode).volatile.emit("timerUpdate", {
       timeLeft: room.timeLeft,
       roomCode: roomCode,
@@ -187,7 +202,7 @@ function startTimer(roomCode) {
         return;
       }
       room.timeLeft--;
-      
+
       // OTIMIZAÇÃO: Emitir timerUpdate apenas a cada 2s (reduz 50% do tráfego)
       const now = Date.now();
       if (!room._lastTimerEmit) room._lastTimerEmit = 0;
@@ -202,7 +217,7 @@ function startTimer(roomCode) {
         // Limpar timer para evitar ticks adicionais
         clearInterval(room.timerInterval);
         room.timerInterval = null;
-    
+
         // CORREÇÃO: Limpar timeouts secundários para evitar que disparem após o fim do jogo
         // (Crucial para Tablita, onde o jogo "continua" para a próxima partida)
         if (room.turnInactivityTimeout) {
@@ -213,24 +228,26 @@ function startTimer(roomCode) {
           clearTimeout(room.firstMoveTimeout);
           room.firstMoveTimeout = null;
         }
-        
+
         const loserColor = room.game.currentPlayer;
         const winnerColor = loserColor === "b" ? "p" : "b";
-        console.log(`[Timer] Processando fim de jogo (modo total): winner=${winnerColor} loser=${loserColor} room=${roomCode}`);
-        
+        console.log(
+          `[Timer] Processando fim de jogo (modo total): winner=${winnerColor} loser=${loserColor} room=${roomCode}`,
+        );
+
         // IMPORTANTE: NÃO marcar isGameConcluded aqui!
         // processEndOfGame fará isso APÓS emitir os eventos gameOver
         safeProcessEndOfGame(winnerColor, loserColor, room, "Tempo esgotado!");
       }
     }, 1000);
-    
+
     // Libera flag após criar interval
     room._timerStarting = false;
   }
 }
 
 function resetTimer(roomCode) {
-  const stack = new Error().stack.split('\n')[2].trim();
+  const stack = new Error().stack.split("\n")[2].trim();
   console.log(`[Timer] resetTimer chamado: roomCode=${roomCode} de: ${stack}`);
   const room = gameRooms[roomCode];
   if (room) {
@@ -243,7 +260,7 @@ function resetTimer(roomCode) {
       // Apenas limpar e reiniciar o interval para garantir funcionamento correto.
       // NÃO fazer: room.whiteTime = room.timerDuration;
       // NÃO fazer: room.blackTime = room.timerDuration;
-      
+
       // Apenas emitir o estado atual e reiniciar o timer
       io.to(roomCode).volatile.emit("timerUpdate", {
         whiteTime: room.whiteTime,
@@ -305,6 +322,12 @@ async function saveMatchHistory(room, winnerEmail, reason) {
         if (REDIS_URL) {
           const { createClient } = require("redis");
           const rc = createClient({ url: REDIS_URL });
+          rc.on("error", (e) =>
+            console.warn("gameManager Redis publish error:", e),
+          );
+          rc.on("end", () =>
+            console.warn("gameManager Redis client disconnected"),
+          );
           rc.connect()
             .then(() =>
               rc.publish(
@@ -318,8 +341,8 @@ async function saveMatchHistory(room, winnerEmail, reason) {
                   gameMode: saved.gameMode,
                   reason: saved.reason,
                   createdAt: saved.createdAt,
-                })
-              )
+                }),
+              ),
             )
             .catch(() => {})
             .finally(() => {
@@ -386,7 +409,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           room.roomCode
         } ignoring duplicate end (last=${
           now - room._lastEndTimestamp
-        }ms) reason=${reason}`
+        }ms) reason=${reason}`,
       );
       // debug trace removed to reduce overhead in hot path
       return;
@@ -397,7 +420,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
   // Prevent duplicate concurrent processing of the same end-of-game event
   if (room._endProcessing) {
     console.log(
-      `[processEndOfGame] room=${room.roomCode} already processing end -> ignoring duplicate call. reason=${reason}`
+      `[processEndOfGame] room=${room.roomCode} already processing end -> ignoring duplicate call. reason=${reason}`,
     );
     // debug trace removed to reduce overhead in hot path
     return;
@@ -408,7 +431,9 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
   try {
     if (room.isGameConcluded) return;
 
-    console.log(`[processEndOfGame] room=${room.roomCode} winner=${winnerColor} reason=${reason} isTablita=${room.isTablita}`);
+    console.log(
+      `[processEndOfGame] room=${room.roomCode} winner=${winnerColor} reason=${reason} isTablita=${room.isTablita}`,
+    );
 
     // Marca como concluído para evitar re-entradas (exceto para Tablita que tem 2 jogos)
     // Em Tablita, só concluímos o jogo "oficialmente" no fim do Match (jogo 2)
@@ -419,7 +444,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       clearInterval(room.timerInterval);
       room.timerInterval = null;
     }
-    
+
     // CORREÇÃO: Limpar timeouts secundários para evitar que disparem após o fim do jogo
     // (Crucial para Tablita, onde o jogo "continua" para a próxima partida)
     if (room.turnInactivityTimeout) {
@@ -458,7 +483,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       }
 
       const winnerData = room.players.find(
-        (p) => p.socketId === winnerSocketId
+        (p) => p.socketId === winnerSocketId,
       );
       const loserData = room.players.find((p) => p.socketId === loserSocketId);
 
@@ -503,7 +528,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         await tournamentManager.handleTournamentGameEnd(
           winnerEmail,
           loserEmail,
-          room
+          room,
         );
       }
 
@@ -557,7 +582,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         const winnerSocketId =
           room.game.players[winnerColor === "b" ? "white" : "black"];
         const winnerData = room.players.find(
-          (p) => p.socketId === winnerSocketId
+          (p) => p.socketId === winnerSocketId,
         );
         if (winnerData) {
           try {
@@ -569,7 +594,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
                   $set: { saldo: { $round: [{ $add: ["$saldo", prize] }, 2] } },
                 },
               ],
-              { new: true }
+              { new: true },
             );
             io.to(room.roomCode).emit("gameOver", {
               winner: winnerColor,
@@ -620,7 +645,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
       const winnerSocketId =
         room.game.players[winnerColor === "b" ? "white" : "black"];
       const winnerData = room.players.find(
-        (p) => p.socketId === winnerSocketId
+        (p) => p.socketId === winnerSocketId,
       );
       if (winnerData) {
         room.match.score[winnerData.user.email]++;
@@ -656,7 +681,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           const updatedWinner = await User.findOneAndUpdate(
             { email: finalWinnerData.email },
             [{ $set: { saldo: { $round: [{ $add: ["$saldo", prize] }, 2] } } }],
-            { new: true }
+            { new: true },
           );
           const winnerColorFinal =
             room.game.users.white === finalWinnerData.email ? "b" : "p"; // Cor do vencedor no ÚLTIMO jogo
@@ -726,7 +751,7 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
 
       const game1WinnerColor = winnerColor;
       const game1Reason = `Jogo 1: ${reason}`;
-      
+
       // Emite gameOver para mostrar resultado do Jogo 1
       io.to(room.roomCode).emit("gameOver", {
         winner: game1WinnerColor,
@@ -735,12 +760,14 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
         initialBoardState: room.game.initialBoardState,
         isTablitaGame1: true,
       });
-      
+
       room.match.currentGame++; // Vai para 2
       const scoreArray = [p1Score, p2Score];
       const nextGameTitle = `Fim da 1ª Partida!`;
 
-      console.log(`[Tablita] Fim do jogo 1. Placar: ${p1Score}-${p2Score}. Preparando próximo jogo...`);
+      console.log(
+        `[Tablita] Fim do jogo 1. Placar: ${p1Score}-${p2Score}. Preparando próximo jogo...`,
+      );
 
       // Emite aviso que o próximo jogo vai começar (apenas overlay informativo)
       io.to(room.roomCode).emit("nextGameStarting", {
@@ -753,7 +780,9 @@ async function processEndOfGame(winnerColor, loserColor, room, reason) {
           // Import dinâmico para evitar dependência circular
           const { startNextTablitaGame } = require("./socketHandlers");
           if (startNextTablitaGame) {
-            console.log(`[Tablita] Chamando startNextTablitaGame para room=${room.roomCode}`);
+            console.log(
+              `[Tablita] Chamando startNextTablitaGame para room=${room.roomCode}`,
+            );
             startNextTablitaGame(room.roomCode);
           } else {
             console.error(`[Tablita] startNextTablitaGame não encontrado!`);
@@ -778,7 +807,7 @@ async function safeProcessEndOfGame(winnerColor, loserColor, room, reason) {
     if (!room) return;
     if (room._safeEndRequested) {
       console.log(
-        `[safeProcessEndOfGame] room=${room.roomCode} already requested end -> ignoring (${reason})`
+        `[safeProcessEndOfGame] room=${room.roomCode} already requested end -> ignoring (${reason})`,
       );
       return;
     }

@@ -105,7 +105,13 @@ try {
     const { createAdapter } = require("@socket.io/redis-adapter");
     const { createClient } = require("redis");
     const pubClient = createClient({ url: REDIS_URL });
+    pubClient.on("error", (e) =>
+      console.warn("Socket.IO pubClient Redis error:", e),
+    );
     const subClient = pubClient.duplicate();
+    subClient.on("error", (e) =>
+      console.warn("Socket.IO subClient Redis error:", e),
+    );
     Promise.all([pubClient.connect(), subClient.connect()])
       .then(() => {
         io.adapter(createAdapter(pubClient, subClient));
@@ -115,7 +121,7 @@ try {
         try {
           console.warn(
             "Failed to connect Redis for Socket.IO adapter, continuing without adapter:",
-            e
+            e,
           );
         } catch (er) {}
       });
@@ -136,7 +142,7 @@ try {
           try {
             console.warn(
               "Redis notif client error:",
-              e && e.message ? e.message : e
+              e && e.message ? e.message : e,
             );
           } catch (er) {}
         });
@@ -144,7 +150,7 @@ try {
         notifClient.on("end", () => {
           try {
             console.warn(
-              "Redis notif client disconnected, will reconnect in 5s"
+              "Redis notif client disconnected, will reconnect in 5s",
             );
           } catch (er) {}
           setTimeout(() => startNotifClient(), 5000);
@@ -176,7 +182,7 @@ try {
         try {
           console.warn(
             "Failed to start Redis notif client, retrying in 5s:",
-            e && e.message ? e.message : e
+            e && e.message ? e.message : e,
           );
         } catch (er) {}
         try {
@@ -204,8 +210,25 @@ app.use(express.static("public"));
 // Evita 404 no favicon solicitando explicitamente um 204 (placeholder)
 app.get("/favicon.ico", (req, res) => res.sendStatus(204));
 
+const mongooseOptions = {
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 10000,
+  maxPoolSize: Number(process.env.MONGO_POOL_SIZE) || 20,
+};
+
+mongoose.connection.on("error", (e) =>
+  console.error("MongoDB connection error:", e),
+);
+mongoose.connection.on("disconnected", () =>
+  console.warn(
+    "MongoDB disconnected; operations will be buffered until reconnect",
+  ),
+);
+mongoose.connection.on("reconnected", () => console.log("MongoDB reconnected"));
+
 mongoose
-  .connect(MONGO_URI)
+  .connect(MONGO_URI, mongooseOptions)
   .then(async () => {
     console.log("Conectado ao MongoDB Atlas com sucesso!");
     // Ao iniciar o servidor, carregamos os históricos recentes para cache
@@ -231,7 +254,7 @@ mongoose
       }
       losses = recents.length - wins - draws;
       console.log(
-        `[Boot] Carregados ${recents.length} partidas recentes: vitórias~${wins} empates~${draws} perdas~${losses}`
+        `[Boot] Carregados ${recents.length} partidas recentes: vitórias~${wins} empates~${draws} perdas~${losses}`,
       );
 
       // Emitir para clientes conectados uma lista inicial (até 100)
@@ -410,7 +433,7 @@ app.post("/api/user/referrals", async (req, res) => {
     if (!email) return res.status(400).json({ message: "Email obrigatório." });
     const referrals = await User.find(
       { referredBy: email.toLowerCase() },
-      "email hasDeposited firstDepositValue"
+      "email hasDeposited firstDepositValue",
     );
     res.json(referrals);
   } catch (error) {
@@ -660,7 +683,7 @@ app.post("/api/tournament/leave", async (req, res) => {
     if (!email) return res.status(400).json({ message: "Email obrigatório." });
 
     const result = await tournamentManager.unregisterPlayer(
-      email.toLowerCase()
+      email.toLowerCase(),
     );
 
     if (result.success) {
@@ -907,7 +930,7 @@ app.put("/api/admin/add-saldo-bonus", adminAuthBody, async (req, res) => {
 });
 app.get("/api/admin/users", adminAuthHeader, async (req, res) => {
   const users = await User.find({}, "email saldo referredBy hasDeposited").sort(
-    { email: 1 }
+    { email: 1 },
   );
   res.json(users);
 });
@@ -958,7 +981,7 @@ app.post("/api/admin/reject-withdrawal", adminAuthBody, async (req, res) => {
 app.put("/api/admin/update-saldo", adminAuthBody, async (req, res) => {
   await User.updateOne(
     { email: req.body.email.toLowerCase() },
-    { $set: { saldo: Number(req.body.newSaldo) } }
+    { $set: { saldo: Number(req.body.newSaldo) } },
   );
   res.json({ message: "Atualizado." });
 });
@@ -1041,7 +1064,7 @@ try {
     } catch (e) {
       console.error(
         "recentMatches poll error:",
-        e && e.message ? e.message : e
+        e && e.message ? e.message : e,
       );
     }
   }
@@ -1072,8 +1095,8 @@ try {
         if (meanMs > 40 || maxMs > 200) {
           console.warn(
             `[EventLoopLag] mean=${meanMs.toFixed(1)}ms max=${maxMs.toFixed(
-              1
-            )}ms`
+              1,
+            )}ms`,
           );
         }
         eventLoopMonitorHandle.reset();
@@ -1110,7 +1133,7 @@ app.get("/api/recent-matches", async (req, res) => {
   try {
     const limit = Math.min(
       200,
-      Math.max(1, parseInt(req.query.limit || "50", 10))
+      Math.max(1, parseInt(req.query.limit || "50", 10)),
     );
     const cutoffMs =
       Number(process.env.RECENT_MATCHES_RETENTION_MS) || 24 * 60 * 60 * 1000;
@@ -1150,7 +1173,7 @@ app.get("/debug/recent-history", adminAuthHeader, async (req, res) => {
   try {
     const limit = Math.min(
       200,
-      Math.max(1, parseInt(req.query.limit || "50", 10))
+      Math.max(1, parseInt(req.query.limit || "50", 10)),
     );
     const recents = await MatchHistory.find({})
       .sort({ createdAt: -1 })
@@ -1174,7 +1197,7 @@ server.listen(PORT, HOST, () => {
 // --- GRACEFUL SHUTDOWN (Reembolso em caso de reinício) ---
 async function gracefulShutdown() {
   console.log(
-    "\n⚠️  Recebido sinal de desligamento. Verificando partidas ativas..."
+    "\n⚠️  Recebido sinal de desligamento. Verificando partidas ativas...",
   );
 
   if (!gameRooms || Object.keys(gameRooms).length === 0) {
@@ -1200,16 +1223,16 @@ async function gracefulShutdown() {
           const p2Email = room.players[1].user.email;
 
           console.log(
-            `🔄 Reembolsando ${bet} para ${p1Email} e ${p2Email} (Sala: ${room.roomCode})`
+            `🔄 Reembolsando ${bet} para ${p1Email} e ${p2Email} (Sala: ${room.roomCode})`,
           );
 
           await User.findOneAndUpdate(
             { email: p1Email },
-            { $inc: { saldo: bet } }
+            { $inc: { saldo: bet } },
           );
           await User.findOneAndUpdate(
             { email: p2Email },
-            { $inc: { saldo: bet } }
+            { $inc: { saldo: bet } },
           );
         }
       } catch (err) {
